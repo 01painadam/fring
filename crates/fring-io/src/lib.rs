@@ -15,8 +15,8 @@ pub mod moons;
 pub mod stats;
 
 pub use stats::{
-    STATS_COLUMNS, STATS_VERSION, read_stats_csv, write_stats_csv, write_stats_header,
-    write_stats_row,
+    STATS_COLUMNS, STATS_VERSION, StatsRead, read_stats_csv, read_stats_csv_report,
+    write_stats_csv, write_stats_header, write_stats_row,
 };
 
 pub use moons::{MOONS_VERSION, MoonRecord, MoonsFile, read_moons, write_moons};
