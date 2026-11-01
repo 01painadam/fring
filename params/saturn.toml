@@ -1,0 +1,23 @@
+# Saturn's gravity field for fring. Task L2. Sources: params/sources.md (keys in brackets).
+# Units: km, s. GM in km^3 s^-2. J2 and J4 are for the reference radius below.
+# Only the [saturn] table is read by fring_model::SaturnParams (deny_unknown_fields).
+
+[meta]
+# One epoch for all files in params/ (time_s = 0 at this epoch).
+epoch_calendar = "2008-01-01 00:00:00"
+epoch_time_scale = "TDB"
+epoch_jd_tdb = 2454466.5
+# Frame of all states in moons.toml: Saturn-centred, Saturn's equator at the epoch (fixed),
+# z along the spin axis. The x axis is the ascending node of Saturn's equator on the ICRF
+# equator at the epoch (the JPL Horizons convention for the body-equator frame).
+frame = "Saturn-centred, Saturn equator of date (IAU_SATURN), fixed at the epoch"
+# Pole precession over 30 yr is 0.013 deg (RA) and 0.0013 deg (Dec) [Coop15_T3]; ignored.
+gm_source = "SAT441_GM"
+j_source = "J22_Zenodo"
+# Harmonics J6 to J12 exist in the same source and are not used in v1; see params/sources.md.
+
+[saturn]
+gm_km3_s2 = 37931206.234
+reference_radius_km = 60330.0
+j2 = 1.6290615e-2
+j4 = -9.35119e-4
