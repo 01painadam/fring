@@ -17,3 +17,5 @@ pub mod probe;
 pub mod spike;
 pub mod spike_gpu;
 pub mod wf32;
+pub mod wh;
+pub mod wh_gpu;

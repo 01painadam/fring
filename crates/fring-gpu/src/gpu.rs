@@ -7,12 +7,15 @@
 
 use std::time::{Duration, Instant};
 
-/// An open GPU device and its queue.
+/// An open GPU device and its queue (cheap to clone: the handles are shared).
+#[derive(Clone)]
 pub struct Gpu {
     device: wgpu::Device,
     queue: wgpu::Queue,
     /// Name, backend and driver of the adapter.
     pub info: wgpu::AdapterInfo,
+    /// The limits of the device (those of the adapter).
+    pub limits: wgpu::Limits,
 }
 
 /// A storage buffer for [`Gpu::run`]: 32-bit words, read and written by the kernel.
@@ -44,7 +47,7 @@ impl Gpu {
         let limits = adapter.limits();
         let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
             label: Some("fring-gpu"),
-            required_limits: limits,
+            required_limits: limits.clone(),
             ..Default::default()
         }))
         .ok()?;
@@ -52,7 +55,18 @@ impl Gpu {
             device,
             queue,
             info,
+            limits,
         })
+    }
+
+    /// The wgpu device.
+    pub fn device(&self) -> &wgpu::Device {
+        &self.device
+    }
+
+    /// The wgpu queue.
+    pub fn queue(&self) -> &wgpu::Queue {
+        &self.queue
     }
 
     /// Compiles the entry point `entry` of the WGSL source `shader`.

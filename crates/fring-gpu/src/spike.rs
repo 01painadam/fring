@@ -106,6 +106,37 @@ impl<const M: u8> Consts<M> {
     }
 }
 
+impl<const M: u8> Consts<M> {
+    /// Constants for the production kernels (ADR 0007): any step `h_s`, GM of
+    /// the moons given. The f32 constants of the option D kick (J2, J4, J6 and
+    /// the moon GMs) are multiplied by `h_s / f32(h_s)` before they are
+    /// rounded, so that the kick, which uses `f32(h_s)`, has the right
+    /// strength. Option C needs no such scale (it carries h in DS).
+    pub fn for_step(p: &SaturnParams, gm_moons_km3_s2: &[f64], h_s: f64) -> Self {
+        let scale = kick_scale(h_s);
+        let mut field_w = SaturnField::<Wf32<M>>::from_params(p);
+        field_w.j2 = Wf32::from_f64(p.j2 * scale);
+        field_w.j4 = Wf32::from_f64(p.j4 * scale);
+        field_w.j6 = Wf32::from_f64(p.j6 * scale);
+        Self {
+            field_w,
+            field_d: SaturnField::from_params(p),
+            inv_gm_d: Ds::split(1.0 / p.gm_km3_s2),
+            gm_moons_w: gm_moons_km3_s2
+                .iter()
+                .map(|&g| Wf32::from_f64(g * scale))
+                .collect(),
+            h_s,
+        }
+    }
+}
+
+/// `h / f32(h)`: the factor by which the f32 constants of the option D kick
+/// are scaled (ADR 0007). It is 1 if `h` is exact in f32.
+pub fn kick_scale(h_s: f64) -> f64 {
+    h_s / f64::from(h_s as f32)
+}
+
 /// The moon tables of one block of steps in f32 and in DS, filled from the
 /// same ephemeris (moon positions rounded from f64; indirect term computed
 /// in each format, as `KickTable::fill` does).
@@ -322,7 +353,7 @@ fn drift_b<const M: u8>(
 
 /// Newton's method for x = ΔE in f32, as in `kepler_drift` (start at m,
 /// stop when the step is below 4 ε max(1, |x|), at most 40 iterations).
-fn newton_f32<const M: u8>(ecos0: Wf32<M>, esin0: Wf32<M>, m: Wf32<M>) -> Wf32<M> {
+pub(crate) fn newton_f32<const M: u8>(ecos0: Wf32<M>, esin0: Wf32<M>, m: Wf32<M>) -> Wf32<M> {
     let one = Wf32::<M>::ONE;
     let mut x = m;
     for _ in 0..40 {
@@ -342,19 +373,19 @@ fn newton_f32<const M: u8>(ecos0: Wf32<M>, esin0: Wf32<M>, m: Wf32<M>) -> Wf32<M
 /// The DS scalars of a Kepler drift: 1/r0, α = 1/a, a, √(GM a), n, e cos E₀,
 /// e sin E₀ and m = n dt. Uses 1/GM to save divisions:
 /// α = 2/r0 − v²/GM, n = √(GM a) α², e sin E₀ = (r·v) n a / GM.
-struct DsScalars<const M: u8> {
-    r0: Ds<M>,
-    ir0: Ds<M>,
-    alpha: Ds<M>,
-    a: Ds<M>,
-    sqrt_gma: Ds<M>,
-    n: Ds<M>,
-    ecos0: Ds<M>,
-    esin0: Ds<M>,
-    m: Ds<M>,
+pub(crate) struct DsScalars<const M: u8> {
+    pub(crate) r0: Ds<M>,
+    pub(crate) ir0: Ds<M>,
+    pub(crate) alpha: Ds<M>,
+    pub(crate) a: Ds<M>,
+    pub(crate) sqrt_gma: Ds<M>,
+    pub(crate) n: Ds<M>,
+    pub(crate) ecos0: Ds<M>,
+    pub(crate) esin0: Ds<M>,
+    pub(crate) m: Ds<M>,
 }
 
-fn ds_scalars<const M: u8>(
+pub(crate) fn ds_scalars<const M: u8>(
     c: &Consts<M>,
     p: Vec3<Ds<M>>,
     v: Vec3<Ds<M>>,
@@ -417,7 +448,7 @@ fn drift_bplus<const M: u8>(
 /// Option D: DS drift; the Kepler equation is solved in f32, then one DS
 /// Newton step with the DS small-angle series corrects x, sin x, cos x and
 /// 1 − cos x to first order in the step.
-fn drift_d<const M: u8>(
+pub(crate) fn drift_d<const M: u8>(
     c: &Consts<M>,
     p: Vec3<Ds<M>>,
     v: Vec3<Ds<M>>,
