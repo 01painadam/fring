@@ -36,6 +36,10 @@ Use Haiku (or do it without a model call) for formatting, changelogs and small e
 - Long simulations run in the background (`run_in_background`). Do not wait in a loop for them; write the run ID in the handoff file and continue with other work, or end the session.
 - Do not re-read a file that you just wrote.
 
+## Toolchain on AJ's Mac
+
+Rust comes from Homebrew `rustup`, which is keg-only. If `cargo` is not found, start the command with `export PATH="/opt/homebrew/opt/rustup/bin:$PATH" &&`.
+
 ## Before the session ends
 
 If you are near a usage limit, or the task is at a natural stop:
