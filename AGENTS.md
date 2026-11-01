@@ -75,7 +75,7 @@ Updated: <YYYY-MM-DD HH:MM>
 At the start:
 
 1. `git pull` and check out your task branch.
-2. Read `docs/status/BOARD.md` and your handoff file. Do not read the whole repository.
+2. Read `docs/status/BOARD.md`, your handoff file and `mistakes.md`. Do not read the whole repository.
 3. Run the "How to verify" commands. If the result does not agree with the handoff, fix the handoff first.
 
 During the work:
