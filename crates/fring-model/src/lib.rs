@@ -13,13 +13,20 @@
 //!
 //! Start with [`units`] for the conventions.
 
+pub mod backend;
 pub mod config;
 pub mod error;
+pub mod particles;
 pub mod real;
 pub mod rng;
+pub mod system;
 pub mod units;
 pub mod vec3;
 
+pub use backend::{Backend, StepStats};
+pub use config::RunConfig;
 pub use error::{Error, Result};
+pub use particles::{InitialState, ParticleView, Particles};
 pub use real::Real;
+pub use system::{BodyState, MoonEphemeris, MoonState, MoonTrack, SaturnParams, System};
 pub use vec3::Vec3;
