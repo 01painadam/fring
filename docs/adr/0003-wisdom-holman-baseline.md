@@ -44,3 +44,18 @@ Option 4. The Wisdom-Holman split, drift-kick-drift with a fixed step, is the ba
 
 - `docs/adr/0003/precession_integrators.py`, run with `uv run --no-project --with numpy python3 docs/adr/0003/precession_integrators.py`. Output as in the table above.
 - C2 tests in the pull request for C2.
+
+C2 measurements (A2, debug build). Method: e = i = 10⁻³, 300 orbits, 150 steps per orbit, rates from a least-squares fit to the pericentre and ascending-node longitudes. Error = measured / PLAN 7.2 − 1.
+
+| r (km) | WH ϖ̇ error | WH Ω̇ error | Leapfrog ϖ̇ error | Leapfrog Ω̇ error |
+|---|---|---|---|---|
+| 100000 | −2.6 × 10⁻⁵ | −7.4 × 10⁻⁶ | −4.96 × 10⁻² | −1.39 × 10⁻³ |
+| 140222.43 | −1.7 × 10⁻⁵ | −7.0 × 10⁻⁶ | −9.71 × 10⁻² | −1.35 × 10⁻³ |
+| 180000 | −1.3 × 10⁻⁵ | −7.2 × 10⁻⁶ | −1.60 × 10⁻¹ | −1.34 × 10⁻³ |
+
+The leapfrog value at a₀ agrees with the script above (−9.71 %). Other C2 numbers:
+
+- Kepler drift, one period: position 9.5 × 10⁻¹⁶, velocity 6.4 × 10⁻¹⁶ (relative). Against a 20000-step leapfrog: 4.8 × 10⁻¹². f32 against f64 (one step of 1/150 period): position 4.1 × 10⁻⁸, velocity 7.0 × 10⁻⁹.
+- WH energy, circular start at a₀, 150 steps per orbit, 10⁴ orbits: max |ΔE/E₀| = 8.3 × 10⁻¹³, drift 2.3 × 10⁻¹³. With e = i = 0.01, 10³ orbits: 7.0 × 10⁻⁹, drift 8.3 × 10⁻¹³.
+- WH one orbit in f32 against f64: 0.20 km.
+- Debug run time: precession tests 0.06 s, WH energy tests 0.8 s.
