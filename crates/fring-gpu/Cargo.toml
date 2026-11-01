@@ -13,5 +13,8 @@ fring-model.workspace = true
 wgpu.workspace = true
 pollster.workspace = true
 
+[dev-dependencies]
+rayon.workspace = true
+
 [lints]
 workspace = true
