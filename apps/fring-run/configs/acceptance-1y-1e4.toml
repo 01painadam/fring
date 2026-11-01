@@ -1,0 +1,42 @@
+# Acceptance run for task R1 (docs/PLAN.md section 9): 10^4 particles, 1 year, CPU.
+# From the repository root:
+#   cargo run -p fring-run --release -- --config apps/fring-run/configs/acceptance-1y-1e4.toml
+# Physical constants (GM, J2, J4, moon masses) are not here: they come from params/.
+
+[run]
+name = "acceptance-1y-1e4"
+backend = "cpu"                 # "cpu" or "gpu"
+seed = 20261101                 # Philox key, 0 to 2^63 - 1
+params_dir = "params"           # optional, default "params"
+
+[time]
+step_s = 360.0                  # about 150 steps per orbit at the core
+duration_years = 1.0            # Julian years (365.25 d)
+
+[frame]
+reference_semi_major_axis_km = 140220.0   # a0: the rotating frame turns at n(a0)
+
+[domain]
+kind = "full_ring"              # or: kind = "arc", width_deg = 10.0, centre_longitude_deg = 0.0
+
+[moons]
+include = ["prometheus", "pandora"]   # names from params/moons.toml; [] for Saturn only
+
+[particles]
+count = 10000
+
+[particles.distribution]
+# kind is "core", "band" or "clump"
+kind = "core"
+semi_major_axis_km = 140220.0
+sigma_semi_major_axis_km = 5.0
+eccentricity = 0.0024
+apse_longitude_deg = 0.0
+
+[collisions]
+model = "none"                  # "none", "stochastic" or "hard_sphere"
+
+[output]
+frame_every_steps = 1460        # 1460 x 360 s = about 6.1 days
+stats_every_steps = 146
+velocities = false
