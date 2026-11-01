@@ -7,6 +7,7 @@ version = "0.1.0"
 edition = "2024"
 rust-version = "1.99"
 publish = false
+license = "MIT"
 repository = "https://github.com/01painadam/fring"
 
 # Internal crates. Each crate refers to these with `<name>.workspace = true`.
@@ -17,6 +18,11 @@ fring-gpu = { path = "crates/fring-gpu" }
 fring-collide = { path = "crates/fring-collide" }
 fring-io = { path = "crates/fring-io" }
 fring-analysis = { path = "crates/fring-analysis" }
+
+# External crates. Add a crate here only after A0 agrees (ask AJ if the
+# dependency is large or hard to remove).
+serde = { version = "1.0.229", features = ["derive"] }
+toml = "1.1.8"
 
 # Lints for every crate (each crate has `[lints] workspace = true`).
 # A crate that needs `unsafe` must allow it locally and link an ADR.

@@ -16,11 +16,11 @@ Rules (full text in `AGENTS.md` and `CLAUDE.md`):
 
 | ID | Task | Role | Status | Branch | Blocked by |
 |---|---|---|---|---|---|
-| F1 | Workspace, CI, coordination files | A0 | review | ws/a0-f1 | |
-| F2 | `fring-model`: units doc, config structs, `Backend` trait, float trait, Philox RNG | A0 | todo | | F1 |
-| F3 | Snapshot format spec, `fring-io` read and write with round-trip tests | A5 | todo | | F1 |
-| L1 | Literature survey of F ring dynamics since about 2000 | A1 | todo | | F1 |
-| L2 | Cited parameter set at a stated epoch, confirmed analytical formulas | A1 | todo | | F1 |
+| F1 | Workspace, CI, coordination files | A0 | done | ws/a0-f1 | |
+| F2 | `fring-model`: units doc, config structs, `Backend` trait, float trait, Philox RNG | A0 | review | ws/a0-f2 | F1 |
+| F3 | Snapshot format spec, `fring-io` read and write with round-trip tests | A5 | review | ws/a5-f3 | F1 |
+| L1 | Literature survey of F ring dynamics since about 2000 | A1 | doing | ws/a1-l1 | F1 |
+| L2 | Cited parameter set at a stated epoch, confirmed analytical formulas; `params/saturn.toml` uses the `SaturnParams` field names | A1 | doing | ws/a1-l2 | F1 |
 | Gate G0 | Approve interfaces, parameters and the observations to reproduce | AJ | todo | | F2, F3, L1, L2 |
 
 ## Phase 1: validated orbits (CPU)
@@ -28,9 +28,9 @@ Rules (full text in `AGENTS.md` and `CLAUDE.md`):
 | ID | Task | Role | Status | Branch | Blocked by |
 |---|---|---|---|---|---|
 | C1 | Saturn point mass + J2/J4 forces and the leapfrog | A2 | todo | | Gate G0 |
-| C2 | Precession test at three radii | A2 | todo | | C1 |
+| C2 | Precession test at three radii; frame conversions inertial, rotating, local (`fring-model/src/physics/`) | A2 | todo | | C1 |
 | C3 | Moon ephemeris integrator and Hermite interpolation | A2 | todo | | C1, V2 |
-| C4 | Test particles with moons, rayon parallel | A2 | todo | | C3, V3 |
+| C4 | Test particles with moons, rayon parallel; initial conditions from the config distributions (`fring-model/src/physics/`) | A2 | todo | | C3, V3 |
 | V1 | REBOUND reference: single-particle precession | A6 | todo | | Gate G0 |
 | V2 | REBOUND reference: Prometheus and Pandora over 20 years | A6 | todo | | Gate G0 |
 | V3 | REBOUND reference: test particles near the core | A6 | todo | | Gate G0 |

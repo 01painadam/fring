@@ -12,9 +12,9 @@ Edit only the directories your role owns. To change anything else, write an inte
 
 | Role | Owns |
 |---|---|
-| A0 Lead | `Cargo.toml`, `AGENTS.md`, `CLAUDE.md`, `docs/` (except `docs/literature/`), `crates/fring-model/`, CI |
+| A0 Lead | `Cargo.toml`, `AGENTS.md`, `CLAUDE.md`, `docs/` (except `docs/literature/`), `crates/fring-model/` (except `src/physics/`), CI |
 | A1 Literature | `docs/literature/`, `params/` |
-| A2 CPU | `crates/fring-cpu/` |
+| A2 CPU | `crates/fring-cpu/`, `crates/fring-model/src/physics/` (A0 reviews each change) |
 | A3 GPU | `crates/fring-gpu/` (except `shaders/collide/`) |
 | A4 Collisions | `crates/fring-collide/`, `crates/fring-gpu/shaders/collide/` |
 | A5 I/O and runner | `crates/fring-io/`, `apps/fring-run/`, `apps/fring-bench/` |
@@ -23,6 +23,8 @@ Edit only the directories your role owns. To change anything else, write an inte
 | A8 Analysis | `crates/fring-analysis/`, `docs/results/` |
 
 Every role can edit its own handoff files and its own row on the board.
+
+`crates/fring-model/src/physics/` holds the physics that the CPU, GPU and web code share: force functions, analytic formulas, moon interpolation, frame conversions and initial conditions. It is generic over `Real` and must compile for wasm32 (AJ decision, 2026-11-01).
 
 A6 writes oracle tests from the physics specification only. A6 does not read the implementation code of A2, A3 or A4.
 
