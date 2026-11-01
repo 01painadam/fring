@@ -1,0 +1,114 @@
+API VERSION: 1.2
+API SOURCE: NASA/JPL Horizons API
+
+*******************************************************************************
+ Revised: Oct 03, 2018            Prometheus/ (Saturn)                      616
+
+ SATELLITE PHYSICAL PROPERTIES:
+  Radius (km)           = 68.2x41.6x28.2    Density (g cm^-3)   =  0.27 +- 0.16 
+  Mass (10^20 kg )      = 0.0014            Geometric Albedo    =  0.5 
+                                            V(1,0)              = +6.4 
+
+ SATELLITE ORBITAL DATA:
+  Semi-major axis, a (km) = 139.35 (10^3)   Orbital period      = 0.612986 d
+  Eccentricity, e         = 0.0024          Rotational period   = 
+  Inclination, i  (deg)   = 0.0     
+*******************************************************************************
+
+
+*******************************************************************************
+Ephemeris / API_USER Sun Nov  1 05:40:35 2026 Pasadena, USA      / Horizons
+*******************************************************************************
+Target body name: Prometheus (616)                {source: sat415_merged_DE437}
+Center body name: Saturn (699)                    {source: sat415_merged_DE437}
+Center-site name: BODY CENTER
+*******************************************************************************
+Start time      : A.D. 2008-Jan-01 00:00:00.0000 TDB
+Stop  time      : A.D. 2008-Jan-01 00:00:00.0000 TDB
+Step-size       : DISCRETE TIME-LIST
+*******************************************************************************
+Center geodetic : 0.0, 0.0, 0.0                   {W-lon(deg),Lat(deg),Alt(km)}
+Center cylindric: 0.0, 0.0, 0.0                   {W-lon(deg),Dxy(km),Dz(km)}
+Center pole/equ : IAU_SATURN                      {West-longitude positive}
+Center radii    : 60268.0, 60268.0, 54364.0 km    {Equator_a, b, pole_c}
+Output units    : KM-S
+Calendar mode   : Mixed Julian/Gregorian
+Output type     : GEOMETRIC cartesian states
+Output format   : 2 (position and velocity)
+Reference frame : IAU_SATURN body equator and node of date
+*******************************************************************************
+JDTDB
+   X     Y     Z
+   VX    VY    VZ
+*******************************************************************************
+$$SOE
+2454466.500000000 = A.D. 2008-Jan-01 00:00:00.0000 TDB 
+ X = 3.294735820205955E+03 Y = 1.391209137473762E+05 Z =-1.671177061433627E+01
+ VX=-1.655694598798910E+01 VY= 3.662910145681393E-01 VZ=-1.597217763473199E-03
+$$EOE
+*******************************************************************************
+ 
+TIME
+
+  Barycentric Dynamical Time ("TDB" or T_eph) output was requested. This
+continuous coordinate time is equivalent to the relativistic proper time
+of a clock at rest in a reference frame co-moving with the solar system
+barycenter but outside the system's gravity well. It is the independent
+variable in the solar system relativistic equations of motion.
+
+  TDB runs at a uniform rate of one SI second per second and is independent
+of irregularities in Earth's rotation.
+ 
+CALENDAR SYSTEM
+
+  Mixed calendar mode was active such that calendar dates after AD 1582-Oct-15
+(if any) are in the modern Gregorian system. Dates prior to 1582-Oct-5 (if any)
+are in the Julian calendar system, which is automatically extended for dates
+prior to its adoption on 45-Jan-1 BC.  The Julian calendar is useful for
+matching historical dates. The Gregorian calendar more accurately corresponds
+to the Earth's orbital motion and seasons. A "Gregorian-only" calendar mode is
+available if such physical events are the primary interest.
+
+REFERENCE FRAME AND COORDINATES
+
+  Body equator and node of date (IAU_SATURN)
+
+    Reference epoch: "of date"
+    Reference plane: ICRF        
+    X-Y plane: central-body IAU_SATURN equator plane at reference epoch
+    X-axis   : out along the ascending node of the central-body IAU_SATURN
+                equator plane on the reference plane at the reference epoch
+    Z-axis   : along the central-body IAU_SATURN north-pole at the reference
+                epoch
+
+  Symbol meaning:
+
+    JDTDB    Julian Day Number, Barycentric Dynamical Time
+      X      X-component of position vector (km)
+      Y      Y-component of position vector (km)
+      Z      Z-component of position vector (km)
+      VX     X-component of velocity vector (km/sec)                           
+      VY     Y-component of velocity vector (km/sec)                           
+      VZ     Z-component of velocity vector (km/sec)                           
+
+ABERRATIONS AND CORRECTIONS
+
+ Geometric state vectors have NO corrections or aberrations applied.
+
+Computations by ...
+
+    Solar System Dynamics Group, Horizons On-Line Ephemeris System
+    4800 Oak Grove Drive, Jet Propulsion Laboratory
+    Pasadena, CA  91109   USA
+
+    General site: https://ssd.jpl.nasa.gov/
+    Mailing list: https://ssd.jpl.nasa.gov/email_list.html
+    System news : https://ssd.jpl.nasa.gov/horizons/news.html
+    User Guide  : https://ssd.jpl.nasa.gov/horizons/manual.html
+    Connect     : browser        https://ssd.jpl.nasa.gov/horizons/app.html#/x
+                  API            https://ssd-api.jpl.nasa.gov/doc/horizons.html
+                  command-line   telnet ssd.jpl.nasa.gov 6775
+                  e-mail/batch   https://ssd.jpl.nasa.gov/ftp/ssd/horizons_batch.txt
+                  scripts        https://ssd.jpl.nasa.gov/ftp/ssd/SCRIPTS
+    Inquiries   : Jon.D.Giorgini@jpl.nasa.gov
+*******************************************************************************

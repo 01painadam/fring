@@ -1,0 +1,46 @@
+# F ring core: orbit at the epoch and observed targets. Task L2.
+# Units: km, degrees, days. Source keys in brackets: see params/sources.md.
+# Status of each value (full detail in params/sources.md):
+#   P = verified (primary), S = verified (secondary, quoted in an opened source), U = UNVERIFIED.
+
+[meta]
+epoch_calendar = "2008-01-01 00:00:00"
+epoch_time_scale = "TDB"
+epoch_jd_tdb = 2454466.5
+frame = "Saturn-centred, Saturn equator of date (IAU_SATURN), fixed at the epoch"
+
+[core]
+# P. Location of the m = 110 corotation-eccentricity resonance with Prometheus, i.e. the
+# massive core, in the Cassini RSS data 2005-2013 [Cuzzi24]. Use as a0 of the rotating frame.
+semi_major_axis_km = 140222.43
+semi_major_axis_err_km = 0.05
+# S. Albers et al. 2012 via Hedman 2017 [Albers12_via_Hedman17].
+eccentricity = 0.00235
+# S. Albers et al. 2012 via Hedman 2017: 2.70025 +- 0.00029 deg/day.
+apse_rate_deg_per_day = 2.70025
+apse_rate_err_deg_per_day = 0.00029
+# U. Approximate. Hedman 2017 puts the pericentre of the F ring about 25 deg behind that of
+# the Prometheus ringlet (50 deg at J2000), so varpi(J2000) = 25 deg, uncertainty not stated
+# (taken as +-5 deg here). Propagated to the epoch with the rate above:
+#   Delta t = 2454466.5 - 2451545.0 = 2921.5 d (J2000 taken as JD 2451545.0 TDB, UNVERIFIED)
+#   varpi = 25 + 2.70025 * 2921.5 = 7913.78 deg = 353.78 deg (mod 360)
+# The rate error alone adds +-0.85 deg. Treat the value as good to a few degrees at best.
+# A run does not need it unless the apse phase relative to Prometheus matters (it does for
+# runs that compare with the arc longitudes of Cuzzi24).
+apse_longitude_deg = 353.78
+apse_longitude_err_deg = 5.0
+# S. Bosh et al. 2002 via Charnoz 2009 [Bosh02_via_Charnoz09]. Primary not opened.
+inclination_deg = 0.0065
+
+[targets]
+# Observations to reproduce (docs/literature/summary.md, section 6).
+# P. Upper limit on the local radial width of the massive core [Cuzzi24].
+radial_width_max_km = 1.0
+# P. Width of the dust strands seen in images, 10 to 30 km [Cuzzi24].
+dust_strand_width_min_km = 10.0
+dust_strand_width_max_km = 30.0
+# P. Arc structure: 110 lobes of 3.27 deg, about 70 % populated [Cuzzi24].
+cer_order_m = 110
+lobe_width_deg = 3.27
+# P. Prometheus mean motion in the RSS analysis period [Cuzzi24].
+prometheus_mean_motion_deg_per_day = 587.285415
