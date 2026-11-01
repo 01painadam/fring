@@ -12,9 +12,10 @@ license.workspace = true
 fring-model.workspace = true
 wgpu.workspace = true
 pollster.workspace = true
+rayon.workspace = true
 
 [dev-dependencies]
-rayon.workspace = true
+fring-cpu.workspace = true
 
 [lints]
 workspace = true

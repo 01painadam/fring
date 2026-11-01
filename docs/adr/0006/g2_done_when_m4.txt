@@ -1,0 +1,19 @@
+CPU and shadow: 48 s. Regular at 1000 orbits: 4890 of 10000 (circular 2829, core 1931, stress 130)
+  d circular  n  2829: da max 7.49e-3 p99 1.58e-3 | dphase max 3.56e-5 p99 1.36e-5 median 1.06e-6
+  d core      n  1931: da max 3.74e-3 p99 1.42e-3 | dphase max 4.52e-5 p99 1.56e-5 median 1.49e-6
+  d stress    n   130: da max 2.59e-2 p99 7.46e-3 | dphase max 1.15e-4 p99 3.07e-5 median 1.16e-6
+  d amp<3     n  3464: da max 2.59e-2 p99 7.77e-4 | dphase max 1.15e-4 p99 6.85e-6 median 9.23e-7
+  d amp>=3    n  1426: da max 7.49e-3 p99 2.09e-3 | dphase max 4.52e-5 p99 2.08e-5 median 2.71e-6
+GPU d (1.8 s wall, Apple M4 (Metal)): 4890 regular particles. da km: max 2.59e-2, p99 1.56e-3, median 1.59e-4. dphase rad: max 1.15e-4, p99 1.48e-5, median 1.21e-6
+  dp circular  n  2829: da max 2.70e-5 p99 7.61e-6 | dphase max 3.70e-7 p99 5.80e-8 median 5.34e-9
+  dp core      n  1931: da max 3.02e-4 p99 3.34e-5 | dphase max 3.64e-6 p99 2.63e-7 median 1.91e-8
+  dp stress    n   130: da max 4.89e-4 p99 1.14e-4 | dphase max 2.07e-6 p99 4.47e-7 median 1.41e-8
+  dp amp<3     n  3464: da max 4.89e-4 p99 1.03e-5 | dphase max 2.07e-6 p99 1.01e-7 median 6.83e-9
+  dp amp>=3    n  1426: da max 3.02e-4 p99 4.82e-5 | dphase max 3.64e-6 p99 3.07e-7 median 1.59e-8
+GPU dp (1.9 s wall, Apple M4 (Metal)): 4890 regular particles. da km: max 4.89e-4, p99 2.45e-5, median 1.23e-6. dphase rad: max 3.64e-6, p99 1.74e-7, median 8.52e-9
+  c circular  n  2829: da max 2.42e-5 p99 2.76e-6 | dphase max 1.81e-7 p99 2.78e-8 median 1.76e-9
+  c core      n  1931: da max 8.99e-5 p99 4.73e-6 | dphase max 4.03e-7 p99 4.40e-8 median 2.29e-9
+  c stress    n   130: da max 3.36e-4 p99 3.84e-5 | dphase max 1.42e-6 p99 7.06e-8 median 1.94e-9
+  c amp<3     n  3464: da max 3.36e-4 p99 2.23e-6 | dphase max 1.42e-6 p99 2.47e-8 median 1.77e-9
+  c amp>=3    n  1426: da max 8.99e-5 p99 8.54e-6 | dphase max 4.03e-7 p99 6.92e-8 median 2.54e-9
+GPU c (3.7 s wall, Apple M4 (Metal)): 4890 regular particles. da km: max 3.36e-4, p99 4.66e-6, median 2.20e-7. dphase rad: max 1.42e-6, p99 3.45e-8, median 1.94e-9

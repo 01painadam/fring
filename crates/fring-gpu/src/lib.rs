@@ -11,9 +11,12 @@
 //!   `shaders/spike.wgsl`).
 //! - [`spike_gpu`]: the same options on the GPU.
 
+pub mod backend;
 pub mod ds;
 pub mod gpu;
 pub mod probe;
 pub mod spike;
 pub mod spike_gpu;
 pub mod wf32;
+pub mod wh;
+pub mod wh_gpu;

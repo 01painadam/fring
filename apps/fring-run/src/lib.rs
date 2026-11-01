@@ -15,6 +15,7 @@ mod sysinfo;
 
 use cli::Args;
 use fring_cpu::CpuBackend;
+use fring_gpu::backend::GpuBackend;
 use fring_io::{Frame, MoonRecord, MoonsFile, RotatingVelocities, RunDir, RunMeta};
 use fring_model::config::{BackendKind, Collisions, Domain};
 use fring_model::params::{moons_from_toml_str, saturn_from_toml_str};
@@ -90,9 +91,6 @@ pub fn check_supported(config: &RunConfig) -> Result<(), RunError> {
             "{what} is not implemented yet (task {task})"
         )))
     };
-    if config.run.backend == BackendKind::Gpu {
-        return no("backend = \"gpu\"", "G2");
-    }
     if matches!(config.domain, Domain::Arc { .. }) {
         return no("domain.kind = \"arc\"", "D1");
     }
@@ -308,10 +306,7 @@ pub fn run(args: &Args) -> Result<Summary, RunError> {
     };
     let system = System { saturn, moons: eph };
 
-    // 3. Backend (the GPU case was refused above).
-    let backend = setup(CpuBackend::new(&config, &system, &init))?;
-    let machine = sysinfo::machine("cpu");
-
+    // 3. Backend, chosen by `[run] backend`.
     let ctx = Context {
         config: &config,
         system: &system,
@@ -321,7 +316,22 @@ pub fn run(args: &Args) -> Result<Summary, RunError> {
         n_steps,
         out: RunDir::new(&out_dir),
     };
-    let mut summary = execute(backend, &ctx, &mut progress)?;
+    let (mut summary, machine) = match config.run.backend {
+        BackendKind::Cpu => {
+            let backend = setup(CpuBackend::new(&config, &system, &init))?;
+            let machine = sysinfo::machine("cpu");
+            (execute(backend, &ctx, &mut progress)?, machine)
+        }
+        BackendKind::Gpu => {
+            let backend = setup(GpuBackend::new(&config, &system, &init))?;
+            let machine = sysinfo::machine(&format!(
+                "gpu {}, mode {}",
+                backend.adapter_name(),
+                backend.mode().name()
+            ));
+            (execute(backend, &ctx, &mut progress)?, machine)
+        }
+    };
 
     // 4. meta.json, last.
     summary.wall_time_s = start.elapsed().as_secs_f64();

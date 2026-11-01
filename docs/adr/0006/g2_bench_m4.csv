@@ -1,0 +1,23 @@
+section,mode,workgroup,n_particles,steps_per_call,output_every,particle_steps_per_s,note
+kernel,cpu_f64,-,100000,150,-,6.733e7,CpuBackend
+kernel,d,64,1000000,150,-,1.106e9,Apple M4 (Metal) block 200
+kernel,dp,64,1000000,150,-,9.525e8,Apple M4 (Metal) block 200
+kernel,c,64,1000000,150,-,4.735e8,Apple M4 (Metal) block 200
+sweep,d,32,1000000,150,-,1.104e9,
+sweep,d,64,1000000,150,-,1.102e9,
+sweep,d,128,1000000,150,-,1.103e9,
+sweep,d,256,1000000,150,-,1.103e9,
+sweep,dp,32,1000000,150,-,9.542e8,
+sweep,dp,64,1000000,150,-,9.511e8,
+sweep,dp,128,1000000,150,-,9.519e8,
+sweep,dp,256,1000000,150,-,9.514e8,
+sweep,c,32,1000000,150,-,4.734e8,
+sweep,c,64,1000000,150,-,4.739e8,
+sweep,c,128,1000000,150,-,4.732e8,
+sweep,c,256,1000000,150,-,4.732e8,
+interface,d,64,1000000,150,150,1.056e9,frame read-back every 150 steps
+interface,d,64,1000000,1500,1500,1.098e9,frame read-back every 1500 steps
+interface,dp,64,1000000,150,150,9.179e8,frame read-back every 150 steps
+interface,dp,64,1000000,1500,1500,9.507e8,frame read-back every 1500 steps
+interface,c,64,1000000,150,150,4.656e8,frame read-back every 150 steps
+interface,c,64,1000000,1500,1500,4.740e8,frame read-back every 1500 steps

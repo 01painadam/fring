@@ -211,10 +211,6 @@ fn refuses_features_that_are_not_built_yet() {
     let base = small_config();
     let cases = [
         (
-            replace(&base, "backend = \"cpu\"", "backend = \"gpu\""),
-            "G2",
-        ),
-        (
             replace(
                 &base,
                 "kind = \"full_ring\"",
@@ -358,4 +354,65 @@ fn acceptance_1e4_particles_1_year() {
         bytes as f64 / 1e6,
         s.particle_steps_per_s / 1e6
     );
+}
+
+/// `backend = "gpu"` runs `GpuBackend` and agrees with the CPU run: the
+/// frames are f32 and the GPU differs from the f64 CPU by far less than
+/// their resolution. Needs a GPU: `cargo test -p fring-run --release -- --ignored`.
+#[test]
+#[ignore = "needs a GPU"]
+fn gpu_backend_run_agrees_with_the_cpu_run() {
+    let base = small_config();
+    let tmp = Tmp::new();
+    let (cpu, _) = run_config(&tmp, &base, "cpu", true).unwrap();
+    let gpu_text = replace(&base, "backend = \"cpu\"", "backend = \"gpu\"");
+    let (gpu, summary) = match run_config(&tmp, &gpu_text, "gpu", true) {
+        Ok(r) => r,
+        Err(RunError::Setup(m)) if m.contains("no GPU adapter") => {
+            eprintln!("no GPU: skipped");
+            return;
+        }
+        Err(e) => panic!("{e}"),
+    };
+    assert!(summary.particle_steps_per_s > 0.0);
+    let frames = cpu.list_frames().unwrap();
+    assert_eq!(frames, gpu.list_frames().unwrap());
+    let mut worst = 0.0f32;
+    for i in frames {
+        let (a, b) = (
+            cpu.read_frame_file(i).unwrap(),
+            gpu.read_frame_file(i).unwrap(),
+        );
+        assert_eq!(a.id, b.id);
+        assert_eq!(a.step, b.step);
+        for (x, y) in [(&a.x_km, &b.x_km), (&a.y_km, &b.y_km), (&a.z_km, &b.z_km)] {
+            for (p, q) in x.iter().zip(y) {
+                worst = worst.max((p - q).abs());
+            }
+        }
+    }
+    // The core particles move 4e5 km in a few orbits; the f32 frames have a
+    // resolution of 0.03 km at that size.
+    assert!(worst < 0.1, "largest frame difference {worst} km");
+    let (ra, rb) = (
+        cpu.read_stats_file().unwrap(),
+        gpu.read_stats_file().unwrap(),
+    );
+    assert_eq!(ra.len(), rb.len());
+}
+
+/// `backend = "gpu"` is accepted: with a GPU the run works, without one it
+/// fails with a backend error (never "not implemented"). Runs in CI.
+#[test]
+fn gpu_backend_is_selected_not_refused() {
+    let text = replace(&small_config(), "backend = \"cpu\"", "backend = \"gpu\"");
+    let tmp = Tmp::new();
+    match run_config(&tmp, &text, "g", true) {
+        Ok(_) => {}
+        Err(RunError::Setup(m)) => {
+            assert!(!m.contains("not implemented"), "{m}");
+            assert!(m.contains("backend error"), "{m}");
+        }
+        Err(e) => panic!("{e}"),
+    }
 }

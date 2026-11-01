@@ -42,7 +42,7 @@ Rules (full text in `AGENTS.md` and `CLAUDE.md`):
 | ID | Task | Role | Status | Branch | Blocked by |
 |---|---|---|---|---|---|
 | G1 | GPU precision spike: f32, f32 + double-single accumulation, double-single (ADR); includes the Wisdom-Holman Kepler drift, and decides GPU or CPU for science runs (gate G1) | A3 | done | ws/a3-g1 | Gate G1 |
-| G2 | wgpu setup, kick and drift kernels, moon table in WGSL, Rust twin tests | A3 | todo | | G1 |
+| G2 | wgpu setup, kick and drift kernels, moon kick table (host, ADR 0007), Rust twin tests; production mode D+ (ADR 0006 addendum) | A3 | done | ws/a3-g2 | G1 |
 | G3 | Chaos indicator on GPU | A3 | todo | | G2 |
 | B1 | `fring-bench`: particle-steps per second, CPU and GPU, N = 10⁴ to 10⁷ | A5 | todo | | G2 |
 | A1-ANALYSIS | First chaos map of the region between the moons; measure the moons' share of ϖ̇ at the core (G0); converged Lyapunov time of the moons (G1) | A8 | todo | | G3 |

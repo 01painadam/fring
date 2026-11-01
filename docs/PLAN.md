@@ -65,7 +65,7 @@ Kilometres, seconds, kilograms. Gravitational parameters as GM in km³ s⁻². A
 ### 4.3 Precision policy
 
 - CPU backend: f64 everywhere. It is the reference.
-- GPU backend (ADR 0006): Metal has no f64. Science runs use option D: particle position and velocity in double-single (two f32 per value, 48 bytes per particle), Saturn-centred; the Kepler drift in double-single (an f32 Newton solve, then one double-single correction); kick magnitudes in f32, applied along the double-single position. Option C (double-single throughout) is the GPU reference mode. The web toy uses option A (plain f32). Double-single needs a guard against Metal fast math and a start-up self-test (ADR 0006). Local coordinates are used for output, collision cells and the arc domain, not for the state. The GPU must agree with the CPU within the tolerances in section 10.
+- GPU backend (ADR 0006): Metal has no f64. Science runs use option D+ (ADR 0006, addendum G2): particle position and velocity in double-single (two f32 per value, 48 bytes per particle), Saturn-centred; the Kepler drift in double-single (an f32 Newton solve, then one double-single correction); the J2 part of the kick in double-single, the J4, J6 and moon parts as f32 magnitudes applied along the double-single position. Option D (all kick magnitudes in f32) is faster but does not meet section 10 in the tail. Option C (double-single throughout) is the GPU reference mode. The web toy uses option A (plain f32). Double-single needs a guard against Metal fast math and a start-up self-test (ADR 0006). Local coordinates are used for output, collision cells and the arc domain, not for the state. The GPU must agree with the CPU within the tolerances in section 10.
 
 ### 4.4 Configuration
 
@@ -151,7 +151,7 @@ Rules:
 
 ### 6.3 Moons
 
-Moons are few, so integrate them on the CPU in f64 with a high-accuracy integrator (for example IAS15-style or a high-order symplectic method with a small step). Before a run, `fring-run` pre-computes a moon ephemeris table for the full duration and uploads it to the GPU. Particle kernels interpolate moon positions (Hermite, from positions and velocities). This removes moon integration from the hot loop and makes CPU and GPU see the same moons.
+Moons are few, so integrate them on the CPU in f64 with a high-accuracy integrator (for example IAS15-style or a high-order symplectic method with a small step). Before a run, `fring-run` pre-computes a moon ephemeris table for the full duration (quintic Hermite, ICR-002). Each backend interpolates it on the host for every block of steps and gives the particle kernels a small table of moon positions and the indirect term at the kick times; the GPU does not interpolate (ADR 0007). This removes moon integration from the hot loop and makes CPU and GPU see the same moons.
 
 ## 7. Physics specification
 
