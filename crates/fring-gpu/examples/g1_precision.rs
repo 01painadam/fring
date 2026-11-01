@@ -7,8 +7,10 @@
 //!
 //! Options: `--orbits N` (default 10000; one orbit = 150 steps of
 //! h = 356.25 s), `--moons none|both`, `--no-gpu`, `--out DIR` (default
-//! `docs/adr/0006`). Writes `DIR/g1_<moons>_series.csv` (every 10 orbits)
-//! and `DIR/g1_<moons>_summary.csv` (10³ and 10⁴ orbits, growth exponents).
+//! `docs/adr/0006`). Writes `DIR/g1_<moons>_series.csv` (log-spaced in orbits,
+//! particles regular up to 10³ orbits), `DIR/g1_<moons>_summary.csv` (10³
+//! and 10⁴ orbits, regular and all particles, growth exponents from 100
+//! orbits on) and `DIR/g1_<moons>_particles.csv` (every particle).
 //!
 //! Ensemble: three orbit types at a = 140,222.43 km (circular; core
 //! e = 0.0024, i = 1.1e-4; stress e = 0.01, i = 1e-3), 32 particles each at
@@ -19,9 +21,12 @@
 //! - `rust_wgsl`: the Rust twins with the WGSL worst-case model (C, D);
 //! - `gpu`: the WGSL kernels on the GPU.
 //!
-//! With moons, a particle counts as chaotic at a horizon if an f64 shadow
-//! started 1 mm further out has |Δa| > 100 times its start value before that
-//! horizon; chaotic particles are left out of the statistics (PLAN 10).
+//! Chaos test: an f64 shadow starts 1 mm further out. A particle is regular
+//! up to a horizon if the shadow's |Δa| stays below 10 times its start value
+//! and its phase difference below 10 times the linear Kepler shear. The
+//! `regular` rows follow PLAN section 10 (trajectories of non-chaotic orbits
+//! only); the `all` rows and `median_dphase_over_shadow` (the GPU-CPU phase
+//! difference divided by the 1 mm shadow's) are the statistics for the rest.
 
 use fring_gpu::gpu::Gpu;
 use fring_gpu::spike::{
@@ -70,9 +75,8 @@ struct Particle {
     m4: Vec<State<M4>>,
     wg: Vec<State<WG>>,
     gpu: Vec<State<M4>>,
-    /// Per block: (Δa km, Δλ rad) for every series; shadow |Δa| separately.
+    /// Per block: (Δa km, Δλ rad) for every series (index 1: the shadow).
     rec: Vec<Vec<(f64, f64)>>,
-    shadow_da: Vec<f64>,
 }
 
 fn main() {
@@ -167,7 +171,6 @@ fn main() {
                 wg: vec![state_from_f64(p, v); WGSL_OPTS.len()],
                 gpu: vec![state_from_f64(p, v); Opt::ALL.len()],
                 rec: Vec::with_capacity(n_blocks),
-                shadow_da: Vec::with_capacity(n_blocks),
             });
         }
     }
@@ -233,7 +236,6 @@ fn main() {
             row.push((ar - af, phase_difference(q.fine.0, q.p)));
             let sh = d(q.shadow.0, q.shadow.1);
             row.push(sh);
-            q.shadow_da.push(sh.0.abs());
             for s in &q.m4 {
                 let (p, v) = state_to_f64(s);
                 row.push(d(p, v));
@@ -261,94 +263,129 @@ fn main() {
         }
     }
 
-    // Chaos classification: shadow |Δa| above 100 times its start value.
-    let start_da: Vec<f64> = parts.iter().map(|q| q.shadow_da[0].max(1e-9)).collect();
-    let chaotic_by = |q: usize, block: usize| {
-        parts[q].shadow_da[..=block]
-            .iter()
-            .any(|&x| x > 100.0 * start_da[q])
+    // Chaos test (PLAN 10: compare trajectories only for non-chaotic orbits).
+    // The f64 shadow starts 1 mm further out. On a regular orbit its Δa stays
+    // near the start value and its phase difference grows linearly (Kepler
+    // shear): Δλ_lin = 1.5 (Δa₀/a) 2π N. A particle is regular up to block
+    // b if max |Δa_sh| < 10 |Δa_sh(0)| and |Δλ_sh| < 10 Δλ_lin up to b.
+    let orbits_at = |b: usize| ((b + 1) * BLOCK / STEPS_PER_ORBIT) as f64;
+    let amp = |q: usize, b: usize| {
+        let r = &parts[q].rec;
+        let da0 = r[0][1].0.abs().max(1e-12);
+        let amp_a = (0..=b).map(|j| r[j][1].0.abs()).fold(0.0, f64::max) / da0;
+        let amp_l = (0..=b)
+            .map(|j| r[j][1].1.abs() / (1.5 * da0 / A0_KM * std::f64::consts::TAU * orbits_at(j)))
+            .fold(0.0, f64::max);
+        (amp_a, amp_l)
     };
-    let blocks_per_10 = 10 * STEPS_PER_ORBIT / BLOCK; // 1
+    let regular = |q: usize, b: usize| {
+        let (aa, al) = amp(q, b);
+        aa < 10.0 && al < 10.0
+    };
+    let horizon_block = |o: usize| (o * STEPS_PER_ORBIT / BLOCK).min(n_blocks) - 1;
+    let b1000 = horizon_block(orbits.min(1000));
     let mut csv = String::from(
         "source,option,orbit_type,moons,orbits,n_particles,rms_da_km,max_da_km,rms_dphase_rad,max_dphase_rad\n",
     );
     let mut summary = String::from(
-        "source,option,orbit_type,moons,orbits,n_particles,n_chaotic,rms_da_km,max_da_km,rms_dphase_rad,max_dphase_rad,exp_da,exp_dphase\n",
+        "source,option,orbit_type,moons,orbits,filter,n_particles,rms_da_km,max_da_km,rms_dphase_rad,max_dphase_rad,median_dphase_over_shadow,exp_da,exp_dphase\n",
     );
-    let last = n_blocks - 1;
+    let mut per_particle = String::from(
+        "moons,orbit_type,particle,orbits,regular,shadow_amp_da,shadow_amp_dphase,source,option,da_km,dphase_rad\n",
+    );
     for (si, s) in series.iter().enumerate() {
-        if s.source == "shadow" {
-            continue;
-        }
         for (kind, &(tname, _, _)) in ORBIT_TYPES.iter().enumerate() {
             let members: Vec<usize> = (0..parts.len())
                 .filter(|&q| parts[q].kind == kind)
                 .collect();
-            let stats = |block: usize, horizon: usize| {
-                let ok: Vec<usize> = members
-                    .iter()
-                    .copied()
-                    .filter(|&q| moons_mode == "none" || !chaotic_by(q, horizon))
-                    .collect();
+            // Statistics at block b over the particles in `set`.
+            let stats = |b: usize, set: &[usize]| {
                 let (mut sa, mut ma, mut sl, mut ml) = (0.0, 0.0f64, 0.0, 0.0f64);
-                for &q in &ok {
-                    let (da, dl) = parts[q].rec[block][si];
+                let mut ratios: Vec<f64> = Vec::new();
+                for &q in set {
+                    let (da, dl) = parts[q].rec[b][si];
                     sa += da * da;
                     sl += dl * dl;
                     ma = ma.max(da.abs());
                     ml = ml.max(dl.abs());
+                    ratios.push(dl.abs() / parts[q].rec[b][1].1.abs().max(1e-300));
                 }
-                let n = ok.len().max(1) as f64;
-                (ok.len(), (sa / n).sqrt(), ma, (sl / n).sqrt(), ml)
+                ratios.sort_by(f64::total_cmp);
+                let med = ratios.get(ratios.len() / 2).copied().unwrap_or(f64::NAN);
+                let n = set.len().max(1) as f64;
+                (set.len(), (sa / n).sqrt(), ma, (sl / n).sqrt(), ml, med)
             };
-            for b in (blocks_per_10 - 1..n_blocks).step_by(blocks_per_10) {
-                let (n, ra, ma, rl, ml) = stats(b, last);
-                let orb = (b + 1) * BLOCK / STEPS_PER_ORBIT;
+            // Time series and growth exponents over the particles that are
+            // regular up to 10³ orbits (all of them without moons).
+            let reg1000: Vec<usize> = members
+                .iter()
+                .copied()
+                .filter(|&q| regular(q, b1000))
+                .collect();
+            // Log-spaced output: every 10 orbits to 100, 50 to 1000, 500 after.
+            let keep = |o: f64| {
+                let o = o as usize;
+                (o <= 100 && o.is_multiple_of(10))
+                    || (o <= 1000 && o.is_multiple_of(50))
+                    || o.is_multiple_of(500)
+            };
+            for b in (0..n_blocks).filter(|&b| keep(orbits_at(b))) {
+                let (n, ra, ma, rl, ml, _) = stats(b, &reg1000);
                 writeln!(
                     csv,
-                    "{},{},{tname},{moons_mode},{orb},{n},{ra:.4e},{ma:.4e},{rl:.4e},{ml:.4e}",
-                    s.source, s.opt
+                    "{},{},{tname},{moons_mode},{},{n},{ra:.4e},{ma:.4e},{rl:.4e},{ml:.4e}",
+                    s.source,
+                    s.opt,
+                    orbits_at(b)
                 )
                 .unwrap();
             }
-            // Growth exponents: least-squares slope of log(rms) against
-            // log(orbits) from 100 orbits to the end.
-            let fit = |col: usize| {
-                let pts: Vec<(f64, f64)> = (0..n_blocks)
+            let fit = |col: usize, set: &[usize], until: usize| {
+                let pts: Vec<(f64, f64)> = (0..=until)
                     .filter_map(|b| {
-                        let orb = ((b + 1) * BLOCK / STEPS_PER_ORBIT) as f64;
-                        let (_, ra, _, rl, _) = stats(b, last);
+                        let (_, ra, _, rl, _, _) = stats(b, set);
                         let y = if col == 0 { ra } else { rl };
-                        (orb >= 100.0 && y > 0.0).then(|| (orb.ln(), y.ln()))
+                        (orbits_at(b) >= 100.0 && y > 0.0).then(|| (orbits_at(b).ln(), y.ln()))
                     })
                     .collect();
                 if pts.len() < 3 {
                     return f64::NAN;
                 }
                 let n = pts.len() as f64;
-                let (mx, my) = (
-                    pts.iter().map(|p| p.0).sum::<f64>() / n,
-                    pts.iter().map(|p| p.1).sum::<f64>() / n,
-                );
+                let mx = pts.iter().map(|p| p.0).sum::<f64>() / n;
+                let my = pts.iter().map(|p| p.1).sum::<f64>() / n;
                 let sxy: f64 = pts.iter().map(|p| (p.0 - mx) * (p.1 - my)).sum();
                 let sxx: f64 = pts.iter().map(|p| (p.0 - mx).powi(2)).sum();
                 sxy / sxx
             };
-            let (ea, el) = (fit(0), fit(1));
-            for horizon_orbits in [1000usize, 10_000] {
-                if horizon_orbits > orbits {
+            for horizon in [1000usize, 10_000] {
+                if horizon > orbits {
                     continue;
                 }
-                let b = horizon_orbits * STEPS_PER_ORBIT / BLOCK - 1;
-                let (n, ra, ma, rl, ml) = stats(b, b);
-                writeln!(
-                    summary,
-                    "{},{},{tname},{moons_mode},{horizon_orbits},{n},{},{ra:.4e},{ma:.4e},{rl:.4e},{ml:.4e},{ea:.2},{el:.2}",
-                    s.source,
-                    s.opt,
-                    members.len() - n
-                )
-                .unwrap();
+                let b = horizon_block(horizon);
+                let reg: Vec<usize> = members.iter().copied().filter(|&q| regular(q, b)).collect();
+                for (filter, set) in [("regular", &reg), ("all", &members)] {
+                    let (n, ra, ma, rl, ml, med) = stats(b, set);
+                    let (ea, el) = (fit(0, set, b), fit(1, set, b));
+                    writeln!(
+                        summary,
+                        "{},{},{tname},{moons_mode},{horizon},{filter},{n},{ra:.4e},{ma:.4e},{rl:.4e},{ml:.4e},{med:.3e},{ea:.2},{el:.2}",
+                        s.source, s.opt
+                    )
+                    .unwrap();
+                }
+                for &q in &members {
+                    let (aa, al) = amp(q, b);
+                    let (da, dl) = parts[q].rec[b][si];
+                    writeln!(
+                        per_particle,
+                        "{moons_mode},{tname},{q},{horizon},{},{aa:.3e},{al:.3e},{},{},{da:.4e},{dl:.4e}",
+                        regular(q, b),
+                        s.source,
+                        s.opt
+                    )
+                    .unwrap();
+                }
             }
         }
     }
@@ -356,6 +393,7 @@ fn main() {
     let base = format!("{out_dir}/g1_{moons_mode}");
     std::fs::write(format!("{base}_series.csv"), csv).unwrap();
     std::fs::write(format!("{base}_summary.csv"), &summary).unwrap();
+    std::fs::write(format!("{base}_particles.csv"), per_particle).unwrap();
     println!("{summary}");
     eprintln!(
         "done: {:.0} s wall, GPU {:.1} s; wrote {base}_series.csv and {base}_summary.csv",
