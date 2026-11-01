@@ -29,7 +29,7 @@ Rules (full text in `AGENTS.md` and `CLAUDE.md`):
 |---|---|---|---|---|---|
 | C1 | Saturn point mass + J2/J4/J6 forces (J6: ICR-001) and the leapfrog | A2 | done | ws/a2-c1 | Gate G0 |
 | C2 | Wisdom-Holman integrator (ADR 0003); precession test at three radii; frame conversions inertial, rotating, local (`fring-model/src/physics/`) | A2 | done | ws/a2-c2 | C1 |
-| C3 | Moon ephemeris integrator and Hermite interpolation | A2 | todo | | C1, V2 |
+| C3 | Moon ephemeris integrator and Hermite interpolation | A2 | done | ws/a2-c3 | C1, V2 |
 | C4 | Test particles with moons, rayon parallel; initial conditions from the config distributions (`fring-model/src/physics/`) | A2 | todo | | C3, V3 |
 | V1 | REBOUND reference: single-particle precession | A6 | done | ws/a6-v1 | Gate G0 |
 | V2 | REBOUND reference: Prometheus and Pandora over 20 years | A6 | done | ws/a6-v2 | Gate G0 |
