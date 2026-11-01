@@ -38,5 +38,5 @@ jobs:
       - name: Test
         run: cargo test --workspace
 
-      - name: fring-model builds for wasm32
-        run: cargo check -p fring-model --target wasm32-unknown-unknown
+      - name: fring-model and fring-io build for wasm32
+        run: cargo check -p fring-model -p fring-io --target wasm32-unknown-unknown
