@@ -13,6 +13,7 @@
 //!
 //! Start with [`units`] for the conventions.
 
+pub mod config;
 pub mod error;
 pub mod real;
 pub mod rng;
