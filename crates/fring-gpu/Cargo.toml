@@ -10,6 +10,8 @@ license.workspace = true
 
 [dependencies]
 fring-model.workspace = true
+wgpu.workspace = true
+pollster.workspace = true
 
 [lints]
 workspace = true
