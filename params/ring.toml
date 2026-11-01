@@ -29,7 +29,7 @@ apse_rate_err_deg_per_day = 0.00029
 # runs that compare with the arc longitudes of Cuzzi24).
 apse_longitude_deg = 353.78
 apse_longitude_err_deg = 5.0
-# U. Bosh et al. 2002 via Charnoz 2009 [Bosh02_via_Charnoz09]. Primary not opened.
+# S. Bosh et al. 2002 via Charnoz 2009 [Bosh02_via_Charnoz09]. Primary not opened.
 inclination_deg = 0.0065
 
 [targets]
