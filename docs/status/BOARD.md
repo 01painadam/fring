@@ -27,7 +27,7 @@ Rules (full text in `AGENTS.md` and `CLAUDE.md`):
 
 | ID | Task | Role | Status | Branch | Blocked by |
 |---|---|---|---|---|---|
-| C1 | Saturn point mass + J2/J4/J6 forces (J6: ICR-001) and the leapfrog | A2 | todo | | Gate G0 |
+| C1 | Saturn point mass + J2/J4/J6 forces (J6: ICR-001) and the leapfrog | A2 | done | ws/a2-c1 | Gate G0 |
 | C2 | Precession test at three radii; frame conversions inertial, rotating, local (`fring-model/src/physics/`) | A2 | todo | | C1 |
 | C3 | Moon ephemeris integrator and Hermite interpolation | A2 | todo | | C1, V2 |
 | C4 | Test particles with moons, rayon parallel; initial conditions from the config distributions (`fring-model/src/physics/`) | A2 | todo | | C3, V3 |
