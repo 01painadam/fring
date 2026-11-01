@@ -161,7 +161,12 @@ Moons are few, so integrate them on the CPU in f64 with a high-accuracy integrat
 
 with P₂(u) = (3u² − 1)/2, P₄(u) = (35u⁴ − 30u² + 3)/8 and P₆(u) = (231u⁶ − 315u⁴ + 105u² − 5)/16. Here r is the spherical radius. Acceleration a = −∇Φ in Cartesian coordinates. Test the analytical gradient against a finite-difference gradient.
 
-Moon acceleration on a particle: point mass, a = −GMᵢ (r − rᵢ)/|r − rᵢ|³. Add a softening only if a test shows close encounters cause problems, and record it in an ADR.
+Moons are point masses. The frame is Saturn-centred, so each moon also accelerates Saturn; the equations include this indirect term (ADR 0004):
+
+- Particle: r̈ = −GM r/|r|³ + a_J(r) + Σⱼ GMⱼ [ (rⱼ − r)/|rⱼ − r|³ − rⱼ/|rⱼ|³ ]
+- Moon i: r̈ᵢ = −(GM + GMᵢ) rᵢ/|rᵢ|³ + a_J(rᵢ) + Σ_{j≠i} GMⱼ [ (rⱼ − rᵢ)/|rⱼ − rᵢ|³ − rⱼ/|rⱼ|³ ]
+
+Here a_J is the acceleration from the J2, J4 and J6 terms of Φ. Add a softening only if a test shows close encounters cause problems, and record it in an ADR.
 
 ### 7.2 Analytical checks (for near-circular equatorial orbits)
 

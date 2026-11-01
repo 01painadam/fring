@@ -1,0 +1,153 @@
+{
+  "task": "V1",
+  "frame": "Saturn-centred, Saturn equator inertial; Saturn at origin",
+  "units": "km, s, rad",
+  "versions": {
+    "rebound": "5.2.2",
+    "numpy": "2.5.4",
+    "python": "3.12.12"
+  },
+  "integrator": {
+    "name": "ias15",
+    "epsilon": 1e-09,
+    "note": "Saturn is a free body but a massless particle does not move it"
+  },
+  "field": {
+    "gm_km3_s2": 37931206.234,
+    "radius_km": 60330.0,
+    "j2": 0.016290615,
+    "j4": -0.000935119,
+    "j6": 8.6764e-05
+  },
+  "start": "guiding centre at r, z=0, theta0=0; v_r=e r kappa, v_t=r n, v_z=i r nu; e=i=1e-3",
+  "n_orbits": 200,
+  "samples_per_orbit": 100,
+  "methods": {
+    "event": "slope of azimuth of pericentre passages (rdot -,+ zero) and ascending nodes (z -,+ zero) vs time; polynomial root finding on 8 samples",
+    "freqfit": "least-squares fit of n (azimuth), kappa (r), nu (z); varpi_dot=n-kappa, node_dot=-(nu-n)"
+  },
+  "sensitivity_checks": [
+    {
+      "label": "e=i=1e-4",
+      "n_orbits": 100,
+      "varpi_rel_err": -2.3166966789389676e-08,
+      "node_rel_err": -3.1559680502279974e-07
+    },
+    {
+      "label": "e=i=1e-3, 50 samples/orbit",
+      "n_orbits": 100,
+      "varpi_rel_err": -6.774693480093852e-06,
+      "node_rel_err": -8.197816233290744e-06
+    },
+    {
+      "label": "e=i=1e-3, theta0=1.0 rad",
+      "n_orbits": 100,
+      "varpi_rel_err": -6.774692766664536e-06,
+      "node_rel_err": -8.19781716132617e-06
+    }
+  ],
+  "results": [
+    {
+      "r_km": 100000.0,
+      "wall_s": 48.891549825668335,
+      "steps_samples": 20001,
+      "n_rad_s": 0.0001956469335517616,
+      "kappa_rad_s": 0.0001938186793484923,
+      "nu_rad_s": 0.00019745826078445327,
+      "expected_varpi_dot_rad_s": 1.828254203269298e-06,
+      "expected_node_dot_rad_s": -1.8113272326916816e-06,
+      "event": {
+        "varpi_dot_rad_s": 1.8282406746357845e-06,
+        "varpi_sigma": 8.661642868473507e-14,
+        "node_dot_rad_s": -1.811315524103304e-06,
+        "node_sigma": 8.731435590840699e-13,
+        "varpi_rel_err": -7.399755181380918e-06,
+        "node_rel_err": -6.464093382008151e-06,
+        "n_peri": 198,
+        "n_node": 201
+      },
+      "freqfit": {
+        "n": 0.00019564633177772831,
+        "kappa": 0.00019381809110490127,
+        "nu": 0.0001974576491001535,
+        "varpi_dot_rad_s": 1.828240672827042e-06,
+        "node_dot_rad_s": -1.8113173224251994e-06,
+        "varpi_rel_err": -7.400744509000745e-06,
+        "node_rel_err": -5.47127338634823e-06,
+        "n_rel_err": -3.0758163307442743e-06,
+        "kappa_rel_err": -3.0350201177808955e-06,
+        "nu_rel_err": -3.09779037521718e-06
+      },
+      "lz_rel_drift": 6.661338147750939e-16,
+      "energy_rel_drift": 1.7763568394002505e-15
+    },
+    {
+      "r_km": 140222.43,
+      "wall_s": 44.28657627105713,
+      "steps_samples": 20001,
+      "n_rad_s": 0.00011756156514220867,
+      "kappa_rad_s": 0.00011701647148457219,
+      "nu_rad_s": 0.00011810414302077576,
+      "expected_varpi_dot_rad_s": 5.450936576364854e-07,
+      "expected_node_dot_rad_s": -5.425778785670836e-07,
+      "event": {
+        "varpi_dot_rad_s": 5.450897615677183e-07,
+        "varpi_sigma": 2.2191631723301873e-14,
+        "node_dot_rad_s": -5.425741690568541e-07,
+        "node_sigma": 2.4600158598872297e-13,
+        "varpi_rel_err": -7.1475217376937294e-06,
+        "node_rel_err": -6.836825414358039e-06,
+        "n_peri": 199,
+        "n_node": 200
+      },
+      "freqfit": {
+        "n": 0.00011756120806651643,
+        "kappa": 0.00011701611833113854,
+        "nu": 0.00011810378269838244,
+        "varpi_dot_rad_s": 5.4508973537789e-07,
+        "node_dot_rad_s": -5.425746318660121e-07,
+        "varpi_rel_err": -7.19556821182632e-06,
+        "node_rel_err": -5.983843425538815e-06,
+        "n_rel_err": -3.037350615464618e-06,
+        "kappa_rel_err": -3.017980538699838e-06,
+        "nu_rel_err": -3.0508869892642565e-06
+      },
+      "lz_rel_drift": 4.440892098500626e-16,
+      "energy_rel_drift": 1.3322676295501878e-15
+    },
+    {
+      "r_km": 180000.0,
+      "wall_s": 49.05059504508972,
+      "steps_samples": 20001,
+      "n_rad_s": 8.075876753469497e-05,
+      "kappa_rad_s": 8.053374999810723e-05,
+      "nu_rad_s": 8.098315984628021e-05,
+      "expected_varpi_dot_rad_s": 2.2501753658773376e-07,
+      "expected_node_dot_rad_s": -2.243923115852393e-07,
+      "event": {
+        "varpi_dot_rad_s": 2.250159551813296e-07,
+        "varpi_sigma": 7.773686255492801e-15,
+        "node_dot_rad_s": -2.243913748017759e-07,
+        "node_sigma": 1.057308876018295e-13,
+        "varpi_rel_err": -7.027925148173075e-06,
+        "node_rel_err": -4.174757400443596e-06,
+        "n_peri": 199,
+        "n_node": 200
+      },
+      "freqfit": {
+        "n": 8.075852345090385e-05,
+        "kappa": 8.053350751566138e-05,
+        "nu": 8.098291422884484e-05,
+        "varpi_dot_rad_s": 2.2501593524247023e-07,
+        "node_dot_rad_s": -2.243907779409882e-07,
+        "varpi_rel_err": -7.116535394646739e-06,
+        "node_rel_err": -6.834655965959335e-06,
+        "n_rel_err": -3.0223813285434886e-06,
+        "kappa_rel_err": -3.0109419448809405e-06,
+        "nu_rel_err": -3.0329445755983286e-06
+      },
+      "lz_rel_drift": 4.440892098500626e-16,
+      "energy_rel_drift": 1.3322676295501878e-15
+    }
+  ]
+}
