@@ -2,7 +2,7 @@
 
 Status: accepted by A0 (2026-11-01); AJ reviews at gate G2
 Date: 2026-11-01
-Author: A3  Approved by A0: not yet
+Author: A3  Approved by A0: 2026-11-01
 
 ## Context
 
