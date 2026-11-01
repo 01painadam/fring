@@ -18,8 +18,12 @@
 //! See `docs/PLAN.md` section 4.2.
 //!
 //! - **Inertial:** origin at Saturn's centre, x-y plane is Saturn's equatorial
-//!   plane, z along the spin axis. All forces are defined here. All state that
-//!   crosses the [`Backend`](crate::Backend) interface is inertial and f64.
+//!   plane, z along the spin axis. The x axis is the ascending node of
+//!   Saturn's equator on the ICRF equator at the epoch (the JPL Horizons
+//!   "body equator" convention used for the moon states in `params/`). The
+//!   frame is fixed: Saturn's pole precession (about 0.01° in 30 years) is
+//!   ignored. All forces are defined here. All state that crosses the
+//!   [`Backend`](crate::Backend) interface is inertial and f64.
 //! - **Rotating:** turns about z at the mean motion n₀ of the reference orbit
 //!   (semi-major axis a₀, from
 //!   [`FrameConfig`](crate::config::FrameConfig)). Used for output, collision
