@@ -303,9 +303,9 @@ fn kick_dir(k: u32, p: V3, v: V3) -> V3 {
 // ---- Entry points: one block of prm_n_steps() steps per particle ----
 
 @compute @workgroup_size(WG_SIZE)
-fn step_d(@builtin(global_invocation_id) id: vec3<u32>) {
+fn step_d(@builtin(global_invocation_id) id: vec3<u32>, @builtin(num_workgroups) nw: vec3<u32>) {
     ds_one = prm_one();
-    let i = id.x;
+    let i = id.y * nw.x * u32(WG_SIZE) + id.x;
     if (i >= prm_n_particles()) { return; }
     let n = prm_n_steps();
     let h = prm_h();
@@ -323,9 +323,9 @@ fn step_d(@builtin(global_invocation_id) id: vec3<u32>) {
 }
 
 @compute @workgroup_size(WG_SIZE)
-fn step_c(@builtin(global_invocation_id) id: vec3<u32>) {
+fn step_c(@builtin(global_invocation_id) id: vec3<u32>, @builtin(num_workgroups) nw: vec3<u32>) {
     ds_one = prm_one();
-    let i = id.x;
+    let i = id.y * nw.x * u32(WG_SIZE) + id.x;
     if (i >= prm_n_particles()) { return; }
     let n = prm_n_steps();
     let h = prm_h();
@@ -349,9 +349,9 @@ fn step_c(@builtin(global_invocation_id) id: vec3<u32>) {
 fn z2() -> vec2<f32> { return vec2<f32>(0.0, 0.0); }
 
 @compute @workgroup_size(WG_SIZE)
-fn t_ds_scalars(@builtin(global_invocation_id) id: vec3<u32>) {
+fn t_ds_scalars(@builtin(global_invocation_id) id: vec3<u32>, @builtin(num_workgroups) nw: vec3<u32>) {
     ds_one = prm_one();
-    let i = id.x;
+    let i = id.y * nw.x * u32(WG_SIZE) + id.x;
     if (i >= prm_n_particles()) { return; }
     let s = ds_scalars(load_p(i), load_v(i), prm_half());
     store(i, V3(s.r0, s.a, s.n), V3(s.ecos0, s.esin0, s.m));
@@ -359,9 +359,9 @@ fn t_ds_scalars(@builtin(global_invocation_id) id: vec3<u32>) {
 
 // x = newton_f32(ecos0, esin0, m) from the hi parts of x, y, z; result in vx.
 @compute @workgroup_size(WG_SIZE)
-fn t_newton_f32(@builtin(global_invocation_id) id: vec3<u32>) {
+fn t_newton_f32(@builtin(global_invocation_id) id: vec3<u32>, @builtin(num_workgroups) nw: vec3<u32>) {
     ds_one = prm_one();
-    let i = id.x;
+    let i = id.y * nw.x * u32(WG_SIZE) + id.x;
     if (i >= prm_n_particles()) { return; }
     let p = load_p(i);
     let x = newton_f32(p.x.x, p.y.x, p.z.x);
@@ -369,45 +369,45 @@ fn t_newton_f32(@builtin(global_invocation_id) id: vec3<u32>) {
 }
 
 @compute @workgroup_size(WG_SIZE)
-fn t_drift_d(@builtin(global_invocation_id) id: vec3<u32>) {
+fn t_drift_d(@builtin(global_invocation_id) id: vec3<u32>, @builtin(num_workgroups) nw: vec3<u32>) {
     ds_one = prm_one();
-    let i = id.x;
+    let i = id.y * nw.x * u32(WG_SIZE) + id.x;
     if (i >= prm_n_particles()) { return; }
     let o = drift_d(load_p(i), load_v(i), prm_half());
     store(i, o.p, o.v);
 }
 
 @compute @workgroup_size(WG_SIZE)
-fn t_kepler_c(@builtin(global_invocation_id) id: vec3<u32>) {
+fn t_kepler_c(@builtin(global_invocation_id) id: vec3<u32>, @builtin(num_workgroups) nw: vec3<u32>) {
     ds_one = prm_one();
-    let i = id.x;
+    let i = id.y * nw.x * u32(WG_SIZE) + id.x;
     if (i >= prm_n_particles()) { return; }
     let o = kepler_c(prm_gm(), load_p(i), load_v(i), prm_half());
     store(i, o.p, o.v);
 }
 
 @compute @workgroup_size(WG_SIZE)
-fn t_accel_j_c(@builtin(global_invocation_id) id: vec3<u32>) {
+fn t_accel_j_c(@builtin(global_invocation_id) id: vec3<u32>, @builtin(num_workgroups) nw: vec3<u32>) {
     ds_one = prm_one();
-    let i = id.x;
+    let i = id.y * nw.x * u32(WG_SIZE) + id.x;
     if (i >= prm_n_particles()) { return; }
     let p = load_p(i);
     store(i, p, accel_j_c(p));
 }
 
 @compute @workgroup_size(WG_SIZE)
-fn t_kick_acc_c(@builtin(global_invocation_id) id: vec3<u32>) {
+fn t_kick_acc_c(@builtin(global_invocation_id) id: vec3<u32>, @builtin(num_workgroups) nw: vec3<u32>) {
     ds_one = prm_one();
-    let i = id.x;
+    let i = id.y * nw.x * u32(WG_SIZE) + id.x;
     if (i >= prm_n_particles()) { return; }
     let p = load_p(i);
     store(i, p, kick_acc_c(0u, p));
 }
 
 @compute @workgroup_size(WG_SIZE)
-fn t_kick_dir(@builtin(global_invocation_id) id: vec3<u32>) {
+fn t_kick_dir(@builtin(global_invocation_id) id: vec3<u32>, @builtin(num_workgroups) nw: vec3<u32>) {
     ds_one = prm_one();
-    let i = id.x;
+    let i = id.y * nw.x * u32(WG_SIZE) + id.x;
     if (i >= prm_n_particles()) { return; }
     let p = load_p(i);
     store(i, p, kick_dir(0u, p, load_v(i)));

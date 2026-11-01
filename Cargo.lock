@@ -232,6 +232,7 @@ dependencies = [
 name = "fring-gpu"
 version = "0.1.0"
 dependencies = [
+ "fring-cpu",
  "fring-model",
  "pollster",
  "rayon",

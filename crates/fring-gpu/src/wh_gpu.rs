@@ -181,7 +181,8 @@ impl WhKernels {
             let mut pass = enc.begin_compute_pass(&Default::default());
             pass.set_pipeline(&pipe);
             pass.set_bind_group(0, &bind, &[]);
-            pass.dispatch_workgroups(cap as u32 / self.workgroup, 1, 1);
+            let (gx, gy) = grid(cap, self.workgroup);
+            pass.dispatch_workgroups(gx, gy, 1);
         }
         let t0 = std::time::Instant::now();
         q.submit([enc.finish()]);
@@ -208,6 +209,15 @@ impl WhKernels {
         unpack_states(&words, cap, states);
         (status, elapsed)
     }
+}
+
+/// The dispatch grid for `cap` particles (a multiple of `workgroup`): at most
+/// 65535 workgroups in x, the rest in y. The shaders form the particle index
+/// as `y * nw.x * workgroup + x`.
+pub fn grid(cap: usize, workgroup: u32) -> (u32, u32) {
+    let groups = (cap as u32).div_ceil(workgroup).max(1);
+    let gx = groups.min(65535);
+    (gx, groups.div_ceil(gx))
 }
 
 /// States as the 6 planes of the GPU: word `2 (c cap + i)` is hi, `+1` is lo.
