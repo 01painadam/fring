@@ -8,6 +8,14 @@
 
 mod bytes;
 pub mod frame;
+pub mod moons;
+pub mod stats;
+
+pub use stats::{
+    STATS_COLUMNS, read_stats_csv, write_stats_csv, write_stats_header, write_stats_row,
+};
+
+pub use moons::{MOONS_VERSION, MoonRecord, MoonsFile, read_moons, write_moons};
 
 pub use frame::{
     FRAME_TYPE_ROTATING_F32, FRAME_VERSION, Frame, FrameHeader, RotatingVelocities,
