@@ -37,6 +37,8 @@ name = "fring-cpu"
 version = "0.1.0"
 dependencies = [
  "fring-model",
+ "serde",
+ "toml",
 ]
 
 [[package]]
