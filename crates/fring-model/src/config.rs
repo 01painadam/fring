@@ -161,7 +161,9 @@ pub enum Distribution {
         semi_major_axis_km: f64,
         /// Standard deviation of the semi-major axis in km (≥ 0).
         sigma_semi_major_axis_km: f64,
-        /// Eccentricity, in [0, 1).
+        /// Eccentricity, in [0, 1). This is the epicyclic amplitude (radial
+        /// excursion `a e` about the guiding circle, first-order epicycle with
+        /// the exact n and kappa), not an osculating Keplerian eccentricity.
         eccentricity: f64,
         /// Longitude of pericentre in degrees.
         apse_longitude_deg: f64,
@@ -176,6 +178,9 @@ pub enum Distribution {
     },
     /// Localised cloud (`kind = "clump"`): Gaussian offsets in position around
     /// one point on a circular orbit, for example to mimic a collision event.
+    /// Every particle has the circular velocity of the centre point (no
+    /// velocity dispersion), so the cloud shears out and its particles
+    /// oscillate in the epicycles that the position offsets imply.
     Clump {
         /// Semi-major axis of the centre in km.
         semi_major_axis_km: f64,
