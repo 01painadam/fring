@@ -2,7 +2,8 @@
 //!
 //! Moons are integrated before the run (f64, CPU) and given to every backend
 //! as a table of states at equal time intervals (`docs/PLAN.md` section 6.3).
-//! Backends interpolate the table (Hermite, from positions and velocities).
+//! Backends interpolate the table (quintic Hermite, from positions, velocities
+//! and accelerations; ICR-002).
 //! So the CPU and GPU backends see the same moons. All states are inertial.
 
 use crate::{Error, Result, Vec3};
@@ -63,6 +64,10 @@ pub struct MoonTrack {
     pub gm_km3_s2: f64,
     /// State at each sample time, in time order.
     pub samples: Vec<BodyState>,
+    /// Inertial acceleration at each sample time in km s⁻² (same length as
+    /// `samples`). With the states it gives the quintic Hermite
+    /// interpolation (ICR-002).
+    pub accelerations_km_s2: Vec<Vec3<f64>>,
 }
 
 /// Pre-computed states of all moons at equal time intervals.
@@ -106,7 +111,8 @@ impl MoonEphemeris {
     }
 
     /// Checks the table: positive interval, at least 2 samples, the same
-    /// number of samples in every track, positive GM, finite states.
+    /// number of samples in every track, one acceleration per sample,
+    /// positive GM, finite states and accelerations.
     pub fn validate(&self) -> Result<()> {
         let fail = |msg: String| Err(Error::Input(format!("moon ephemeris: {msg}")));
         if !(self.start_s.is_finite() && self.interval_s.is_finite() && self.interval_s > 0.0) {
@@ -117,6 +123,14 @@ impl MoonEphemeris {
         }
         let n = self.sample_count();
         for track in &self.tracks {
+            if track.accelerations_km_s2.len() != track.samples.len() {
+                return fail(format!(
+                    "track {:?} has {} accelerations for {} samples",
+                    track.name,
+                    track.accelerations_km_s2.len(),
+                    track.samples.len()
+                ));
+            }
             if track.samples.len() != n || n < 2 {
                 return fail(format!(
                     "track {:?} has {} samples; every track needs the same number, at least 2",
@@ -134,6 +148,12 @@ impl MoonEphemeris {
                 .position(|s| !(finite(s.position_km) && finite(s.velocity_km_s)))
             {
                 return fail(format!("track {:?} sample {k} is not finite", track.name));
+            }
+            if let Some(k) = track.accelerations_km_s2.iter().position(|a| !finite(*a)) {
+                return fail(format!(
+                    "track {:?} acceleration {k} is not finite",
+                    track.name
+                ));
             }
         }
         Ok(())
