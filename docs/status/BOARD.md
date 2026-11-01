@@ -1,6 +1,6 @@
 # Task board
 
-Current phase: **1 (validated orbits, CPU)**. Gate G0 was approved on 2026-11-01 (`docs/gates/G0.md`).
+Current phase: **2 (GPU backend)**. Gates G0 and G1 were approved on 2026-11-01 (`docs/gates/`).
 
 Rules (full text in `AGENTS.md` and `CLAUDE.md`):
 
@@ -35,17 +35,17 @@ Rules (full text in `AGENTS.md` and `CLAUDE.md`):
 | V2 | REBOUND reference: Prometheus and Pandora over 20 years | A6 | done | ws/a6-v2 | Gate G0 |
 | V3 | REBOUND reference: test particles near the core | A6 | done | ws/a6-v3 | Gate G0 |
 | R1 | `fring-run` CLI: config, backend, snapshots, `meta.json`, progress | A5 | done | ws/a5-r1 | C4 |
-| Gate G1 | CPU backend agrees with REBOUND; moon chaos looks right | AJ | review | ws/a0-g1 | C1, C2, C3, C4, V1, V2, V3, R1 |
+| Gate G1 | CPU backend agrees with REBOUND; moon chaos looks right | AJ | done | ws/a0-g1 | C1, C2, C3, C4, V1, V2, V3, R1 |
 
 ## Phase 2: GPU backend
 
 | ID | Task | Role | Status | Branch | Blocked by |
 |---|---|---|---|---|---|
-| G1 | GPU precision spike: f32, f32 + double-single accumulation, double-single (ADR) | A3 | todo | | Gate G1 |
+| G1 | GPU precision spike: f32, f32 + double-single accumulation, double-single (ADR); includes the Wisdom-Holman Kepler drift, and decides GPU or CPU for science runs (gate G1) | A3 | todo | | Gate G1 |
 | G2 | wgpu setup, kick and drift kernels, moon table in WGSL, Rust twin tests | A3 | todo | | G1 |
 | G3 | Chaos indicator on GPU | A3 | todo | | G2 |
 | B1 | `fring-bench`: particle-steps per second, CPU and GPU, N = 10⁴ to 10⁷ | A5 | todo | | G2 |
-| A1-ANALYSIS | First chaos map of the region between the moons; measure the moons' share of ϖ̇ at the core (G0) | A8 | todo | | G3 |
+| A1-ANALYSIS | First chaos map of the region between the moons; measure the moons' share of ϖ̇ at the core (G0); converged Lyapunov time of the moons (G1) | A8 | todo | | G3 |
 | Gate G2 | GPU agrees with CPU; first chaos map reviewed | AJ | todo | | G1, G2, G3, B1, A1-ANALYSIS |
 
 ## Phase 3: first web toy
