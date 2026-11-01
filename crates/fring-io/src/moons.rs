@@ -2,9 +2,7 @@
 //!
 //! Layout: `docs/snapshot-format.md` section 7.
 
-use crate::bytes::{
-    expect_end, read_err, read_f64s, read_u32, read_u64, write_f64s,
-};
+use crate::bytes::{expect_end, read_err, read_f64s, read_u32, read_u64, write_f64s};
 use fring_model::{BodyState, Error, Result, Vec3};
 use std::io::{Read, Write};
 
@@ -134,7 +132,9 @@ pub fn read_moons<R: Read>(r: &mut R) -> Result<MoonsFile> {
     for _ in 0..n_records {
         let row = read_f64s(r, width, "moons record")?;
         let bodies = row[1..]
-            .chunks_exact(6)
+            .as_chunks::<6>()
+            .0
+            .iter()
             .map(|c| BodyState {
                 position_km: Vec3::new(c[0], c[1], c[2]),
                 velocity_km_s: Vec3::new(c[3], c[4], c[5]),

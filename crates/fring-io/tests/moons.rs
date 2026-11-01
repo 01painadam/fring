@@ -14,7 +14,9 @@ fn file(names: &[&str], n_records: usize) -> MoonsFile {
         records: (0..n_records)
             .map(|i| MoonRecord {
                 time_s: i as f64 * 360.0,
-                bodies: (0..names.len()).map(|m| body((i * 10 + m) as f64)).collect(),
+                bodies: (0..names.len())
+                    .map(|m| body((i * 10 + m) as f64))
+                    .collect(),
             })
             .collect(),
     }
@@ -73,24 +75,54 @@ fn rejects_damaged_files() {
     }
     let mut t = b.clone();
     t.push(0);
-    assert!(read_moons(&mut t.as_slice()).unwrap_err().to_string().contains("trailing"));
+    assert!(
+        read_moons(&mut t.as_slice())
+            .unwrap_err()
+            .to_string()
+            .contains("trailing")
+    );
     let mut m = b.clone();
     m[0] = b'X';
-    assert!(read_moons(&mut m.as_slice()).unwrap_err().to_string().contains("bad magic"));
+    assert!(
+        read_moons(&mut m.as_slice())
+            .unwrap_err()
+            .to_string()
+            .contains("bad magic")
+    );
     let mut v = b.clone();
     v[8] = 9;
-    assert!(read_moons(&mut v.as_slice()).unwrap_err().to_string().contains("unsupported"));
+    assert!(
+        read_moons(&mut v.as_slice())
+            .unwrap_err()
+            .to_string()
+            .contains("unsupported")
+    );
     let mut fl = b.clone();
     fl[20] = 1;
-    assert!(read_moons(&mut fl.as_slice()).unwrap_err().to_string().contains("flag"));
+    assert!(
+        read_moons(&mut fl.as_slice())
+            .unwrap_err()
+            .to_string()
+            .contains("flag")
+    );
     // Name length that runs past the table.
     let mut n = b.clone();
     n[32..36].copy_from_slice(&1000u32.to_le_bytes());
-    assert!(read_moons(&mut n.as_slice()).unwrap_err().to_string().contains("name table"));
+    assert!(
+        read_moons(&mut n.as_slice())
+            .unwrap_err()
+            .to_string()
+            .contains("name table")
+    );
     // Huge record count fails as truncated.
     let mut c = b.clone();
     c[24..32].copy_from_slice(&u64::MAX.to_le_bytes());
-    assert!(read_moons(&mut c.as_slice()).unwrap_err().to_string().contains("truncated"));
+    assert!(
+        read_moons(&mut c.as_slice())
+            .unwrap_err()
+            .to_string()
+            .contains("truncated")
+    );
 }
 
 #[test]

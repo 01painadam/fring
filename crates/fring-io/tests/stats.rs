@@ -65,7 +65,10 @@ fn stats_plain_csv_header() {
         "time_s,steps_total,collisions_since_last,max_rel_energy_error"
     );
     assert!(!text.contains('#'));
-    assert!(text.lines().nth(1).unwrap().ends_with(','), "empty field = None");
+    assert!(
+        text.lines().nth(1).unwrap().ends_with(','),
+        "empty field = None"
+    );
 }
 
 #[test]
@@ -95,7 +98,9 @@ fn stats_rejects_bad_input() {
         ("time_s\nabc\n", "not a number"),
         ("time_s,steps_total\n1.0,-3\n", "not an integer"),
     ] {
-        let e = read_stats_csv(&mut text.as_bytes()).unwrap_err().to_string();
+        let e = read_stats_csv(&mut text.as_bytes())
+            .unwrap_err()
+            .to_string();
         assert!(e.contains(needle), "{text:?}: {e}");
     }
 }

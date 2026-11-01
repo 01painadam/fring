@@ -5,6 +5,9 @@
 use fring_model::{Error, Result, StepStats};
 use std::io::{Read, Write};
 
+/// Version of `stats.csv` written by this crate (recorded in `meta.json`).
+pub const STATS_VERSION: u32 = 1;
+
 /// Column names written by this version, in order.
 pub const STATS_COLUMNS: [&str; 4] = [
     "time_s",
