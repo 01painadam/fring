@@ -14,10 +14,12 @@ frame = "Saturn-centred, Saturn equator of date (IAU_SATURN), fixed at the epoch
 # Pole precession over 30 yr is 0.013 deg (RA) and 0.0013 deg (Dec) [Coop15_T3]; ignored.
 gm_source = "SAT441_GM"
 j_source = "J22_Zenodo"
-# Harmonics J6 to J12 exist in the same source and are not used in v1; see params/sources.md.
+# J6 is used (AJ decision at gate G0, ICR-001). J8 to J12 exist in the same source and are
+# not used in v1; see params/sources.md.
 
 [saturn]
 gm_km3_s2 = 37931206.234
 reference_radius_km = 60330.0
 j2 = 1.6290615e-2
 j4 = -9.35119e-4
+j6 = 8.6764e-5
