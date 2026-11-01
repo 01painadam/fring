@@ -2,6 +2,13 @@
 
 Read this file at the start of a session. When a mistake costs time, add an entry so that no agent makes it twice. Newest first. Each entry: what happened, why, and the rule now.
 
+## 2026-11-01 (phase 2)
+
+### M16. WGSL on Metal is not IEEE: fast math removes double-single error terms
+
+- **What:** wgpu-hal compiles Metal shaders with fast math on, and naga has no switch to turn it off. The compiler rewrote `(a + b) - a` as `b`, so plain double-single arithmetic had only f32 accuracy. Knuth's TwoSum with a guard passed alone, but failed again once the compiler inlined it into the double-single add (G1, ADR 0006).
+- **Rule:** never assume IEEE evaluation order in WGSL. Guard every error-free transformation (multiply key sums by a 1.0 read from a uniform). Test the real kernels against their Rust twins on the GPU, not only the primitives. Any GPU path that uses double-single runs the self-test at start-up and fails closed.
+
 ## 2026-11-01 (phase 1)
 
 ### M12. The plan's baseline method was not accurate enough for the science
