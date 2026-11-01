@@ -102,6 +102,7 @@ fn moons_are_refused() {
             name: "prometheus".to_string(),
             gm_km3_s2: 10.0,
             samples: vec![BodyState::default(); 2],
+            accelerations_km_s2: vec![Vec3::zero(); 2],
         }],
     };
     let r = CpuBackend::new(&config(), &sys, &init(1));

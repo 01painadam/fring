@@ -100,6 +100,7 @@ fn one_moon_system() -> System {
                 name: "prometheus".to_string(),
                 gm_km3_s2: 0.01,
                 samples: vec![state(139_380.0), state(139_380.0)],
+                accelerations_km_s2: vec![Vec3::zero(); 2],
             }],
         },
     }
