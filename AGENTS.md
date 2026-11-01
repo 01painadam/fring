@@ -152,6 +152,9 @@ cd validation && uv run pytest -q                         # reference force vs f
 cd validation && uv run python scripts/v1_precession.py   # V1, about 5 minutes; writes reference/v1_* and reports/v1_precession.png
 cd validation && uv run python scripts/v2_moons.py --check   # V2, recompute the first day, compare with the committed file
 cd validation && uv run python scripts/v2_moons.py           # V2, about 15 minutes (5 parallel runs); writes reference/v2_*, reports/v2_*.png
+cd validation && uv run python scripts/v3_particles.py --check   # V3, recompute the first orbit of 3 particles, compare with the committed file
+cd validation && uv run python scripts/v3_particles.py           # V3, about 2 minutes; writes reference/v3_*, reports/v3*
+cd validation && uv run python scripts/v3_compare.py --rust <file.csv>   # V3, compare a Rust trajectory (long CSV) with the reference
 ```
 
 Web commands: A7 adds them here when task W1 is done.
