@@ -35,7 +35,7 @@ Rules (full text in `AGENTS.md` and `CLAUDE.md`):
 | V2 | REBOUND reference: Prometheus and Pandora over 20 years | A6 | done | ws/a6-v2 | Gate G0 |
 | V3 | REBOUND reference: test particles near the core | A6 | done | ws/a6-v3 | Gate G0 |
 | R1 | `fring-run` CLI: config, backend, snapshots, `meta.json`, progress | A5 | done | ws/a5-r1 | C4 |
-| Gate G1 | CPU backend agrees with REBOUND; moon chaos looks right | AJ | todo | | C1, C2, C3, C4, V1, V2, V3, R1 |
+| Gate G1 | CPU backend agrees with REBOUND; moon chaos looks right | AJ | review | ws/a0-g1 | C1, C2, C3, C4, V1, V2, V3, R1 |
 
 ## Phase 2: GPU backend
 
