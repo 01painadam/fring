@@ -24,6 +24,7 @@ fring-analysis = { path = "crates/fring-analysis" }
 serde = { version = "1.0.229", features = ["derive"] }
 toml = "1.1.8"
 serde_json = "1.0.154"
+rayon = "1.11"
 
 # Lints for every crate (each crate has `[lints] workspace = true`).
 # A crate that needs `unsafe` must allow it locally and link an ADR.

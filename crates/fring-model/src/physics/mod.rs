@@ -11,6 +11,9 @@
 //!   equations of motion (ADR 0004), the IAS15 integrator, the ephemeris table
 //!   and its quintic Hermite interpolation (ICR-002).
 //! - [`wisdom_holman`]: the baseline integrator (ADR 0003).
+//! - [`moon_kick`]: the moons' direct and indirect pull in the kick, and the
+//!   Wisdom-Holman loop with moons (task C4).
+//! - [`initial`]: initial conditions from the config distributions (task C4).
 //! - [`leapfrog`]: plain drift-kick-drift step, kept as a reference.
 //! - [`frames`]: inertial, rotating and local coordinates.
 
@@ -20,9 +23,11 @@ pub mod frames;
 pub mod gravity;
 pub mod hermite;
 pub mod ias15;
+pub mod initial;
 pub mod kepler;
 pub mod leapfrog;
 pub mod moon_dynamics;
+pub mod moon_kick;
 pub mod wisdom_holman;
 
 pub use circular::{CircularFrequencies, circular_speed, frequencies};
@@ -37,7 +42,11 @@ pub use frames::{
 pub use gravity::SaturnField;
 pub use hermite::{hermite3, hermite5};
 pub use ias15::Ias15;
+pub use initial::{EpicycleElements, epicycle_state, generate_particles, initial_particle};
 pub use kepler::kepler_drift;
 pub use leapfrog::{dkd_step, leapfrog_circular_speed};
 pub use moon_dynamics::MoonSystem;
+pub use moon_kick::{
+    KickTable, indirect_acceleration, kick_acceleration, moon_direct_acceleration, wh_steps_moons,
+};
 pub use wisdom_holman::{wh_step, wh_steps};
