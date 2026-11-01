@@ -19,9 +19,9 @@ Rules (full text in `AGENTS.md` and `CLAUDE.md`):
 | F1 | Workspace, CI, coordination files | A0 | done | ws/a0-f1 | |
 | F2 | `fring-model`: units doc, config structs, `Backend` trait, float trait, Philox RNG | A0 | review | ws/a0-f2 | F1 |
 | F3 | Snapshot format spec, `fring-io` read and write with round-trip tests | A5 | review | ws/a5-f3 | F1 |
-| L1 | Literature survey of F ring dynamics since about 2000 | A1 | doing | ws/a1-l1 | F1 |
-| L2 | Cited parameter set at a stated epoch, confirmed analytical formulas; `params/saturn.toml` uses the `SaturnParams` field names | A1 | doing | ws/a1-l2 | F1 |
-| Gate G0 | Approve interfaces, parameters and the observations to reproduce | AJ | todo | | F2, F3, L1, L2 |
+| L1 | Literature survey of F ring dynamics since about 2000 | A1 | review | ws/a1-l1 | F1 |
+| L2 | Cited parameter set at a stated epoch, confirmed analytical formulas; `params/saturn.toml` uses the `SaturnParams` field names | A1 | review | ws/a1-l2 | F1 |
+| Gate G0 | Approve interfaces, parameters and the observations to reproduce | AJ | review | ws/a0-g0 | F2, F3, L1, L2 |
 
 ## Phase 1: validated orbits (CPU)
 
