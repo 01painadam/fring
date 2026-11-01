@@ -361,7 +361,7 @@ fn drift_d(p: V3, v: V3, dt: vec2<f32>) -> KepD {
     let r = ds_mul(k.a, ds_add(ds_sub(one, ds_mul(k.ecos0, cs)), ds_mul(k.esin0, s)));
     let ir = ds_div(one, r);
     let fm1 = -ds_mul(ds_mul(omc, k.a), k.ir0);
-    let g = ds_add_f(dt, -(ds_sub(x, s).x / k.n.x));
+    let g = ds_sub(dt, ds_div(ds_sub(x, s), k.n));
     let fdot = -ds_mul(ds_mul(ds_mul(k.sqrt_gma, ir), k.ir0), s);
     let gm1 = -ds_mul(ds_mul(omc, k.a), ir);
     let p1 = v3_add(p, v3_add(v3_mul(p, fm1), v3_mul(v, g)));

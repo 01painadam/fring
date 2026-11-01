@@ -439,7 +439,9 @@ fn drift_d<const M: u8>(
     let r = k.a * (one - k.ecos0 * cs + k.esin0 * s);
     let ir = one / r;
     let fm1 = -(omc * k.a * k.ir0);
-    let g = dt.add_f(-(Wf32::<M>((x - s).hi) / Wf32(k.n.hi)).0);
+    // g = dt - (x - sin x)/n in DS: an f32 quotient here biases every step
+    // of a circular orbit the same way and makes a drift (ADR 0006).
+    let g = dt - (x - s) / k.n;
     let fdot = -(k.sqrt_gma * ir * k.ir0 * s);
     let gm1 = -(omc * k.a * ir);
     let _ = (k.alpha, k.r0);
