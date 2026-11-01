@@ -4,6 +4,16 @@ Read this file at the start of a session. When a mistake costs time, add an entr
 
 ## 2026-11-01 (phase 2)
 
+### M17. A small sample hid the tail of an error distribution
+
+- **What:** the G1 spike compared 47 regular particles and found that option D met PLAN section 10 (max Δλ 6.1 × 10⁻⁶ rad). The G2 test with 4,890 regular particles found a max Δλ of 1.15 × 10⁻⁴ rad, 19 times larger. The median was the same; only the tail was different. G2 needed one more mode (D+) and one more round of work.
+- **Rule:** a precision or tolerance claim needs the full distribution (max, 99th percentile, median) over thousands of cases, not tens. Size the sample before a gate decision depends on it. A test that filters cases (for example by a shadow rule) must also assert a minimum number of cases.
+
+### M18. A0 wrote a decision for a subagent but did not send it
+
+- **What:** the G2 subagent stopped and asked how to continue. A0 wrote the decision in the conversation but did not call SendMessage. The subagent waited until AJ asked for the status.
+- **Rule:** when a subagent waits for a decision, send the decision in the same turn in which you write it, and confirm that the agent has resumed.
+
 ### M16. WGSL on Metal is not IEEE: fast math removes double-single error terms
 
 - **What:** wgpu-hal compiles Metal shaders with fast math on, and naga has no switch to turn it off. The compiler rewrote `(a + b) - a` as `b`, so plain double-single arithmetic had only f32 accuracy. Knuth's TwoSum with a guard passed alone, but failed again once the compiler inlined it into the double-single add (G1, ADR 0006).
