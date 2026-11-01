@@ -25,6 +25,7 @@ Status values:
 | `reference_radius_km` | 60330 | J22_Zenodo (file header, 6.033e7 m); the same radius is used in [Iess19] and [Coop15_T3] | verified (primary: data file) |
 | `j2` | 1.6290615e-2 (± 2.5e-8) | J22_Zenodo: unnormalised C20 = -1.6290615e-2, and J2 = -C20 | verified (primary: data file) |
 | `j4` | -9.35119e-4 (± 9.3e-8) | J22_Zenodo: unnormalised C40 = +9.35119e-4, and J4 = -C40 | verified (primary: data file) |
+| `j6` | 8.6764e-5 (± 1.62e-7) | J22_Zenodo: unnormalised C60 = -8.6764e-5, and J6 = -C60. Added at G0 (ICR-001) | verified (primary: data file) |
 
 Notes.
 
@@ -45,9 +46,9 @@ Notes.
 - The J2 of [Iess19] includes a constant tidal term from the satellites (Table 1 caption). Jacobson's treatment is UNVERIFIED.
 - Effect on the apse precession at the core: see `docs/literature/formulas.md` (J4 and J6 matter at the level of 0.002 deg/day).
 
-### Higher harmonics: not used in v1
+### Higher harmonics
 
-`SaturnParams` has only J2 and J4. The Zenodo file also gives (unnormalised C, so J = -C): J3 = +9.5e-8 (± 4.0e-8), J5 = -6.0e-8 (± 1.37e-7), J6 = +8.6764e-5 (± 1.62e-7), J7 = +4.81e-7, J8 = -1.3931e-5 (± 2.17e-7), J9 = +8.92e-7, J10 = +5.426e-6 (± 2.08e-7), J11 = +1.47e-7, J12 = -5.37e-7 (± 1.80e-7). Odd harmonics are zero at the level of the uncertainty and are ignored. J6 to J12: not used in v1. The effect of J6 on the resonance location is in `formulas.md`. A0 raises J6 with AJ at G0. Status: verified (primary: data file).
+`SaturnParams` has J2, J4 and J6 (J6 added at gate G0, ICR-001; the change to this file was made by A0 under that ICR). The Zenodo file also gives (unnormalised C, so J = -C): J3 = +9.5e-8 (± 4.0e-8), J5 = -6.0e-8 (± 1.37e-7), J6 = +8.6764e-5 (± 1.62e-7), J7 = +4.81e-7, J8 = -1.3931e-5 (± 2.17e-7), J9 = +8.92e-7, J10 = +5.426e-6 (± 2.08e-7), J11 = +1.47e-7, J12 = -5.37e-7 (± 1.80e-7). Odd harmonics are zero at the level of the uncertainty and are ignored. J8 to J12: not used in v1 (together they change the apse precession at the core by about 0.0001 deg/day). The effect of J6 on the resonance location is in `formulas.md`. Status: verified (primary: data file).
 
 ### Ring mass
 
@@ -127,8 +128,8 @@ Table keys used above: Coop15_T3, Coop15_T4, Coop15_T5, Coop15_T6 are Tables 3 t
 
 ## Open questions
 
-1. The epoch 2008-01-01 TDB is a fallback (Albers' epoch unknown). AJ to confirm at G0.
-2. J6 to J12 are not used in v1 (A0 to raise at G0). Effect on the apse precession and the resonance location: `docs/literature/formulas.md`.
+1. The epoch 2008-01-01 TDB is a fallback (Albers' epoch unknown). AJ approved it at G0.
+2. J6 is used since G0 (ICR-001). J8 to J12 are not used in v1. Effect on the apse precession and the resonance location: `docs/literature/formulas.md`.
 3. Apse longitude at the epoch is approximate and UNVERIFIED. Albers et al. 2012 (primary) is needed.
 4. Core eccentricity and apse rate are verified only in a secondary source (Hedman 2017, quoting Albers et al. 2012). The inclination is verified only in Charnoz 2009 (quoting Bosh et al. 2002).
 5. Whether the Jacobson 2022 field includes the ring mass, and the sign and size of the tidal term in J2, are UNVERIFIED (paper not opened).

@@ -20,14 +20,14 @@ There is no previous dissertation or code to port. The physics comes from the li
 
 In scope:
 
-- Saturn as a point mass plus J2 and J4.
+- Saturn as a point mass plus J2, J4 and J6 (J6 added at gate G0, ICR-001).
 - Prometheus and Pandora as massive bodies that interact with Saturn and with each other.
 - Ring particles that feel Saturn and the moons but do not affect the moons.
 - Collisions between ring particles: a stochastic superparticle model (primary) and a hard-sphere model (check).
 - Two domains: full ring and a co-moving arc of the core.
 - GPU backend (wgpu on Metal) as the main engine, with a CPU f64 backend as the reference.
 
-Not in scope (v1): particle self-gravity, other moons (Mimas, Janus, Epimetheus etc.), radiation forces, plasma drag, particle growth or fragmentation, J6 and higher.
+Not in scope (v1): particle self-gravity, other moons (Mimas, Janus, Epimetheus etc.), radiation forces, plasma drag, particle growth or fragmentation, J8 and higher.
 
 ## 3. Rules for agents
 
@@ -93,11 +93,12 @@ These values are approximate starting points. Task L2 replaces them with cited v
 | Quantity | Approximate value | Note |
 |---|---|---|
 | Saturn GM | 3.7931 × 10⁷ km³ s⁻² | |
-| Saturn reference radius R | 60,330 km | J2/J4 are defined for a specified R |
+| Saturn reference radius R | 60,330 km | J2, J4, J6 are defined for a specified R |
 | J2 | 1.6291 × 10⁻² | |
 | J4 | −9.36 × 10⁻⁴ | |
+| J6 | 8.68 × 10⁻⁵ | Added at G0 (ICR-001); cited value in `params/saturn.toml` |
 | F ring core semi-major axis | about 140,220 km | |
-| F ring core eccentricity | about 0.0024 | Apse precesses with J2/J4 |
+| F ring core eccentricity | about 0.0024 | Apse precesses with J2, J4, J6 |
 | Prometheus semi-major axis | about 139,380 km | Mass about 1.6 × 10¹⁷ kg |
 | Pandora semi-major axis | about 141,720 km | Mass about 1.4 × 10¹⁷ kg |
 | Prometheus–Pandora interaction | near 121:118 resonance, about 6.2 yr period | Chaotic |
@@ -156,9 +157,9 @@ Moons are few, so integrate them on the CPU in f64 with a high-accuracy integrat
 
 ### 7.1 Gravitational potential
 
-Φ(r, z) = −(GM/r) [1 − J2 (R/r)² P₂(z/r) − J4 (R/r)⁴ P₄(z/r)]
+Φ(r, z) = −(GM/r) [1 − J2 (R/r)² P₂(z/r) − J4 (R/r)⁴ P₄(z/r) − J6 (R/r)⁶ P₆(z/r)]
 
-with P₂(u) = (3u² − 1)/2 and P₄(u) = (35u⁴ − 30u² + 3)/8. Acceleration a = −∇Φ in Cartesian coordinates. Test the analytical gradient against a finite-difference gradient.
+with P₂(u) = (3u² − 1)/2, P₄(u) = (35u⁴ − 30u² + 3)/8 and P₆(u) = (231u⁶ − 315u⁴ + 105u² − 5)/16. Here r is the spherical radius. Acceleration a = −∇Φ in Cartesian coordinates. Test the analytical gradient against a finite-difference gradient.
 
 Moon acceleration on a particle: point mass, a = −GMᵢ (r − rᵢ)/|r − rᵢ|³. Add a softening only if a test shows close encounters cause problems, and record it in an ADR.
 
@@ -166,12 +167,12 @@ Moon acceleration on a particle: point mass, a = −GMᵢ (r − rᵢ)/|r − r�
 
 With Ω_K² = GM/r³ and q = R/r:
 
-- n² ≈ Ω_K² [1 + (3/2) J2 q² − (15/8) J4 q⁴]
-- κ² ≈ Ω_K² [1 − (3/2) J2 q² + (45/8) J4 q⁴]
-- ν² ≈ Ω_K² [1 + (9/2) J2 q² − (75/8) J4 q⁴]
+- n² = Ω_K² [1 + (3/2) J2 q² − (15/8) J4 q⁴ + (35/16) J6 q⁶]
+- κ² = Ω_K² [1 − (3/2) J2 q² + (45/8) J4 q⁴ − (175/16) J6 q⁶]
+- ν² = Ω_K² [1 + (9/2) J2 q² − (75/8) J4 q⁴ + (245/16) J6 q⁶]
 - Apsidal precession ϖ̇ = n − κ; nodal regression Ω̇ = −(ν − n).
 
-Task L2 confirms these expressions from a textbook source (for example Murray and Dermott) before they are used as test oracles.
+For a circular equatorial orbit in the potential of section 7.1 these are exact, not approximations. L2 confirmed the J2 and J4 terms by symbolic derivation (`docs/literature/formulas.md`, `docs/literature/derivations/n_kappa_nu.py`); A0 derived the J6 terms in the same way for ICR-001.
 
 ### 7.3 Integrators
 
@@ -241,11 +242,11 @@ Task format: ID, owner, description, acceptance criteria. Tasks in the same phas
 
 ### Phase 1: validated orbits (CPU)
 
-- **C1 (A2).** Saturn point mass + J2/J4 forces and the leapfrog. *Done when:* finite-difference gradient test passes (relative error < 10⁻⁸); a circular orbit at a₀ has relative energy error < 10⁻¹⁰ over 10⁴ orbits with no secular drift.
+- **C1 (A2).** Saturn point mass + J2/J4/J6 forces and the leapfrog. *Done when:* finite-difference gradient test passes (relative error < 10⁻⁸); a circular orbit at a₀ has relative energy error < 10⁻¹⁰ over 10⁴ orbits with no secular drift.
 - **C2 (A2).** Precession test. *Done when:* measured ϖ̇ and Ω̇ at three radii agree with section 7.2 to better than 0.1 %.
 - **C3 (A2).** Moon ephemeris integrator and Hermite interpolation. *Done when:* interpolation error at mid-interval < 10⁻³ km; moon orbits agree with A6's REBOUND run (V2).
 - **C4 (A2).** Test particles with moons, rayon parallel. *Done when:* agrees with REBOUND for 100 particles over 100 orbits (V3).
-- **V1 to V3 (A6).** REBOUND (with REBOUNDx for J2/J4) reference runs for: single-particle precession (V1), Prometheus–Pandora over 20 years, including the resonance period (V2), test particles near the core (V3). *Done when:* scripts produce reference files and comparison plots in `validation/reports/`.
+- **V1 to V3 (A6).** REBOUND (with REBOUNDx for J2/J4, and J6 as an additional force) reference runs for: single-particle precession (V1), Prometheus–Pandora over 20 years, including the resonance period (V2), test particles near the core (V3). *Done when:* scripts produce reference files and comparison plots in `validation/reports/`.
 - **R1 (A5).** `fring-run` CLI: reads config, runs a backend, writes snapshots and `meta.json`, shows progress. *Done when:* a CPU run of 10⁴ particles for 1 year completes from one config file.
 
 **Gate G1 (AJ):** CPU backend agrees with REBOUND; moon chaos looks right.
@@ -298,7 +299,7 @@ Task format: ID, owner, description, acceptance criteria. Tasks in the same phas
 
 | Test | Tolerance |
 |---|---|
-| J2/J4 gradient versus finite difference | relative < 10⁻⁸ (f64) |
+| J2/J4/J6 gradient versus finite difference | relative < 10⁻⁸ (f64) |
 | Energy, single particle, 10⁴ orbits (CPU) | relative < 10⁻¹⁰, no secular trend |
 | Precession rates versus analytical | < 0.1 % |
 | CPU versus REBOUND, test particles, 100 orbits | position difference < 1 km (non-chaotic orbits) |

@@ -8,8 +8,8 @@
 use crate::{Error, Result, Vec3};
 use serde::{Deserialize, Serialize};
 
-/// Saturn's gravity field: point mass plus J2 and J4 (`docs/PLAN.md` section
-/// 7.1). Values come from `params/` (task L2).
+/// Saturn's gravity field: point mass plus J2, J4 and J6 (`docs/PLAN.md`
+/// section 7.1; J6 since ICR-001). Values come from `params/saturn.toml`.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SaturnParams {
@@ -21,17 +21,20 @@ pub struct SaturnParams {
     pub j2: f64,
     /// Zonal harmonic J4 (no unit).
     pub j4: f64,
+    /// Zonal harmonic J6 (no unit).
+    pub j6: f64,
 }
 
 impl SaturnParams {
-    /// Checks that GM and R are positive and J2, J4 are finite.
+    /// Checks that GM and R are positive and J2, J4, J6 are finite.
     pub fn validate(&self) -> Result<()> {
         let ok = self.gm_km3_s2.is_finite()
             && self.gm_km3_s2 > 0.0
             && self.reference_radius_km.is_finite()
             && self.reference_radius_km > 0.0
             && self.j2.is_finite()
-            && self.j4.is_finite();
+            && self.j4.is_finite()
+            && self.j6.is_finite();
         if ok {
             Ok(())
         } else {

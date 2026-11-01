@@ -82,6 +82,7 @@ fn saturn() -> SaturnParams {
         reference_radius_km: 60_330.0,
         j2: 1.6291e-2,
         j4: -9.36e-4,
+        j6: 8.68e-5,
     }
 }
 
