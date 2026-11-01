@@ -1,6 +1,6 @@
 # 0001: fring-model interfaces (task F2)
 
-Status: proposed (AJ reviews at gate G0)
+Status: accepted (AJ, gate G0, 2026-11-01)
 Date: 2026-11-01
 Author: A0  Approved by A0: 2026-11-01
 
