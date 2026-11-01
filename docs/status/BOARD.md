@@ -16,7 +16,7 @@ Rules (full text in `AGENTS.md` and `CLAUDE.md`):
 
 | ID | Task | Role | Status | Branch | Blocked by |
 |---|---|---|---|---|---|
-| F1 | Workspace, CI, coordination files | A0 | review | ws/a0-f1 | |
+| F1 | Workspace, CI, coordination files | A0 | done | ws/a0-f1 | |
 | F2 | `fring-model`: units doc, config structs, `Backend` trait, float trait, Philox RNG | A0 | todo | | F1 |
 | F3 | Snapshot format spec, `fring-io` read and write with round-trip tests | A5 | todo | | F1 |
 | L1 | Literature survey of F ring dynamics since about 2000 | A1 | todo | | F1 |
