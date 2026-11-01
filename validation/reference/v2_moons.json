@@ -1,0 +1,241 @@
+{
+  "task": "V2",
+  "frame": "Saturn-centred (Saturn position and velocity subtracted), Saturn equator frame of params/moons.toml",
+  "units": "km, km/s, s",
+  "epoch": "2008-01-01 00:00 TDB = t_s 0",
+  "duration_years_julian": 20,
+  "model": "ADR 0004: Saturn a free massive body; J2,J4,J6 force on the moons relative to Saturn; Saturn's reaction to the J force neglected (relative order 3e-10)",
+  "integrator": {
+    "name": "ias15",
+    "epsilon": 1e-09,
+    "cadence_s_primary": 3600.0
+  },
+  "versions": {
+    "rebound": "5.2.2",
+    "numpy": "2.5.4",
+    "python": "3.12.12"
+  },
+  "columns": [
+    "t_s",
+    "prometheus_x_km",
+    "prometheus_y_km",
+    "prometheus_z_km",
+    "prometheus_vx_km_s",
+    "prometheus_vy_km_s",
+    "prometheus_vz_km_s",
+    "pandora_x_km",
+    "pandora_y_km",
+    "pandora_z_km",
+    "pandora_vx_km_s",
+    "pandora_vy_km_s",
+    "pandora_vz_km_s"
+  ],
+  "files": {
+    "v2_moons_6h.npy": "float64 (29221, 13); rows every 21600 s from t = 0",
+    "v2_moons_1d.csv": "preview, rows every 86400 s",
+    "v2_shadow_along1e-3_6h.npy": "same layout; Prometheus displaced by 1e-3 km along its velocity at t = 0 (shadow run)"
+  },
+  "wall_s": {
+    "main": 897.8920440673828,
+    "tang1e-3": 913.490373134613,
+    "rad1e-3": 906.7628810405731,
+    "tang1e-6": 905.1646659374237,
+    "along1e-3": 803.5183851718903,
+    "along1e-6": 791.1554796695709
+  },
+  "wall_total_s": 803.8286490440369,
+  "sha256": {
+    "v2_moons_6h.npy": "2602d00d7430f96b8fcbad6e82bde7e592cef9c16224cc7caf03ee4ec4cf72b7",
+    "v2_moons_1d.csv": "b0b564fd5f2d1ecdb30ef803e41ab150a603cf111f3973cb36ea2b1ed07487c1",
+    "v2_shadow_along1e-3_6h.npy": "ee3c8aafdc37da95e483e4d0b8018af86988fdceb4095653be0e2a7afdc951d1"
+  },
+  "large_files_git_ignored": {
+    "v2_along1e-3_1h.npy": {
+      "sha256": "f8e93afe3d953ed12690a61a39484ee962f4ec648f263d3e28c7e8de3a80853f",
+      "bytes": 18233512
+    },
+    "v2_along1e-6_1h.npy": {
+      "sha256": "d73163c9c6d3447376ada77585285722ff75ae0fa9c9048b2a3efbb49c41ffbf",
+      "bytes": 18233512
+    },
+    "v2_main_1h.npy": {
+      "sha256": "8446e8508ac91df217e97b3d0ab3d21a9b55fbe3d91d96ccec419fcffc876063",
+      "bytes": 18233512
+    },
+    "v2_rad1e-3_1h.npy": {
+      "sha256": "d016af226b67f3f6565d30604fea2f46098a5b3e26a9ddf9695bf4f8783bf3ca",
+      "bytes": 18233512
+    },
+    "v2_tang1e-3_1h.npy": {
+      "sha256": "1b1fb6308aea12c9232713212b19d2094a52eed04895b151946170c2eea7759a",
+      "bytes": 18233512
+    },
+    "v2_tang1e-6_1h.npy": {
+      "sha256": "e39ada7b0ed06f8dc2ca3572f96f8009c33bb05e5c8eb1f3eb8f17805c32adcb",
+      "bytes": 18233512
+    }
+  },
+  "analysis": {
+    "n_prometheus_deg_yr": {
+      "mean": 214505.67984708215,
+      "min": 214504.65079239552,
+      "max": 214506.92080582626,
+      "range": 2.2700134307211455,
+      "std": 0.5085817292430249
+    },
+    "n_pandora_deg_yr": {
+      "mean": 209211.65868602382,
+      "min": 209210.22199644183,
+      "max": 209212.84940824928,
+      "range": 2.6274118074615775,
+      "std": 0.5833263355362054
+    },
+    "n_prometheus_deg_day_mean": 587.2845444136403,
+    "n_pandora_deg_day_mean": 572.7903044107427,
+    "mean_motion_note": "orbit-averaged longitude, central difference over +-24.84 d (two synodic periods); range = max - min of the 20 yr series",
+    "apse_antialignment_period_yr_from_linear_fit": 6.237355347303507,
+    "apse_antialignment_epochs_yr": [
+      5.106890257814283,
+      11.344398813597993,
+      17.583276294775267
+    ],
+    "conjunction_count": 295,
+    "conjunction_min_separation_epochs_yr": [
+      7.278090618157888,
+      11.76569307068338,
+      17.614897091949558
+    ],
+    "conjunction_min_separation_spacing_yr": [
+      4.487602452525492,
+      5.849204021266178
+    ],
+    "conjunction_separation_km": {
+      "min": 1546.8473150006864,
+      "max": 3221.418275195781
+    },
+    "synodic_period_days_mean": 24.83758001774784,
+    "resonant_angles_note": "phi_k = 121 lam_Pd - 118 lam_Pr - k varpi_Pr - (3-k) varpi_Pd, orbit-averaged (mean) elements, not geometric",
+    "ecc_mean": {
+      "prometheus": 0.0022149659857796287,
+      "pandora": 0.0042131805884675815
+    },
+    "chaos": {
+      "along1e-3": {
+        "offset_km": [
+          -0.0009997553693085318,
+          2.2117690594003284e-05,
+          -9.644453972040984e-08
+        ],
+        "T_1km_yr": NaN,
+        "T_1km_prometheus_yr": NaN,
+        "T_1km_pandora_yr": NaN,
+        "T_1m_yr": 0.5681983494528648,
+        "final_dr_km": {
+          "prometheus": 0.19337316160527748,
+          "pandora": 0.18636965588671606
+        },
+        "growth_rate_per_yr_of_ln_dr": {
+          "0.2-2 yr": 0.9892890595053832,
+          "2-6 yr": 0.2073157931692881,
+          "6-12 yr": 0.14983931513802615,
+          "12-20 yr": 0.0020496394485206583,
+          "0.2-20 yr": 0.14015009277334697
+        },
+        "d_over_offset_at_yr": {
+          "1": 17.026926959289774,
+          "3": 48.84289236043477,
+          "6": 81.23900774688535,
+          "12": 186.090048344569,
+          "20": 268.5643838347775
+        }
+      },
+      "along1e-6": {
+        "offset_km": [
+          -9.997553693085317e-07,
+          2.2117690594003282e-08,
+          -9.644453972040984e-11
+        ],
+        "T_1km_yr": NaN,
+        "T_1km_prometheus_yr": NaN,
+        "T_1km_pandora_yr": NaN,
+        "T_1m_yr": NaN,
+        "final_dr_km": {
+          "prometheus": 5.2217072263235494e-05,
+          "pandora": 6.294702711033224e-05
+        },
+        "growth_rate_per_yr_of_ln_dr": {
+          "0.2-2 yr": 0.8587926324305715,
+          "2-6 yr": 0.23568904713829866,
+          "6-12 yr": 0.489429926818258,
+          "12-20 yr": -0.13160987322742612,
+          "0.2-20 yr": 0.15863128807492718
+        },
+        "d_over_offset_at_yr": {
+          "1": 12.075065158416107,
+          "3": 30.18803065778869,
+          "6": 56.66508552369266,
+          "12": 297.8992625557245,
+          "20": 81.78600649116485
+        }
+      },
+      "tang1e-3": {
+        "offset_km": [
+          0.001,
+          0,
+          0
+        ],
+        "T_1km_yr": 2.498874978136978,
+        "T_1km_prometheus_yr": 2.498874978136978,
+        "T_1km_pandora_yr": 4.515649473705231,
+        "T_1m_yr": 0.033636125927841494,
+        "final_dr_km": {
+          "prometheus": 3.1078710693324707,
+          "pandora": 2.6714834636458615
+        },
+        "growth_rate_per_yr_of_ln_dr": {
+          "0.2-2 yr": 1.3324026904421373,
+          "2-6 yr": 0.045465430814504014,
+          "6-12 yr": 0.13764465261741496,
+          "12-20 yr": -0.00843841584531986,
+          "0.2-20 yr": 0.1183529115716265
+        },
+        "d_over_offset_at_yr": {
+          "1": 347.3516767486634,
+          "3": 1351.4812804008063,
+          "6": 1320.3577793198724,
+          "12": 2934.1174828232174,
+          "20": 4098.254077058552
+        }
+      },
+      "rad1e-3": {
+        "offset_km": [
+          0,
+          0.001,
+          0
+        ],
+        "T_1km_yr": 0.08704897551860206,
+        "T_1km_prometheus_yr": 0.08704897551860206,
+        "T_1km_pandora_yr": 0.6104921327071022,
+        "T_1m_yr": 0.0008352845575700081,
+        "final_dr_km": {
+          "prometheus": 135.6065918532795,
+          "pandora": 107.84303734935519
+        },
+        "growth_rate_per_yr_of_ln_dr": {
+          "0.2-2 yr": 1.3523187588017391,
+          "2-6 yr": 0.035875201663571665,
+          "6-12 yr": 0.12125121688165402,
+          "12-20 yr": 0.011131851272092957,
+          "0.2-20 yr": 0.11211698513296221
+        },
+        "d_over_offset_at_yr": {
+          "1": 14976.46614538471,
+          "3": 58954.32160987006,
+          "6": 55830.299891379014,
+          "12": 116541.42420137355,
+          "20": 173260.69507766713
+        }
+      }
+    }
+  }
+}
