@@ -102,6 +102,13 @@ fn gpu_matches_cpu_for_1e4_particles_over_1e3_orbits() {
     let regular: Vec<usize> = (0..N)
         .filter(|&i| amp_a[i] < 10.0 && amp_l[i] < 10.0)
         .collect();
+    // Guard (A0): the comparison must not pass because the shadow rule removed
+    // most particles. G2 on the M4 found 4,890 regular particles of 10^4.
+    assert!(
+        regular.len() >= N * 2 / 5,
+        "only {} of {N} particles are regular; the shadow selection is suspect",
+        regular.len()
+    );
     println!(
         "CPU and shadow: {:.0} s. Regular at {} orbits: {} of {} (circular {}, core {}, stress {})",
         t0.elapsed().as_secs_f64(),
