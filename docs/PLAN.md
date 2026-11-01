@@ -151,7 +151,7 @@ Rules:
 
 ### 6.3 Moons
 
-Moons are few, so integrate them on the CPU in f64 with a high-accuracy integrator (for example IAS15-style or a high-order symplectic method with a small step). Before a run, `fring-run` pre-computes a moon ephemeris table for the full duration and uploads it to the GPU. Particle kernels interpolate moon positions (Hermite, from positions and velocities). This removes moon integration from the hot loop and makes CPU and GPU see the same moons.
+Moons are few, so integrate them on the CPU in f64 with a high-accuracy integrator (for example IAS15-style or a high-order symplectic method with a small step). Before a run, `fring-run` pre-computes a moon ephemeris table for the full duration (quintic Hermite, ICR-002). Each backend interpolates it on the host for every block of steps and gives the particle kernels a small table of moon positions and the indirect term at the kick times; the GPU does not interpolate (ADR 0007). This removes moon integration from the hot loop and makes CPU and GPU see the same moons.
 
 ## 7. Physics specification
 
