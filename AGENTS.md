@@ -150,6 +150,8 @@ Validation commands (A6; a `uv` project in `validation/`, Python 3.12, needs `uv
 cd validation && uv sync                                  # install rebound, reboundx, numpy, scipy, matplotlib, pytest
 cd validation && uv run pytest -q                         # reference force vs finite difference, PLAN 7.2 and REBOUNDx
 cd validation && uv run python scripts/v1_precession.py   # V1, about 5 minutes; writes reference/v1_* and reports/v1_precession.png
+cd validation && uv run python scripts/v2_moons.py --check   # V2, recompute the first day, compare with the committed file
+cd validation && uv run python scripts/v2_moons.py           # V2, about 15 minutes (5 parallel runs); writes reference/v2_*, reports/v2_*.png
 ```
 
 Web commands: A7 adds them here when task W1 is done.
