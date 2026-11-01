@@ -48,13 +48,35 @@ pub fn write_stats_csv<W: Write>(w: &mut W, rows: &[StepStats]) -> Result<()> {
     Ok(())
 }
 
+/// Result of [`read_stats_csv_report`].
+#[derive(Clone, Debug, PartialEq)]
+pub struct StatsRead {
+    /// The complete rows, in file order.
+    pub rows: Vec<StepStats>,
+    /// True if the file ended in an unfinished line (no final newline), which
+    /// was dropped. That is what a crash during a write leaves behind.
+    pub dropped_partial: bool,
+}
+
 /// Reads `stats.csv`. Columns are found by name; unknown columns are ignored;
 /// an empty field is `None` (or the default for non-optional fields that are
 /// missing as a whole column).
+///
+/// Crash rule: a row is complete only when its newline has been written, so
+/// a last line without a newline is dropped, even if it would parse (a
+/// truncated number can still parse and be wrong). Every other bad row is an error.
 pub fn read_stats_csv<R: Read>(r: &mut R) -> Result<Vec<StepStats>> {
+    Ok(read_stats_csv_report(r)?.rows)
+}
+
+/// As [`read_stats_csv`], and also says whether a partial last line was dropped.
+pub fn read_stats_csv_report<R: Read>(r: &mut R) -> Result<StatsRead> {
     let mut text = String::new();
     r.read_to_string(&mut text)
         .map_err(|e| Error::Io(format!("stats.csv: {e}")))?;
+    let complete_len = text.rfind('\n').map_or(0, |i| i + 1);
+    let dropped_partial = complete_len < text.len();
+    text.truncate(complete_len);
     let mut lines = text.lines().enumerate();
     let (_, head) = lines
         .next()
@@ -102,5 +124,8 @@ pub fn read_stats_csv<R: Read>(r: &mut R) -> Result<Vec<StepStats>> {
         }
         out.push(s);
     }
-    Ok(out)
+    Ok(StatsRead {
+        rows: out,
+        dropped_partial,
+    })
 }

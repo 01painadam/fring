@@ -38,7 +38,7 @@ Frame file names are the frame index with at least 6 digits (`000042.bin`, and `
 - Write each file to `<name>.tmp` in the same directory, then rename it. A reader then never sees a half-written file. A run that stops in the middle leaves at most one `.tmp` file, which readers ignore.
 - Write `config.toml` first (copy the bytes of the input file; do not serialise the parsed config again).
 - `moons.bin` can be written once, at the start: the moon ephemeris is computed before the run (`docs/PLAN.md` section 6.3), so the moon states at all output times are known.
-- `stats.csv` grows during a run. It is the one exception to the `.tmp` rule: the writer appends rows (`write_stats_header`, then `write_stats_row`). Task R1 decides how a reader treats an incomplete last row after a crash (see section 12).
+- `stats.csv` grows during a run. It is the one exception to the `.tmp` rule: the writer appends rows (`write_stats_header`, then `write_stats_row`). The runner formats each row into one buffer and writes it with a single `write_all`, so a crash can leave at most one unfinished last line. How a reader treats it: section 8.
 - Check array lengths before writing. All arrays of one frame have the same length as `n_particles`.
 
 ## 5. Frame file `frames/NNNNNN.bin`
@@ -107,6 +107,7 @@ Plain CSV: a header row with column names, then one row per output. No comment l
 - A reader finds columns by name. It ignores unknown columns and accepts any order. Only `time_s` is required; a missing column gives the default.
 - An empty field means "no value" (`None`).
 - Floating-point values use the shortest text that parses back to the same number (Rust `{:?}`). Not-a-number and infinity are written `NaN`, `inf`, `-inf`.
+- **Crash rule (R1).** A row is complete only when its newline has been written. A reader drops a last line that has no final newline, even if it parses, because a truncated number (`0.0001` cut from `0.000123`) can still parse and be wrong. `read_stats_csv_report` says whether it dropped a line. Any other bad row, including a finished ragged row, is an error. A header without a newline counts as an empty file.
 - New `StepStats` fields add columns at the end. The format version is in `meta.json`.
 
 ## 9. `meta.json`
@@ -134,5 +135,5 @@ The reader returns `Error::Io` with a clear message in each case:
 ## 12. Open items
 
 - Compression for the web replay (task W3).
-- `stats.csv` after a crash (task R1): the strict reader rejects a ragged last row. R1 decides whether a reader of a run directory drops an incomplete last line, or whether the writer flushes whole rows only.
+- `stats.csv` after a crash: decided in R1, see the crash rule in section 8.
 - Optional per-particle columns (for example size) need a new frame type.

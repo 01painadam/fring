@@ -140,7 +140,8 @@ CI (`.github/workflows/ci.yml`) runs `cargo fmt --check`, clippy, the tests and 
 These commands work after their tasks are done. Until then, the apps only print "not implemented yet".
 
 ```sh
-cargo run -p fring-run --release -- --config runs/<name>.toml   # after R1
+cargo run -p fring-run --release -- --config apps/fring-run/configs/<name>.toml [--out <dir>] [--quiet]
+cargo test -p fring-run --release -- --ignored                  # acceptance: 10^4 particles, 1 year
 cargo run -p fring-bench --release                              # after B1
 ```
 

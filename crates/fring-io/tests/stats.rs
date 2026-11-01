@@ -104,3 +104,22 @@ fn stats_rejects_bad_input() {
         assert!(e.contains(needle), "{text:?}: {e}");
     }
 }
+
+#[test]
+fn stats_drops_unfinished_last_line() {
+    use fring_io::read_stats_csv_report;
+    // A crash during a write leaves a line without a newline. It is dropped
+    // even when it parses (here "2.5" could be a cut "2.5e9").
+    for tail in ["2.5", "2.", "", "2.5,7,0"] {
+        let text = format!("time_s,steps_total,collisions_since_last\n1.0,3,0\n{tail}");
+        let got = read_stats_csv_report(&mut text.as_bytes()).unwrap();
+        assert_eq!(got.rows.len(), 1, "{tail:?}");
+        assert_eq!(got.rows[0].time_s, 1.0);
+        assert_eq!(got.dropped_partial, !tail.is_empty(), "{tail:?}");
+    }
+    // A finished but bad row is still an error.
+    assert!(read_stats_csv(&mut "time_s,steps_total\n1.0\n".as_bytes()).is_err());
+    // A header without a newline is an empty file.
+    let e = read_stats_csv(&mut "time_s,steps".as_bytes()).unwrap_err();
+    assert!(e.to_string().contains("empty"), "{e}");
+}
