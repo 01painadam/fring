@@ -2,6 +2,28 @@
 
 Read this file at the start of a session. When a mistake costs time, add an entry so that no agent makes it twice. Newest first. Each entry: what happened, why, and the rule now.
 
+## 2026-11-01 (phase 1)
+
+### M12. The plan's baseline method was not accurate enough for the science
+
+- **What:** PLAN 7.3 chose the leapfrog at 100 to 200 steps per orbit. In C2 it slowed the apse precession at the core by 9.7 % and gave 52,000 km of along-track error after 100 orbits (ADR 0003).
+- **Rule:** before you build on a planned method, measure its error on the quantity that the science needs (here ϖ̇ = n − κ, a small difference of large numbers), not only on a generic test.
+
+### M13. A long background script ran twice
+
+- **What:** the V2 script was started twice (the first start survived a shell exit). Both copies used 4 cores and wrote the same files.
+- **Rule:** before you start a long run, check `ps` for a copy; after the start, check that only one copy runs.
+
+### M14. A pipe hid an exit code
+
+- **What:** `cmd | tail -1; echo $?` printed 0, the status of `tail`, although `cmd` had exited with 2.
+- **Rule:** check exit codes without a pipe, or use `${pipestatus[1]}` in zsh.
+
+### M15. Evidence was left in a temporary folder
+
+- **What:** a comparison plot for the gate was only in the session scratchpad, which is deleted later.
+- **Rule:** copy gate evidence into the repository (for example `docs/gates/G<n>/`) before the session ends.
+
 ## 2026-11-01 (phase 0)
 
 ### M1. Merging the base of stacked PRs closed the other PRs
