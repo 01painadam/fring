@@ -38,8 +38,12 @@ fn quantile(sorted: &[f64], q: f64) -> f64 {
 #[ignore = "needs a GPU, about 2 minutes"]
 fn gpu_matches_cpu_for_1e4_particles_over_1e3_orbits() {
     let _ = ORBITS;
-    let system = system(H_S, STEPS, true);
-    let config = config(H_S, STEPS, true);
+    let h = std::env::var("FRING_TEST_H")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(H_S);
+    let system = system(h, STEPS, true);
+    let config = config(h, STEPS, true);
     let gm = system.saturn.gm_km3_s2;
     let (init, kinds) = ensemble(&system, N);
 
@@ -127,6 +131,51 @@ fn gpu_matches_cpu_for_1e4_particles_over_1e3_orbits() {
         let t_gpu = t1.elapsed().as_secs_f64();
         let pg = gpu.particles().unwrap().particles.clone();
         let (mut da, mut dl): (Vec<f64>, Vec<f64>) = (Vec::new(), Vec::new());
+        // Diagnostics: by orbit type and by the shadow's amplification.
+        let mut groups: Vec<(String, Vec<f64>, Vec<f64>)> = Vec::new();
+        for (name, f) in [
+            (
+                "circular",
+                Box::new(|i: usize| kinds[i] == 0) as Box<dyn Fn(usize) -> bool>,
+            ),
+            ("core", Box::new(|i: usize| kinds[i] == 1)),
+            ("stress", Box::new(|i: usize| kinds[i] == 2)),
+            (
+                "amp<3",
+                Box::new(|i: usize| amp_a[i] < 3.0 && amp_l[i] < 3.0),
+            ),
+            (
+                "amp>=3",
+                Box::new(|i: usize| amp_a[i] >= 3.0 || amp_l[i] >= 3.0),
+            ),
+        ] {
+            let mut ga = Vec::new();
+            let mut gl = Vec::new();
+            for &i in regular.iter().filter(|&&i| f(i)) {
+                let (p, v) = state(&pc, i);
+                let (q, w) = state(&pg, i);
+                ga.push((semi_major_axis(gm, q, w) - semi_major_axis(gm, p, v)).abs());
+                gl.push(phase_difference(p, q).abs());
+            }
+            ga.sort_by(|a, b| a.total_cmp(b));
+            gl.sort_by(|a, b| a.total_cmp(b));
+            groups.push((name.to_string(), ga, gl));
+        }
+        for (name, ga, gl) in &groups {
+            if ga.is_empty() {
+                continue;
+            }
+            println!(
+                "  {} {name:9} n {:5}: da max {:.2e} p99 {:.2e} | dphase max {:.2e} p99 {:.2e} median {:.2e}",
+                mode.name(),
+                ga.len(),
+                ga.last().unwrap(),
+                quantile(ga, 0.99),
+                gl.last().unwrap(),
+                quantile(gl, 0.99),
+                quantile(gl, 0.5)
+            );
+        }
         for &i in &regular {
             let (p, v) = state(&pc, i);
             let (q, w) = state(&pg, i);
