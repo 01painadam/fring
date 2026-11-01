@@ -66,10 +66,18 @@ fn steps_advance_time_and_match_the_plain_loop() {
 
     let field = SaturnField::<f64>::from_params(&sys.saturn);
     let mut expected = ini.particles.clone();
-    step_particles(&field, &mut expected, cfg.time.step_s, 500);
+    step_particles(&field, &mut expected, cfg.time.step_s, 500).unwrap();
     let view = b.particles().unwrap();
     assert_eq!(view.time_s, 100.0 + 500.0 * cfg.time.step_s);
-    assert_eq!(view.particles, &expected);
+    // 400 + 100 steps and 500 steps differ by rounding only (the merged half
+    // drifts are split differently).
+    let (a, e) = (view.particles, &expected);
+    for i in 0..e.len() {
+        assert!((a.x_km[i] - e.x_km[i]).abs() < 1e-6, "x {i}");
+        assert!((a.y_km[i] - e.y_km[i]).abs() < 1e-6, "y {i}");
+        assert!((a.vx_km_s[i] - e.vx_km_s[i]).abs() < 1e-11, "vx {i}");
+        assert!((a.vy_km_s[i] - e.vy_km_s[i]).abs() < 1e-11, "vy {i}");
+    }
 }
 
 #[test]
@@ -98,4 +106,13 @@ fn moons_are_refused() {
     };
     let r = CpuBackend::new(&config(), &sys, &init(1));
     assert!(matches!(r, Err(Error::Input(_))), "{:?}", r.err());
+}
+
+#[test]
+fn unbound_particle_is_an_error() {
+    let mut ini = init(2);
+    ini.particles.vx_km_s[1] = 1.0e3;
+    ini.particles.vy_km_s[1] = 1.0e3;
+    let mut b = CpuBackend::new(&config(), &system(), &ini).unwrap();
+    assert!(matches!(b.step(1), Err(Error::Backend(_))));
 }

@@ -176,8 +176,8 @@ For a circular equatorial orbit in the potential of section 7.1 these are exact,
 
 ### 7.3 Integrators
 
-- **Baseline:** drift-kick-drift leapfrog, fixed step. Target 100 to 200 steps per orbit.
-- **Option (task C5):** a Wisdom-Holman style split (exact Kepler drift around Saturn, kicks for J2/J4 and moons). Expected 3 to 5x fewer steps. Adopt only if it passes the same validation tests and is faster in wall time.
+- **Baseline (ADR 0003):** Wisdom-Holman split: an exact Kepler drift about Saturn alternates with kicks from J2, J4, J6 and the moons, drift-kick-drift, fixed step. Target 150 steps per orbit. At 150 steps per orbit it gives the apse precession at the core to 0.001 %; the plain leapfrog gives −9.7 % (ADR 0003). The former option C5 is now the baseline.
+- **Reference:** the drift-kick-drift leapfrog (task C1) stays in the code for comparison and fast tests.
 - Close encounters with Prometheus: measure the closest approach distribution. If some particles need smaller steps, use per-particle sub-stepping (block time steps) rather than reducing the global step.
 
 ### 7.4 Initial conditions
