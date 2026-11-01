@@ -150,6 +150,10 @@ fn wgsl_functions_match_their_rust_twins() {
         let a = wh::kick_acc_c(&s.c, &s.host, 0, p);
         join(p, a)
     });
+    check_vectors("t_kick_dir_plus", &s, &k, |s, st| {
+        let (p, v) = vecs(st);
+        join(p, wh::kick_dir_plus(&s.c, &s.host, 0, p, v))
+    });
     check_vectors("t_kick_dir", &s, &k, |s, st| {
         let (p, v) = vecs(st);
         join(p, wh::kick_dir(&s.c, &s.host, 0, p, v))

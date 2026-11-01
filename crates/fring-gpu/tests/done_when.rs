@@ -115,7 +115,7 @@ fn gpu_matches_cpu_for_1e4_particles_over_1e3_orbits() {
     let pc = cpu.particles().unwrap().particles.clone();
 
     let mut failures = Vec::new();
-    for mode in [Mode::D, Mode::C] {
+    for mode in [Mode::D, Mode::Dp, Mode::C] {
         let t1 = Instant::now();
         let mut gpu = GpuBackend::with_options(
             &config,
@@ -199,7 +199,9 @@ fn gpu_matches_cpu_for_1e4_particles_over_1e3_orbits() {
             quantile(&dl, 0.99),
             quantile(&dl, 0.5),
         );
-        if ma >= 0.01 || md >= 1e-5 {
+        // Option D is reported, not asserted: it does not meet PLAN section 10
+        // in the tail (ADR 0006 addendum); D+ and C must.
+        if mode != Mode::D && (ma >= 0.01 || md >= 1e-5) {
             failures.push(format!(
                 "mode {}: max da {ma:.2e} km, max dphase {md:.2e} rad",
                 mode.name()

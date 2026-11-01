@@ -300,6 +300,61 @@ fn kick_dir(k: u32, p: V3, v: V3) -> V3 {
     return v3_add_w(v3_add(v, dv), small);
 }
 
+// Kick of option D+ (G2, ADR 0006 addendum): as kick_dir, but the J2 term is
+// computed in DS with h in DS (the f32 magnitudes of D made a mean-motion
+// error that grew to 1e-4 rad in the tail). J4, J6 and the moons as in D.
+fn kick_dir_plus(k: u32, p: V3, v: V3) -> V3 {
+    let r2d = v3_dot(p, p);
+    let rd = ds_sqrt(r2d);
+    let ud = ds_div(p.z, rd);
+    let u2d = ds_mul(ud, ud);
+    let qd = ds_div(prm_radius(), rd);
+    let q2d = ds_mul(qd, qd);
+    let j2q = ds_mul(prm_j2(), q2d);
+    let p2d = ds_mul(ds_sub(ds_mul(ds(3.0), u2d), ds(1.0)), ds(0.5));
+    let d2d = ds_mul(ds(3.0), ud);
+    let aa2 = ds_mul(ds_mul(ds(3.0), j2q), p2d);
+    let b2 = ds_mul(j2q, d2d);
+    let radial2 = ds_sub(ds_sub(ds(0.0), aa2), ds_mul(ud, b2));
+    let kkd = ds_div(-prm_gm(), ds_mul(r2d, rd));
+    let hd = prm_h();
+    let sxy2 = ds_mul(ds_mul(kkd, radial2), hd);
+    let sz2 = ds_mul(ds_mul(ds_mul(kkd, b2), rd), hd);
+
+    let pw = v3_hi(p);
+    let r2 = dot_f(pw, pw);
+    let r = sqrt(r2);
+    let u = pw.z / r;
+    let u2 = u * u;
+    let q = prm_radius().x / r;
+    let q2 = q * q;
+    let q4 = q2 * q2;
+    let q6 = q4 * q2;
+    let p4 = ((35.0 * u2 - 30.0) * u2 + 3.0) * 0.125;
+    let p6 = (((231.0 * u2 - 315.0) * u2 + 105.0) * u2 - 5.0) * 0.0625;
+    let d4 = ((35.0 * u2 - 15.0) * u) * 0.5;
+    let d6 = (((1386.0 * u2 - 1260.0) * u2 + 210.0) * u) * 0.0625;
+    let j4q = prm_j4s() * q4;
+    let j6q = prm_j6s() * q6;
+    let aa = 5.0 * j4q * p4 + 7.0 * j6q * p6;
+    let b = j4q * d4 + j6q * d6;
+    let radial = -aa - u * b;
+    let kk = -prm_gm().x / (r2 * r);
+    let h = prm_h().x;
+    let sxy = ds_add_f(sxy2, kk * radial * h);
+    let sz = ds_add_f(sz2, kk * b * r * h);
+    var am = vec3<f32>(0.0, 0.0, 0.0);
+    for (var j = 0u; j < prm_n_moons(); j++) {
+        let m = moon_ds(k, j);
+        let d = vec3<f32>(ds_sub(m.x, p.x).x, ds_sub(m.y, p.y).x, ds_sub(m.z, p.z).x);
+        let dd2 = dot_f(d, d);
+        am = am + d * (prm_gm_moon_s(j) / (dd2 * sqrt(dd2)));
+    }
+    let small = (am + indirect_f(k)) * h;
+    let dv = V3(ds_mul(p.x, sxy), ds_mul(p.y, sxy), ds_add(ds_mul(p.z, sxy), sz));
+    return v3_add_w(v3_add(v, dv), small);
+}
+
 // ---- Entry points: one block of prm_n_steps() steps per particle ----
 
 @compute @workgroup_size(WG_SIZE)
@@ -314,6 +369,26 @@ fn step_d(@builtin(global_invocation_id) id: vec3<u32>, @builtin(num_workgroups)
     var ok = o.ok;
     for (var k = 0u; k < n; k++) {
         let v = kick_dir(k, o.p, o.v);
+        var dt = h;
+        if (k + 1u == n) { dt = half; }
+        o = drift_d(o.p, v, dt);
+        ok = ok && o.ok;
+    }
+    if (ok) { store(i, o.p, o.v); } else { atomicMin(&status[0], i); }
+}
+
+@compute @workgroup_size(WG_SIZE)
+fn step_dp(@builtin(global_invocation_id) id: vec3<u32>, @builtin(num_workgroups) nw: vec3<u32>) {
+    ds_one = prm_one();
+    let i = id.y * nw.x * u32(WG_SIZE) + id.x;
+    if (i >= prm_n_particles()) { return; }
+    let n = prm_n_steps();
+    let h = prm_h();
+    let half = prm_half();
+    var o = drift_d(load_p(i), load_v(i), half);
+    var ok = o.ok;
+    for (var k = 0u; k < n; k++) {
+        let v = kick_dir_plus(k, o.p, o.v);
         var dt = h;
         if (k + 1u == n) { dt = half; }
         o = drift_d(o.p, v, dt);
@@ -411,4 +486,13 @@ fn t_kick_dir(@builtin(global_invocation_id) id: vec3<u32>, @builtin(num_workgro
     if (i >= prm_n_particles()) { return; }
     let p = load_p(i);
     store(i, p, kick_dir(0u, p, load_v(i)));
+}
+
+@compute @workgroup_size(WG_SIZE)
+fn t_kick_dir_plus(@builtin(global_invocation_id) id: vec3<u32>, @builtin(num_workgroups) nw: vec3<u32>) {
+    ds_one = prm_one();
+    let i = id.y * nw.x * u32(WG_SIZE) + id.x;
+    if (i >= prm_n_particles()) { return; }
+    let p = load_p(i);
+    store(i, p, kick_dir_plus(0u, p, load_v(i)));
 }

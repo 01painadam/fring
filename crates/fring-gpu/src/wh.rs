@@ -27,6 +27,8 @@ pub const PARAM_WORDS: usize = 36;
 pub enum Mode {
     /// Option D: DS state and drift, f32 kick magnitudes. Science runs.
     D,
+    /// Option D+: as D with the J2 term of the kick in DS (ADR 0006 addendum).
+    Dp,
     /// Option C: DS throughout. Reference mode.
     C,
 }
@@ -36,6 +38,7 @@ impl Mode {
     pub fn entry(self) -> &'static str {
         match self {
             Mode::D => "step_d",
+            Mode::Dp => "step_dp",
             Mode::C => "step_c",
         }
     }
@@ -44,6 +47,7 @@ impl Mode {
     pub fn name(self) -> &'static str {
         match self {
             Mode::D => "d",
+            Mode::Dp => "dp",
             Mode::C => "c",
         }
     }
@@ -257,6 +261,78 @@ pub fn kick_dir<const M: u8>(
     )
 }
 
+/// Twin of `kick_dir_plus` in `wh.wgsl` for step `k` (option D+): the J2 term
+/// in DS with DS `h`; J4, J6 and the moons as in [`kick_dir`].
+pub fn kick_dir_plus<const M: u8>(
+    c: &Consts<M>,
+    tab: &HostTable<M>,
+    k: usize,
+    p: Vec3<Ds<M>>,
+    v: Vec3<Ds<M>>,
+) -> Vec3<Ds<M>> {
+    let fd = &c.field_d;
+    let ds = |x: f32| Ds::<M>::from_f32(x);
+    let r2d = p.norm_squared();
+    let rd = r2d.sqrt();
+    let ud = p.z / rd;
+    let u2d = ud * ud;
+    let qd = fd.reference_radius_km / rd;
+    let q2d = qd * qd;
+    let j2q = fd.j2 * q2d;
+    let p2d = (ds(3.0) * u2d - ds(1.0)) * ds(0.5);
+    let d2d = ds(3.0) * ud;
+    let aa2 = ds(3.0) * j2q * p2d;
+    let b2 = j2q * d2d;
+    let radial2 = (ds(0.0) - aa2) - ud * b2;
+    let kkd = (-fd.gm_km3_s2) / (r2d * rd);
+    let hd = Ds::<M>::split(c.h_s);
+    let sxy2 = kkd * radial2 * hd;
+    let sz2 = kkd * b2 * rd * hd;
+
+    let f = &c.field_w;
+    let cw = |x: f32| Wf32::<M>(x);
+    let pw = hi3(p);
+    let r2 = pw.norm_squared();
+    let r = r2.sqrt();
+    let u = pw.z / r;
+    let u2 = u * u;
+    let q = f.reference_radius_km / r;
+    let q2 = q * q;
+    let q4 = q2 * q2;
+    let q6 = q4 * q2;
+    let p4 = ((cw(35.0) * u2 - cw(30.0)) * u2 + cw(3.0)) * cw(0.125);
+    let p6 = (((cw(231.0) * u2 - cw(315.0)) * u2 + cw(105.0)) * u2 - cw(5.0)) * cw(0.0625);
+    let d4 = ((cw(35.0) * u2 - cw(15.0)) * u) * cw(0.5);
+    let d6 = (((cw(1386.0) * u2 - cw(1260.0)) * u2 + cw(210.0)) * u) * cw(0.0625);
+    let j4q = f.j4 * q4;
+    let j6q = f.j6 * q6;
+    let aa = cw(5.0) * j4q * p4 + cw(7.0) * j6q * p6;
+    let b = j4q * d4 + j6q * d6;
+    let radial = -aa - u * b;
+    let kk = -f.gm_km3_s2 / (r2 * r);
+    let h = cw(c.h_s as f32);
+    let sxy = sxy2.add_f((kk * radial * h).0);
+    let sz = sz2.add_f((kk * b * r * h).0);
+    let mut am = Vec3::new(Wf32::<M>::ZERO, Wf32::<M>::ZERO, Wf32::<M>::ZERO);
+    for (gm, mp) in c.gm_moons_w.iter().zip(tab.moons(k)) {
+        let d = Vec3::new(
+            Wf32::<M>((mp.x - p.x).hi),
+            Wf32::<M>((mp.y - p.y).hi),
+            Wf32::<M>((mp.z - p.z).hi),
+        );
+        let dd2 = d.norm_squared();
+        am += d * (*gm / (dd2 * dd2.sqrt()));
+    }
+    let small = (am + tab.ind_w[k]) * h;
+    let dv = Vec3::new(p.x * sxy, p.y * sxy, p.z * sxy + sz);
+    let w = v + dv;
+    Vec3::new(
+        w.x.add_f(small.x.0),
+        w.y.add_f(small.y.0),
+        w.z.add_f(small.z.0),
+    )
+}
+
 /// Twin of `kick_acc_c`: the whole kick acceleration in DS at step `k`.
 pub fn kick_acc_c<const M: u8>(
     c: &Consts<M>,
@@ -284,10 +360,14 @@ pub fn advance<const M: u8>(
     let half = Ds::<M>::split(0.5 * c.h_s);
     let (mut p, mut v) = split_state(s);
     match mode {
-        Mode::D => {
+        Mode::D | Mode::Dp => {
             (p, v) = drift_d(c, p, v, half)?;
             for k in 0..n {
-                v = kick_dir(c, tab, k, p, v);
+                v = if mode == Mode::D {
+                    kick_dir(c, tab, k, p, v)
+                } else {
+                    kick_dir_plus(c, tab, k, p, v)
+                };
                 let dt = if k + 1 == n { half } else { h };
                 (p, v) = drift_d(c, p, v, dt)?;
             }

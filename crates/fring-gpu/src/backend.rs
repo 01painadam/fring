@@ -20,10 +20,11 @@
 //!
 //! # Mode
 //!
-//! Option D (default, science runs) or option C (reference mode). The run
-//! config has no field for it, so [`Backend::new`] reads the environment
-//! variable `FRING_GPU_MODE` (`d` or `c`); use [`GpuBackend::with_options`]
-//! in code.
+//! Option D+ (default, science runs), option C (reference mode) or option D
+//! (faster, but it does not meet PLAN section 10 in the tail; ADR 0006
+//! addendum). The run config has no field for it, so [`Backend::new`] reads
+//! the environment variable `FRING_GPU_MODE` (`dp`, `c` or `d`); use
+//! [`GpuBackend::with_options`] in code.
 
 use crate::gpu::Gpu;
 use crate::spike::{Consts, State, kick_scale, state_from_f64, state_to_f64};
@@ -61,7 +62,7 @@ pub struct Options {
 impl Default for Options {
     fn default() -> Self {
         Self {
-            mode: Mode::D,
+            mode: Mode::Dp,
             workgroup: DEFAULT_WORKGROUP,
             block_steps: None,
         }
@@ -69,16 +70,17 @@ impl Default for Options {
 }
 
 impl Options {
-    /// Defaults, with the mode from `FRING_GPU_MODE` (`d` or `c`).
+    /// Defaults, with the mode from `FRING_GPU_MODE` (`dp`, `d` or `c`).
     pub fn from_env() -> Result<Self> {
         let mut o = Self::default();
         if let Ok(m) = std::env::var("FRING_GPU_MODE") {
             o.mode = match m.trim().to_ascii_lowercase().as_str() {
-                "d" | "" => Mode::D,
+                "dp" | "d+" | "" => Mode::Dp,
+                "d" => Mode::D,
                 "c" => Mode::C,
                 other => {
                     return Err(Error::Config(format!(
-                        "FRING_GPU_MODE must be \"d\" or \"c\", not {other:?}"
+                        "FRING_GPU_MODE must be \"dp\", \"d\" or \"c\", not {other:?}"
                     )));
                 }
             };

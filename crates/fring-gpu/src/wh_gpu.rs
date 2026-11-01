@@ -201,8 +201,10 @@ impl WhKernels {
         d.poll(wgpu::PollType::wait_indefinitely()).expect("poll");
         let view = stage.get_mapped_range(..).expect("mapped range");
         let words: Vec<f32> = view[..6 * cap * 8]
-            .chunks_exact(4)
-            .map(|c| f32::from_le_bytes([c[0], c[1], c[2], c[3]]))
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .map(|c| f32::from_le_bytes(*c))
             .collect();
         let off = 6 * cap * 8;
         let status = u32::from_le_bytes([view[off], view[off + 1], view[off + 2], view[off + 3]]);
