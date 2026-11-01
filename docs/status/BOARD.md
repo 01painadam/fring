@@ -31,7 +31,7 @@ Rules (full text in `AGENTS.md` and `CLAUDE.md`):
 | C2 | Wisdom-Holman integrator (ADR 0003); precession test at three radii; frame conversions inertial, rotating, local (`fring-model/src/physics/`) | A2 | done | ws/a2-c2 | C1 |
 | C3 | Moon ephemeris integrator and Hermite interpolation | A2 | todo | | C1, V2 |
 | C4 | Test particles with moons, rayon parallel; initial conditions from the config distributions (`fring-model/src/physics/`) | A2 | todo | | C3, V3 |
-| V1 | REBOUND reference: single-particle precession | A6 | todo | | Gate G0 |
+| V1 | REBOUND reference: single-particle precession | A6 | done | ws/a6-v1 | Gate G0 |
 | V2 | REBOUND reference: Prometheus and Pandora over 20 years | A6 | todo | | Gate G0 |
 | V3 | REBOUND reference: test particles near the core | A6 | todo | | Gate G0 |
 | R1 | `fring-run` CLI: config, backend, snapshots, `meta.json`, progress | A5 | todo | | C4 |
