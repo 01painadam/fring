@@ -56,6 +56,18 @@ impl<T: Real> SaturnField<T> {
     /// With `A = sum (n+1) Jn q^n Pn(u)` and `B = sum Jn q^n Pn'(u)`:
     /// `a = -(GM/r²) [ (1 - A - u B) pos/r + B z_hat ]`.
     pub fn acceleration(&self, pos_km: Vec3<T>) -> Vec3<T> {
+        self.accel(pos_km, true)
+    }
+
+    /// Acceleration in km s⁻² without the point-mass term: only the J2, J4
+    /// and J6 parts. The Wisdom-Holman kick uses this; the Kepler drift
+    /// carries the point mass.
+    pub fn acceleration_without_point_mass(&self, pos_km: Vec3<T>) -> Vec3<T> {
+        self.accel(pos_km, false)
+    }
+
+    #[inline]
+    fn accel(&self, pos_km: Vec3<T>, with_point_mass: bool) -> Vec3<T> {
         let r2 = pos_km.norm_squared();
         let r = r2.sqrt();
         let u = pos_km.z / r;
@@ -76,7 +88,8 @@ impl<T: Real> SaturnField<T> {
         let j6q = self.j6 * q6;
         let a = c::<T>(3.0) * j2q * p2 + c::<T>(5.0) * j4q * p4 + c::<T>(7.0) * j6q * p6;
         let b = j2q * d2 + j4q * d4 + j6q * d6;
-        let radial = T::ONE - a - u * b;
+        let point = if with_point_mass { T::ONE } else { T::ZERO };
+        let radial = point - a - u * b;
         let k = -self.gm_km3_s2 / (r2 * r);
         Vec3::new(
             k * radial * pos_km.x,
