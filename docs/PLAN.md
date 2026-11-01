@@ -65,7 +65,7 @@ Kilometres, seconds, kilograms. Gravitational parameters as GM in km³ s⁻². A
 ### 4.3 Precision policy
 
 - CPU backend: f64 everywhere. It is the reference.
-- GPU backend: Metal has no f64. Store state as f32 in local coordinates, and use double-single (two f32) arithmetic where a spike (task G1) shows that it is necessary. The GPU must agree with the CPU within the tolerances in section 10.
+- GPU backend (ADR 0006): Metal has no f64. Science runs use option D: particle position and velocity in double-single (two f32 per value, 48 bytes per particle), Saturn-centred; the Kepler drift in double-single (an f32 Newton solve, then one double-single correction); kick magnitudes in f32, applied along the double-single position. Option C (double-single throughout) is the GPU reference mode. The web toy uses option A (plain f32). Double-single needs a guard against Metal fast math and a start-up self-test (ADR 0006). Local coordinates are used for output, collision cells and the arc domain, not for the state. The GPU must agree with the CPU within the tolerances in section 10.
 
 ### 4.4 Configuration
 
