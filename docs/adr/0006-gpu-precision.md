@@ -156,3 +156,43 @@ Files in `docs/adr/0006/`: `probe_m4.txt`, `g1_none_summary.csv` and `g1_both_su
 Code: `crates/fring-gpu/src/{wf32,ds,probe,spike,spike_gpu,gpu}.rs`, `crates/fring-gpu/shaders/{ds,trig,probe,spike}.wgsl`, `crates/fring-gpu/examples/{g1_probe,g1_precision,g1_bench}.rs`, `crates/fring-gpu/tests/gpu_twins.rs`.
 
 Dependencies: wgpu 30.0.1, pollster 1.0.1 (A0, 2026-11-01). A clean workspace build takes 13.9 s instead of 5.4 s (debug) and 20.0 s instead of 7.2 s (release).
+
+## Addendum (G2, 2026-11-01): option D fails the tail; D+ is the production mode
+
+Status: accepted by A0; AJ reviews at gate G2.
+
+**What G2 found.** The G1 matrix compared 96 particles, of which 47 were regular at 10³ orbits (max Δλ 6.1 × 10⁻⁶ rad for D). The G2 done-when test uses 10⁴ particles through the `Backend` interface (the same three orbit types, both moons, h = 356.2537 s, 150,030 steps, a step that is not exact in f32). 4,890 particles are regular by the 1 mm shadow rule at 10³ orbits (circular 2,829, core 1,931, stress 130). Option D fails PLAN section 10 in the tail: the median is as in G1, but the maximum is 19 times larger. **Lesson: 47 particles hid the tail; a precision claim needs the whole distribution (max and 99th percentile) over thousands of particles.**
+
+**Cause.** The f32 kick magnitudes of D give a small systematic error in the J2 force (already noted above); it differs from particle to particle and the largest values reach 10⁻⁴ rad at 10³ orbits.
+
+**D+.** D with the J2 part of the kick in DS and h in DS (sine of latitude, q², P₂ and the magnitude 1/r³ all in DS). J4, J6 and the moon terms stay as in D (f32 magnitudes along the DS position; DS moon separations). J4 and J6 are smaller than J2 by a factor of about 10⁻³, so their f32 errors are below 10⁻¹⁰.
+
+**Result (Apple M4, 4,890 regular particles at 10³ orbits; `docs/adr/0006/g2_done_when_m4.txt`).**
+
+| Mode | Δa max (km) | Δa p99 (km) | Δa median (km) | Δλ max (rad) | Δλ p99 (rad) | Δλ median (rad) | PLAN 10 |
+|---|---|---|---|---|---|---|---|
+| D | 2.59 × 10⁻² | 1.56 × 10⁻³ | 1.59 × 10⁻⁴ | 1.15 × 10⁻⁴ | 1.48 × 10⁻⁵ | 1.21 × 10⁻⁶ | **fails** |
+| D+ | 4.89 × 10⁻⁴ | 2.45 × 10⁻⁵ | 1.23 × 10⁻⁶ | 3.64 × 10⁻⁶ | 1.74 × 10⁻⁷ | 8.52 × 10⁻⁹ | passes |
+| C | 3.36 × 10⁻⁴ | 4.66 × 10⁻⁶ | 2.20 × 10⁻⁷ | 1.42 × 10⁻⁶ | 3.45 × 10⁻⁸ | 1.94 × 10⁻⁹ | passes |
+
+D+ keeps a margin of 20 in Δa and 2.7 in Δλ at the maximum (limits 0.01 km and 10⁻⁵ rad). The test is not rerun with the WGSL worst-case model for division and square root; risk 2 above still holds on other GPUs.
+
+**Throughput** (`docs/adr/0006/g2_bench_m4.csv`; `GpuBackend` through the `Backend` interface, 10⁶ core particles, both moons, 150 steps per call, best of 3; `CpuBackend` 10⁵ particles).
+
+| | CPU f64 | D | D+ | C |
+|---|---|---|---|---|
+| Particle-steps per second | 6.7 × 10⁷ | 1.11 × 10⁹ | **9.5 × 10⁸** | 4.7 × 10⁸ |
+| Times the CPU | 1 | 16 | **14** | 7.0 |
+| With a frame read back every 150 steps | | 1.06 × 10⁹ | 9.2 × 10⁸ | 4.7 × 10⁸ |
+| With a frame read back every 1500 steps | | 1.10 × 10⁹ | 9.5 × 10⁸ | 4.7 × 10⁸ |
+
+The workgroup size (32, 64, 128, 256) changes the speed by less than 0.3 %; the default is 64. D+ costs 14 % of D's speed and is twice as fast as C.
+
+**Decision.**
+1. **D+ is the production mode** (default of `GpuBackend`). It meets PLAN section 10 and runs 14 times the CPU.
+2. **C stays the reference mode.**
+3. **D stays as a documented fast mode** that does not meet PLAN section 10 in the tail (`FRING_GPU_MODE=d`). It costs nothing to keep (same kernel library), and its equality with the frozen G1 kernels is tested. Do not use it for science results.
+4. The mode is chosen by `GpuBackend::with_options` or the environment variable `FRING_GPU_MODE` (`dp`, `d`, `c`). A config field needs an ICR (S1).
+5. The step h is handled as in ADR 0007 (the f32 constants of the D and D+ kick are scaled by h / f32(h)); the tests use a step that is not exact in f32.
+
+Code: `crates/fring-gpu/{shaders/wh.wgsl,src/wh.rs,src/backend.rs}`; tests `tests/{gpu_wh,gpu_backend,done_when}.rs`; benchmark `examples/g2_bench.rs`.
