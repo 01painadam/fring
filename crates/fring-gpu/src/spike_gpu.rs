@@ -29,12 +29,28 @@ impl<'g> GpuSpike<'g> {
     /// [`fring_model::Error::Backend`] if double-single arithmetic does not
     /// work on this GPU.
     pub fn new(gpu: &'g Gpu) -> Result<Self> {
+        Self::with_source(gpu, SPIKE_WGSL)
+    }
+
+    /// As [`GpuSpike::new`] with another WGSL source (for example with the
+    /// built-in sine and cosine, for the benchmark).
+    pub fn with_source(gpu: &'g Gpu, source: &str) -> Result<Self> {
         self_test(gpu)?;
         let kernels = Opt::ALL
             .iter()
-            .map(|&o| (o, gpu.kernel(SPIKE_WGSL, o.entry())))
+            .map(|&o| (o, gpu.kernel(source, o.entry())))
             .collect();
         Ok(Self { kernels })
+    }
+
+    /// [`SPIKE_WGSL`] with `sin_cos_f32` replaced by the WGSL built-ins
+    /// (accurate to 1.3e-7 on the M4, but only to 2^-11 by the WGSL spec).
+    pub fn builtin_trig_source() -> String {
+        let own = include_str!("../shaders/trig.wgsl");
+        SPIKE_WGSL.replace(
+            own,
+            "fn sin_cos_f32(x: f32) -> vec2<f32> { return vec2<f32>(sin(x), cos(x)); }\n",
+        )
     }
 
     /// The uniform parameters (6 × vec4) for the constants `c` and table `tab`.
