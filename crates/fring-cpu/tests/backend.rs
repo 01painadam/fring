@@ -1,5 +1,5 @@
 //! `CpuBackend` through the `Backend` trait: it steps, reports energy, and
-//! refuses moons (they come in C3/C4).
+//! refuses an ephemeris that does not cover the run. Moons: `tests/v3.rs`.
 
 use fring_cpu::CpuBackend;
 use fring_cpu::integrate::step_particles;
@@ -93,7 +93,7 @@ fn stats_report_a_small_energy_error() {
 }
 
 #[test]
-fn moons_are_refused() {
+fn an_ephemeris_that_is_too_short_is_refused() {
     let mut sys = system();
     sys.moons = MoonEphemeris {
         start_s: 0.0,
