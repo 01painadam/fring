@@ -1,6 +1,6 @@
 # Task board
 
-Current phase: **0 (foundation)**. Gate G0 is not approved yet.
+Current phase: **1 (validated orbits, CPU)**. Gate G0 was approved on 2026-11-01 (`docs/gates/G0.md`).
 
 Rules (full text in `AGENTS.md` and `CLAUDE.md`):
 
@@ -17,17 +17,17 @@ Rules (full text in `AGENTS.md` and `CLAUDE.md`):
 | ID | Task | Role | Status | Branch | Blocked by |
 |---|---|---|---|---|---|
 | F1 | Workspace, CI, coordination files | A0 | done | ws/a0-f1 | |
-| F2 | `fring-model`: units doc, config structs, `Backend` trait, float trait, Philox RNG | A0 | review | ws/a0-f2 | F1 |
-| F3 | Snapshot format spec, `fring-io` read and write with round-trip tests | A5 | review | ws/a5-f3 | F1 |
-| L1 | Literature survey of F ring dynamics since about 2000 | A1 | doing | ws/a1-l1 | F1 |
-| L2 | Cited parameter set at a stated epoch, confirmed analytical formulas; `params/saturn.toml` uses the `SaturnParams` field names | A1 | doing | ws/a1-l2 | F1 |
-| Gate G0 | Approve interfaces, parameters and the observations to reproduce | AJ | todo | | F2, F3, L1, L2 |
+| F2 | `fring-model`: units doc, config structs, `Backend` trait, float trait, Philox RNG | A0 | done | ws/a0-f2 | F1 |
+| F3 | Snapshot format spec, `fring-io` read and write with round-trip tests | A5 | done | ws/a5-f3 | F1 |
+| L1 | Literature survey of F ring dynamics since about 2000 | A1 | done | ws/a1-l1 | F1 |
+| L2 | Cited parameter set at a stated epoch, confirmed analytical formulas; `params/saturn.toml` uses the `SaturnParams` field names | A1 | done | ws/a1-l2 | F1 |
+| Gate G0 | Approve interfaces, parameters and the observations to reproduce | AJ | done | ws/a0-g0 | F2, F3, L1, L2 |
 
 ## Phase 1: validated orbits (CPU)
 
 | ID | Task | Role | Status | Branch | Blocked by |
 |---|---|---|---|---|---|
-| C1 | Saturn point mass + J2/J4 forces and the leapfrog | A2 | todo | | Gate G0 |
+| C1 | Saturn point mass + J2/J4/J6 forces (J6: ICR-001) and the leapfrog | A2 | todo | | Gate G0 |
 | C2 | Precession test at three radii; frame conversions inertial, rotating, local (`fring-model/src/physics/`) | A2 | todo | | C1 |
 | C3 | Moon ephemeris integrator and Hermite interpolation | A2 | todo | | C1, V2 |
 | C4 | Test particles with moons, rayon parallel; initial conditions from the config distributions (`fring-model/src/physics/`) | A2 | todo | | C3, V3 |
@@ -45,7 +45,7 @@ Rules (full text in `AGENTS.md` and `CLAUDE.md`):
 | G2 | wgpu setup, kick and drift kernels, moon table in WGSL, Rust twin tests | A3 | todo | | G1 |
 | G3 | Chaos indicator on GPU | A3 | todo | | G2 |
 | B1 | `fring-bench`: particle-steps per second, CPU and GPU, N = 10⁴ to 10⁷ | A5 | todo | | G2 |
-| A1-ANALYSIS | First chaos map of the region between the moons | A8 | todo | | G3 |
+| A1-ANALYSIS | First chaos map of the region between the moons; measure the moons' share of ϖ̇ at the core (G0) | A8 | todo | | G3 |
 | Gate G2 | GPU agrees with CPU; first chaos map reviewed | AJ | todo | | G1, G2, G3, B1, A1-ANALYSIS |
 
 ## Phase 3: first web toy
