@@ -1,0 +1,16 @@
+[package]
+name = "fring-bench"
+description = "Benchmarks: particle-steps per second for CPU and GPU"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+repository.workspace = true
+
+[dependencies]
+fring-model.workspace = true
+fring-cpu.workspace = true
+fring-gpu.workspace = true
+
+[lints]
+workspace = true

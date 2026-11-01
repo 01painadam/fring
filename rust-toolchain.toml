@@ -1,0 +1,7 @@
+# Pinned so that local builds and CI use the same compiler and the same
+# clippy lints. A0 updates the version on purpose, in its own pull request.
+[toolchain]
+channel = "1.99"
+profile = "minimal"
+components = ["rustfmt", "clippy"]
+targets = ["wasm32-unknown-unknown"]

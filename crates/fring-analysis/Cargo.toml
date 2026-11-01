@@ -1,0 +1,15 @@
+[package]
+name = "fring-analysis"
+description = "Chaos indicators and ring diagnostics"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+repository.workspace = true
+
+[dependencies]
+fring-model.workspace = true
+fring-io.workspace = true
+
+[lints]
+workspace = true

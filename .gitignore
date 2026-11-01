@@ -1,0 +1,13 @@
+# Rust build output
+/target/
+
+# Simulation output (docs/PLAN.md section 6.1)
+/runs/
+
+# Python (validation/)
+__pycache__/
+.venv/
+.ipynb_checkpoints/
+
+# macOS
+.DS_Store

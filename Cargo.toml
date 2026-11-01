@@ -1,0 +1,24 @@
+[workspace]
+resolver = "3"
+members = ["crates/*", "apps/*"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.99"
+publish = false
+repository = "https://github.com/01painadam/fring"
+
+# Internal crates. Each crate refers to these with `<name>.workspace = true`.
+[workspace.dependencies]
+fring-model = { path = "crates/fring-model" }
+fring-cpu = { path = "crates/fring-cpu" }
+fring-gpu = { path = "crates/fring-gpu" }
+fring-collide = { path = "crates/fring-collide" }
+fring-io = { path = "crates/fring-io" }
+fring-analysis = { path = "crates/fring-analysis" }
+
+# Lints for every crate (each crate has `[lints] workspace = true`).
+# A crate that needs `unsafe` must allow it locally and link an ADR.
+[workspace.lints.rust]
+unsafe_code = "deny"

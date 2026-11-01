@@ -121,7 +121,7 @@ Phases end at gates G0 to G6 (`docs/PLAN.md`, section 9). No role starts a task 
 
 ## Commands
 
-These exist after task F1. A0 keeps this list correct.
+A0 keeps this list correct. `rust-toolchain.toml` pins the compiler (Rust 1.99, with rustfmt, clippy and the wasm32 target). rustup installs it on first use.
 
 ```sh
 cargo build --workspace
@@ -130,8 +130,16 @@ cargo test -p <crate>                       # test one crate (cheaper)
 cargo test --workspace -- --ignored         # long tests
 cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --all
-cargo run -p fring-run --release -- --config runs/<name>.toml
-cargo run -p fring-bench --release
+cargo check -p fring-model --target wasm32-unknown-unknown   # fring-model must build for the web
+```
+
+CI (`.github/workflows/ci.yml`) runs `cargo fmt --check`, clippy, the tests and the wasm32 check on macOS for each pull request and each push to `main`.
+
+These commands work after their tasks are done. Until then, the apps only print "not implemented yet".
+
+```sh
+cargo run -p fring-run --release -- --config runs/<name>.toml   # after R1
+cargo run -p fring-bench --release                              # after B1
 ```
 
 Web and validation commands: A7 and A6 add them here when tasks W1 and V1 are done.

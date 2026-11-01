@@ -1,0 +1,13 @@
+[package]
+name = "fring-model"
+description = "Shared types, units, config, Philox RNG, force functions and analytic formulas. No wgpu, rayon or I/O; compiles to wasm32"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+repository.workspace = true
+
+[dependencies]
+
+[lints]
+workspace = true
