@@ -7,6 +7,7 @@ version = "0.1.0"
 edition = "2024"
 rust-version = "1.99"
 publish = false
+license = "MIT"
 repository = "https://github.com/01painadam/fring"
 
 # Internal crates. Each crate refers to these with `<name>.workspace = true`.
