@@ -37,6 +37,8 @@ Frame file names are the frame index with at least 6 digits (`000042.bin`, and `
 
 - Write each file to `<name>.tmp` in the same directory, then rename it. A reader then never sees a half-written file. A run that stops in the middle leaves at most one `.tmp` file, which readers ignore.
 - Write `config.toml` first (copy the bytes of the input file; do not serialise the parsed config again).
+- `moons.bin` can be written once, at the start: the moon ephemeris is computed before the run (`docs/PLAN.md` section 6.3), so the moon states at all output times are known.
+- `stats.csv` grows during a run. It is the one exception to the `.tmp` rule: the writer appends rows (`write_stats_header`, then `write_stats_row`). Task R1 decides how a reader treats an incomplete last row after a crash (see section 12).
 - Check array lengths before writing. All arrays of one frame have the same length as `n_particles`.
 
 ## 5. Frame file `frames/NNNNNN.bin`
@@ -109,12 +111,13 @@ Plain CSV: a header row with column names, then one row per output. No comment l
 
 ## 9. `meta.json`
 
-A JSON object (Rust struct `RunMeta`): `code_version`, `git_hash`, `machine`, `wall_time_s`, `frame_format_version`, `moons_format_version`, `stats_format_version`. `fring-run` fills the values. `fring-io` does not call git and does not read a clock. `meta.json` also repeats a0 and n0 for people. Readers of frames do not need it.
+A JSON object (Rust struct `RunMeta`): `code_version`, `git_hash`, `machine`, `wall_time_s`, `frame_format_version`, `moons_format_version`, `stats_format_version`. `fring-run` fills the values. `fring-io` does not call git and does not read a clock. Readers of frames do not need `meta.json`: a0 and n0 are in every frame header.
 
 ## 10. Versions and compatibility
 
 - A reader checks the magic (wrong magic is an error), then the version. It rejects a version that it does not know.
-- A new version may append header fields. A reader skips bytes between the fields that it knows and `header_len`. A change of the body, or of the meaning of an existing field, needs a new version number.
+- Within one version, a writer may append header fields after the known ones; `header_len` grows. A reader of that version skips the bytes between the fields that it knows and `header_len`. So added header fields do not break older readers.
+- A change of the body, or of the meaning or position of an existing field, needs a new version number. Older readers then reject the file instead of misreading it.
 - Unknown flag bits and unknown frame types are errors in version 1.
 - There is no checksum and no compression in version 1. W3 may add compression with a new version.
 
@@ -131,4 +134,5 @@ The reader returns `Error::Io` with a clear message in each case:
 ## 12. Open items
 
 - Compression for the web replay (task W3).
+- `stats.csv` after a crash (task R1): the strict reader rejects a ragged last row. R1 decides whether a reader of a run directory drops an incomplete last line, or whether the writer flushes whole rows only.
 - Optional per-particle columns (for example size) need a new frame type.
