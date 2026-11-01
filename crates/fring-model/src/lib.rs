@@ -16,6 +16,7 @@
 pub mod backend;
 pub mod config;
 pub mod error;
+pub mod params;
 pub mod particles;
 pub mod physics;
 pub mod real;
