@@ -2,7 +2,7 @@
 
 Status: accepted
 Date: 2026-11-01
-Author: A0  Approved by A0: 2026-11-01 (AJ informed; review at gate G1)
+Author: A0  Approved by A0: 2026-11-01 (AJ approved at gate G1, 2026-11-01)
 
 ## Context
 
