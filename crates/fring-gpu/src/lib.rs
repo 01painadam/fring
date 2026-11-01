@@ -9,9 +9,11 @@
 //! - [`ds`]: double-single numbers, the Rust twin of `shaders/ds.wgsl`.
 //! - [`spike`]: the precision options A, B, B+, C, D (Rust twins of
 //!   `shaders/spike.wgsl`).
+//! - [`spike_gpu`]: the same options on the GPU.
 
 pub mod ds;
 pub mod gpu;
 pub mod probe;
 pub mod spike;
+pub mod spike_gpu;
 pub mod wf32;

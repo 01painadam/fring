@@ -55,18 +55,34 @@ impl Gpu {
         })
     }
 
-    /// Runs the entry point `entry` of the WGSL source `shader` once per call
-    /// of `dispatches`, with `workgroups` workgroups in x.
-    ///
-    /// Binding `i` of group 0 is `buffers[i]` (storage, read-write; the
-    /// shader may declare it `read`). If `uniform` is given, it is the next
-    /// binding (uniform buffer). After the run, every storage buffer is read
-    /// back into `buffers`. Returns the wall time of all dispatches, measured
-    /// from the submit to the end of the GPU work (without upload and
-    /// read-back).
+    /// Compiles the entry point `entry` of the WGSL source `shader`.
     ///
     /// # Panics
-    /// If the shader does not compile or the bindings do not match it.
+    /// If the shader does not compile.
+    pub fn kernel(&self, shader: &str, entry: &str) -> Kernel<'_> {
+        let module = self
+            .device
+            .create_shader_module(wgpu::ShaderModuleDescriptor {
+                label: Some(entry),
+                source: wgpu::ShaderSource::Wgsl(shader.into()),
+            });
+        let pipeline = self
+            .device
+            .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+                label: Some(entry),
+                layout: None,
+                module: &module,
+                entry_point: Some(entry),
+                compilation_options: Default::default(),
+                cache: None,
+            });
+        Kernel {
+            gpu: self,
+            pipeline,
+        }
+    }
+
+    /// Compiles `entry` and runs it once; see [`Kernel::run`].
     pub fn run(
         &self,
         shader: &str,
@@ -76,19 +92,37 @@ impl Gpu {
         workgroups: u32,
         dispatches: u32,
     ) -> Duration {
-        let d = &self.device;
-        let module = d.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some(entry),
-            source: wgpu::ShaderSource::Wgsl(shader.into()),
-        });
-        let pipeline = d.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-            label: Some(entry),
-            layout: None,
-            module: &module,
-            entry_point: Some(entry),
-            compilation_options: Default::default(),
-            cache: None,
-        });
+        self.kernel(shader, entry)
+            .run(buffers, uniform, workgroups, dispatches)
+    }
+}
+
+/// A compiled compute kernel (one entry point).
+pub struct Kernel<'g> {
+    gpu: &'g Gpu,
+    pipeline: wgpu::ComputePipeline,
+}
+
+impl Kernel<'_> {
+    /// Runs the kernel `dispatches` times with `workgroups` workgroups in x.
+    ///
+    /// Binding `i` of group 0 is `buffers[i]` (storage; the shader may
+    /// declare it `read` or `read_write`). If `uniform` is given, it is the
+    /// next binding (uniform buffer). After the run, every storage buffer is
+    /// read back into `buffers`. Returns the wall time from the submit to the
+    /// end of the GPU work (without upload and read-back).
+    ///
+    /// # Panics
+    /// If the bindings do not match the shader or the device is lost.
+    pub fn run(
+        &self,
+        buffers: &mut [Words],
+        uniform: Option<&[u32]>,
+        workgroups: u32,
+        dispatches: u32,
+    ) -> Duration {
+        let d = &self.gpu.device;
+        let queue = &self.gpu.queue;
         let bytes = |w: &[u32]| -> Vec<u8> { w.iter().flat_map(|x| x.to_le_bytes()).collect() };
         let storage: Vec<wgpu::Buffer> = buffers
             .iter()
@@ -101,7 +135,7 @@ impl Gpu {
                         | wgpu::BufferUsages::COPY_DST,
                     mapped_at_creation: false,
                 });
-                self.queue.write_buffer(&b, 0, &bytes(w));
+                queue.write_buffer(&b, 0, &bytes(w));
                 b
             })
             .collect();
@@ -112,7 +146,7 @@ impl Gpu {
                 usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
                 mapped_at_creation: false,
             });
-            self.queue.write_buffer(&b, 0, &bytes(u));
+            queue.write_buffer(&b, 0, &bytes(u));
             b
         });
         let mut entries: Vec<wgpu::BindGroupEntry> = storage
@@ -131,30 +165,29 @@ impl Gpu {
         }
         let bind = d.create_bind_group(&wgpu::BindGroupDescriptor {
             label: None,
-            layout: &pipeline.get_bind_group_layout(0),
+            layout: &self.pipeline.get_bind_group_layout(0),
             entries: &entries,
         });
         // Upload first, so the timing below holds only the kernels.
-        self.queue.submit([]);
+        queue.submit([]);
         d.poll(wgpu::PollType::wait_indefinitely())
             .expect("GPU poll failed");
 
         let mut enc = d.create_command_encoder(&Default::default());
         {
             let mut pass = enc.begin_compute_pass(&Default::default());
-            pass.set_pipeline(&pipeline);
+            pass.set_pipeline(&self.pipeline);
             pass.set_bind_group(0, &bind, &[]);
             for _ in 0..dispatches {
                 pass.dispatch_workgroups(workgroups, 1, 1);
             }
         }
         let t0 = Instant::now();
-        self.queue.submit([enc.finish()]);
+        queue.submit([enc.finish()]);
         d.poll(wgpu::PollType::wait_indefinitely())
             .expect("GPU poll failed");
         let elapsed = t0.elapsed();
 
-        // Read back.
         let staging: Vec<wgpu::Buffer> = storage
             .iter()
             .map(|b| {
@@ -170,7 +203,7 @@ impl Gpu {
         for (s, b) in staging.iter().zip(&storage) {
             enc.copy_buffer_to_buffer(b, 0, s, 0, b.size());
         }
-        self.queue.submit([enc.finish()]);
+        queue.submit([enc.finish()]);
         for s in &staging {
             s.map_async(wgpu::MapMode::Read, .., |r| r.expect("map failed"));
         }
