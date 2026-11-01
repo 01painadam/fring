@@ -2,8 +2,8 @@
 //!
 //! Owner: A2 (see `AGENTS.md`).
 //!
-//! C1: Saturn's field (point mass + J2 + J4 + J6) and the fixed-step
-//! drift-kick-drift leapfrog. The physics lives in
+//! C1, C2: Saturn's field (point mass + J2 + J4 + J6) and the fixed-step
+//! Wisdom-Holman integrator (ADR 0003; the plain leapfrog stays as a reference). The physics lives in
 //! `fring_model::physics`; this crate holds the particle loop and the
 //! [`CpuBackend`]. Moons (C3, C4) and rayon (C4) come later.
 
@@ -57,7 +57,7 @@ impl Backend for CpuBackend {
     }
 
     fn step(&mut self, n_steps: u64) -> Result<()> {
-        step_particles(&self.field, &mut self.particles, self.step_s, n_steps);
+        step_particles(&self.field, &mut self.particles, self.step_s, n_steps)?;
         self.steps_total += n_steps;
         Ok(())
     }
