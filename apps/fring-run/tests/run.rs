@@ -400,3 +400,19 @@ fn gpu_backend_run_agrees_with_the_cpu_run() {
     );
     assert_eq!(ra.len(), rb.len());
 }
+
+/// `backend = "gpu"` is accepted: with a GPU the run works, without one it
+/// fails with a backend error (never "not implemented"). Runs in CI.
+#[test]
+fn gpu_backend_is_selected_not_refused() {
+    let text = replace(&small_config(), "backend = \"cpu\"", "backend = \"gpu\"");
+    let tmp = Tmp::new();
+    match run_config(&tmp, &text, "g", true) {
+        Ok(_) => {}
+        Err(RunError::Setup(m)) => {
+            assert!(!m.contains("not implemented"), "{m}");
+            assert!(m.contains("backend error"), "{m}");
+        }
+        Err(e) => panic!("{e}"),
+    }
+}

@@ -35,7 +35,7 @@ fn matches_the_cpu_backend_over_one_orbit_with_and_without_moons() {
         return;
     }
     for moons in [true, false] {
-        for mode in [Mode::D, Mode::C] {
+        for mode in [Mode::D, Mode::Dp, Mode::C] {
             let steps = 150;
             let system = system(H_S, steps, moons);
             let config = config(H_S, steps, moons);
@@ -64,7 +64,11 @@ fn matches_the_cpu_backend_over_one_orbit_with_and_without_moons() {
                 "moons {moons}, mode {}: after 150 steps GPU against CPU: position {wp:.2e}, velocity {wv:.2e} (relative)",
                 mode.name()
             );
-            let bound = if mode == Mode::C { 1e-9 } else { 1e-7 };
+            let bound = match mode {
+                Mode::C => 1e-9,
+                Mode::Dp => 1e-8,
+                Mode::D => 1e-7,
+            };
             assert!(wp < bound && wv < bound);
             let (sg, sc) = (gpu.stats().unwrap(), cpu.stats().unwrap());
             assert_eq!(sg.steps_total, sc.steps_total);
