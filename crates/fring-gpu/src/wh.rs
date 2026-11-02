@@ -245,6 +245,11 @@ impl<const M: u8> HostTable<M> {
         self.ind_ds.is_empty()
     }
 
+    /// Number of moons.
+    pub fn n_moons(&self) -> usize {
+        self.n_moons
+    }
+
     /// Moon positions of step `k`.
     pub fn moons(&self, k: usize) -> &[Vec3<Ds<M>>] {
         &self.pos[k * self.n_moons..(k + 1) * self.n_moons]
@@ -447,6 +452,140 @@ pub fn advance<const M: u8>(
     Some(())
 }
 
+/// The moon positions at the two sync times of a block as the shader reads
+/// them (rows `n` and `n + 1` of the table, see [`sync_rows`]); `None` for a
+/// time outside the ephemeris.
+pub type SyncMoons<const M: u8> = [Option<Vec<Vec3<Ds<M>>>>; 2];
+
+/// Reads the rows of [`sync_rows`] for `n_moons` moons.
+pub fn sync_moons<const M: u8>(rows: &[f32; 2 * ROW], n_moons: usize) -> SyncMoons<M> {
+    let one = |r: usize| {
+        let row = &rows[r * ROW..(r + 1) * ROW];
+        if !moon_row_valid(row[0]) {
+            return None;
+        }
+        let ds = |i: usize| Ds::<M> {
+            hi: row[i],
+            lo: row[i + 1],
+        };
+        Some(
+            (0..n_moons.min(MAX_MOONS))
+                .map(|j| Vec3::new(ds(6 * j), ds(6 * j + 2), ds(6 * j + 4)))
+                .collect(),
+        )
+    };
+    [one(0), one(1)]
+}
+
+/// What [`advance_dropping`] found.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct DropOutcome {
+    /// 0 live, 1 unbound or invalid orbit, `2 + k` inside moon `k`.
+    pub reason: u32,
+    /// For `reason >= 2`: the drift that hit, 0 for the half drift before the
+    /// first kick, `k + 1` for the drift after kick `k` (the last one is the
+    /// half drift to the sync time at the end of the block).
+    pub segment: Option<usize>,
+    /// For `reason >= 2`: the squared distances of the two ends of the drift
+    /// that hit, km².
+    pub ends_d2_km2: [f32; 2],
+    /// Smallest squared distance to each moon over the drifts that were
+    /// checked, km² (infinity for a moon never checked). Over the whole block
+    /// if nothing hit, up to the hit otherwise.
+    pub min_d2_km2: [f32; MAX_MOONS],
+}
+
+/// Twin of one block of `step_d_r` or `step_dp_r` (ICR-006) for one particle:
+/// as [`advance`] for the modes D and Dp, and also the radius rule. `r2_km2`
+/// holds the squared radius of each moon (0 switches a moon off), `sync` the
+/// moon positions at the two ends of the block. The state `s` changes only
+/// if the particle is not dropped.
+///
+/// The moon-radius test is done for each drift (including the half drifts at
+/// the two ends of the block) on the position relative to each moon, linear
+/// between its ends; a drift is skipped when either end has no moon position.
+pub fn advance_dropping<const M: u8>(
+    mode: Mode,
+    c: &Consts<M>,
+    tab: &HostTable<M>,
+    sync: &SyncMoons<M>,
+    r2_km2: &[f32],
+    s: &mut State<M>,
+) -> DropOutcome {
+    assert!(mode != Mode::C, "the radius rule is for the modes D and Dp");
+    let n = tab.len();
+    let nm = tab.n_moons().min(MAX_MOONS);
+    let mut out = DropOutcome {
+        reason: 0,
+        segment: None,
+        ends_d2_km2: [0.0; 2],
+        min_d2_km2: [f32::INFINITY; MAX_MOONS],
+    };
+    if n == 0 {
+        return out;
+    }
+    let h = Ds::<M>::split(c.h_s);
+    let half = Ds::<M>::split(0.5 * c.h_s);
+    let (mut p, mut v) = split_state(s);
+    let rel_to = |moons: Option<&[Vec3<Ds<M>>]>, p: Vec3<Ds<M>>| -> Option<Vec<[f32; 3]>> {
+        moons.map(|m| m.iter().take(nm).map(|mp| moon_rel(p, *mp)).collect())
+    };
+    let mut prev = rel_to(sync[0].as_deref(), p);
+    // Checks the drift that ended at `p`; the moon positions at its end are `end`.
+    let check = |seg: usize,
+                 prev: &mut Option<Vec<[f32; 3]>>,
+                 end: Option<&[Vec3<Ds<M>>]>,
+                 p: Vec3<Ds<M>>,
+                 out: &mut DropOutcome| {
+        let next = rel_to(end, p);
+        if let (Some(a), Some(b)) = (prev.as_ref(), next.as_ref()) {
+            for j in 0..nm {
+                let d2 = segment_min_d2::<M>(a[j], b[j]);
+                out.min_d2_km2[j] = out.min_d2_km2[j].min(d2);
+                if out.reason == 0 && r2_km2.get(j).is_some_and(|r2| *r2 > 0.0 && d2 < *r2) {
+                    let sq = |x: [f32; 3]| x[0] * x[0] + x[1] * x[1] + x[2] * x[2];
+                    out.reason = 2 + j as u32;
+                    out.segment = Some(seg);
+                    out.ends_d2_km2 = [sq(a[j]), sq(b[j])];
+                }
+            }
+        }
+        *prev = next;
+    };
+    let unbound = DropOutcome { reason: 1, ..out };
+    let Some((p1, v1)) = drift_d(c, p, v, half) else {
+        return unbound;
+    };
+    (p, v) = (p1, v1);
+    check(0, &mut prev, Some(tab.moons(0)), p, &mut out);
+    for k in 0..n {
+        if out.reason != 0 {
+            return out;
+        }
+        v = if mode == Mode::D {
+            kick_dir(c, tab, k, p, v)
+        } else {
+            kick_dir_plus(c, tab, k, p, v)
+        };
+        let dt = if k + 1 == n { half } else { h };
+        let Some((p1, v1)) = drift_d(c, p, v, dt) else {
+            return DropOutcome { reason: 1, ..out };
+        };
+        (p, v) = (p1, v1);
+        let end = if k + 1 == n {
+            sync[1].as_deref()
+        } else {
+            Some(tab.moons(k + 1))
+        };
+        check(k + 1, &mut prev, end, p, &mut out);
+    }
+    if out.reason != 0 {
+        return out;
+    }
+    *s = join_state(p, v);
+    out
+}
+
 /// Twin of `newton_f32` in `wh.wgsl`.
 pub fn newton<const M: u8>(ecos0: f32, esin0: f32, m: f32) -> f32 {
     newton_f32(Wf32::<M>(ecos0), Wf32::<M>(esin0), Wf32::<M>(m)).0
@@ -570,6 +709,72 @@ mod radius_tests {
         // The end is outside the ephemeris: sentinel in the second row only.
         let rows = sync_rows(&eph, 0.0, h, 0, 1_000_000);
         assert!(moon_row_valid(rows[0]) && !moon_row_valid(rows[ROW]));
+    }
+
+    #[test]
+    fn dropping_twin_equals_advance_when_nothing_drops_and_freezes_otherwise() {
+        use fring_model::physics::{
+            EpicycleElements, KickTable, SaturnField, build_ephemeris, epicycle_state,
+        };
+        let sp =
+            fring_model::params::saturn_from_toml_str(include_str!("../../../params/saturn.toml"))
+                .unwrap();
+        let moons =
+            fring_model::params::moons_from_toml_str(include_str!("../../../params/moons.toml"))
+                .unwrap();
+        let h = 356.2537;
+        let eph = build_ephemeris(&sp, &moons, 20.0 * h + 7200.0, 1800.0).unwrap();
+        let gms: Vec<f64> = eph.tracks.iter().map(|t| t.gm_km3_s2).collect();
+        let c = Consts::<M4>::for_step(&sp, &gms, h);
+        let mut table = KickTable::<f64>::for_ephemeris(&eph);
+        let n = 6;
+        table.fill(&eph, 0.0, h, 0, n).unwrap();
+        let scale = crate::spike::kick_scale(h);
+        let tab = HostTable::<M4>::from_kick_table(&table, scale);
+        let sync = sync_moons::<M4>(&sync_rows(&eph, 0.0, h, 0, n), 2);
+        let field = SaturnField::<f64>::from_params(&sp);
+        for mode in [Mode::D, Mode::Dp] {
+            for k in 0..12 {
+                let el = EpicycleElements {
+                    a_km: 139_000.0 + 250.0 * k as f64,
+                    e: 0.0024,
+                    i_rad: 1e-4,
+                    mean_anomaly_rad: 0.5 * k as f64,
+                    z_phase_rad: 0.2 * k as f64,
+                    mean_longitude_rad: 0.9 * k as f64,
+                };
+                let (p, v) = epicycle_state(&field, &el);
+                let s0 = crate::spike::state_from_f64::<M4>(p, v);
+                let mut a = s0;
+                advance(mode, &c, &tab, &mut a).unwrap();
+                let mut b = s0;
+                let o = advance_dropping(mode, &c, &tab, &sync, &[0.0, 0.0], &mut b);
+                assert_eq!(o.reason, 0);
+                assert_eq!(a, b, "rule off: same bits as advance");
+                // Radius 1e6 km: dropped in the first drift, state frozen.
+                let mut f = s0;
+                let o = advance_dropping(mode, &c, &tab, &sync, &[1.0e12, 0.0], &mut f);
+                assert_eq!((o.reason, o.segment), (2, Some(0)));
+                assert_eq!(f, s0, "frozen");
+            }
+        }
+        // Unbound: three times the escape speed.
+        let (p, v) = epicycle_state(
+            &field,
+            &EpicycleElements {
+                a_km: 140_000.0,
+                e: 0.0,
+                i_rad: 0.0,
+                mean_anomaly_rad: 0.0,
+                z_phase_rad: 0.0,
+                mean_longitude_rad: 0.0,
+            },
+        );
+        let mut s = crate::spike::state_from_f64::<M4>(p, v * 3.0);
+        let s0 = s;
+        let o = advance_dropping(Mode::D, &c, &tab, &sync, &[1.0, 1.0], &mut s);
+        assert_eq!(o.reason, 1);
+        assert_eq!(s, s0);
     }
 
     #[test]
