@@ -1,0 +1,14 @@
+[project]
+name = "fring-analysis-plots"
+version = "0.1.0"
+description = "Figures for task A1-ANALYSIS (Altair / Vega-Lite). Reads the CSV files that fring-analyse writes."
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "altair==5.5.0",
+    "vl-convert-python==1.7.0",
+    "pandas==2.2.3",
+    "numpy==2.2.2",
+]
+
+[tool.uv]
+package = false
