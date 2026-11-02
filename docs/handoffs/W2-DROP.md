@@ -41,7 +41,7 @@ Host and native: `cargo test -p fring-web --lib` (31 passed) and `cargo test -p 
 Browser (AJ):
 `apps/fring-web/scripts/build.sh && python3 -m http.server 8080 -d apps/fring-web/dist`, then open `http://localhost:8080` in Chrome.
 - B1, full run at 10^5. Default band, speed 500 h/s. Expected: the line "Dropped: ..." shows zeros at t = 0, then the numbers rise. The run reaches the end with no stop. At the end the time stops, Play is disabled and the message "End of the moon data. Press Restart to start again from t = 0." shows.
-- B2, band close to Prometheus (for example a min of 139,700 km and a max of 140,000 km), 10^5. Expected: the "inside Prometheus" count rises, the dots vanish, and the run does not stop.
+- B2, a custom band on the orbit of Prometheus (A0 correction: a = 139,300 km to 139,450 km; Prometheus moves between about 139,070 km and 139,690 km, so a band from 139,700 km can give few hits), 10^5. Expected: the "inside Prometheus" count rises, the dots vanish, and the run does not stop.
 - B3, "Set to now" after drops, then Compare = Side by side or Overlay. Expected: the reference does not show particles that were dropped before the copy. Press Restart: the counts go to zero, the reference goes back to t = 0 (message "The reference was reset to t = 0.").
 - B4, at the end (paused). Expected: camera drag and zoom, Compare and "Set to now" still work; Pause or Play do nothing (the button is disabled). Restart, a new particle count, a new band, a new preset and the Pandora switch each start at t = 0 and enable Play; the end message disappears.
 - B5, Pandora off. Expected: the line has no Pandora part. Zoom to the maximum on a dot: no jitter at a few km (M24).
