@@ -1,6 +1,6 @@
 # W2-DROP-GPU: dropped particles in GpuStepper (ICR-006)
-Role: A3  Branch: ws/a3-w2-drop-gpu  Status: review
-Updated: 2026-11-02 21:10
+Role: A3  Branch: ws/a3-w2-drop-gpu  Status: done (A0 review passed; merged after green CI)
+Updated: 2026-11-02 (A0 review)
 
 ## Goal and acceptance criteria
 ICR-006 in `crates/fring-gpu`: a drop reason for each particle in the status buffer (`8 + cap` words), an early return for a dropped particle in the D and Dp step kernels, counts by reason, and an opt-in moon-radius rule (minimum distance over each drift between two kicks, linear interpolation of the particle-minus-moon vector, mean radius from `params/moons.toml`). Done when: the tests of ICR-006 item 4 pass natively; all existing tests pass and `GpuBackend` results are bit for bit unchanged with the rule off; `cargo check -p fring-gpu --target wasm32-unknown-unknown` passes; `fring-bench` shows no slow-down beyond its noise.
@@ -42,11 +42,14 @@ ICR-006 in `crates/fring-gpu`: a drop reason for each particle in the status buf
 | gpu_dp | 1000000 | false | 9.4614e8 | 9.4341e8 | 9.4763e8 | 9.4579e8 | 9.5040e8 | 9.4768e8 |
 | gpu_dp | 1000000 | true | 4.6680e8 | 4.6721e8 | 4.6628e8 | 4.6848e8 | 4.6747e8 | 4.6959e8 |
 
-  Best of three per binary (spread = (max - min) / max over the three runs): B vs A best is between -0.2 % and +0.5 % in all 12 rows; the spread of A is 0.1 to 1.0 %, of B 0.1 to 0.9 %; B's best lies inside A's spread range in every row, so there is no slow-down beyond the noise. Three repeats were enough (the rule was not to go to 5 unless B's best fell outside A's spread). The two rows with the largest differences: gpu_dp 1000000 chaos true +0.5 % (faster) and gpu_dp 100000 false -0.2 %.
-- Rule on (information, `rate_with_the_rule_off_and_on`, best of 5, 300 steps in one block): D 100000: 1.048e9 off, 9.135e8 on (-12.9 %); Dp 100000: 9.072e8, 7.862e8 (-13.3 %); D 1000000: 1.080e9, 9.510e8 (-12.0 %); Dp 1000000: 9.494e8, 8.313e8 (-12.4 %). The web budget of 6.6e8 particle-steps/s for compute is still met at 8.3e8.
+  Best of three per binary (spread = (max - min) / max over the three runs): B vs A best is between -0.2 % and +0.5 % in all 12 rows; the spread of A is 0.1 to 1.0 %, of B 0.1 to 0.9 %; B's best is never below A's lowest run: it lies inside A's range (lowest to best) in 4 rows and above A's best in 8 rows (A0 review, recomputed from the raw rows), so there is no slow-down beyond the noise. Three repeats were enough (the rule was not to go to 5 unless B's best fell outside A's spread). The two rows with the largest differences: gpu_dp 1000000 chaos true +0.5 % (faster) and gpu_dp 100000 false -0.2 %.
+- Rule on (information, `rate_with_the_rule_off_and_on`, best of 5, 300 steps in one block): D 100000: 1.048e9 off, 9.135e8 on (-12.8 %); Dp 100000: 9.072e8, 7.862e8 (-13.3 %); D 1000000: 1.080e9, 9.510e8 (-12.0 %); Dp 1000000: 9.494e8, 8.313e8 (-12.4 %).
+- Web budget (A0 review correction): `COMPUTE_BUDGET_PARTICLE_STEPS_PER_S` = 6.6e8 in `fring-web` is 70 % of the rule-off Dp rate (30 % of the frame kept for drawing). With the rule on, 70 % of 7.86e8 to 8.31e8 is 5.5e8 to 5.8e8, so W2-DROP must lower the constant to about 5.5e8 (measured again in the browser). The speed limit min(500, budget / (10 N)) h/s then stays 500 h/s at 10^5 (550), and becomes about 183 h/s at 3x10^5 (was 220) and about 55 h/s at 10^6 (was 66).
 
 ## Next step (one concrete action)
-A0 review: run the Definition of done on the pushed head, check the bench table against the raw rows, then start W2-DROP (A7): `set_moon_radii_km(&[43.09, 40.63])` before the first step, read words 0 to 7 of `status_buffer()`, hide particles with a nonzero word `8 + i`.
+None for this task. Next task: W2-DROP (A7): `set_moon_radii_km(&[43.09, 40.63])` before the first step, read words 0 to 7 of `status_buffer()`, hide particles with a nonzero word `8 + i`, lower the web compute budget to about 5.5e8 (see above).
+
+A0 review (2026-11-02): Definition of done again on the pushed head 2a80a6e, each exit code read directly: fmt 0, clippy 0, `cargo test --workspace` 0 (223 passed, 0 failed, 36 ignored), wasm32 checks of fring-model, fring-gpu and fring-web 0, `cargo test -p fring-gpu --release -- --ignored` 0 (21 passed), `cargo test -p fring-web --release -- --ignored` 0 (6 passed). The raw output gives "173 of 366 dropped, 0 on the edge" (D and Dp) and twin errors 1.18e-7 (`t_moon_rel`) and 3.73e-7 (`t_segment_min`). The golden hashes were recorded at 319b128, which adds only test files to the baseline. Log: `runs/logs/a0-review-w2-drop-gpu.log` (main checkout).
 
 ## How to verify the current state
 - `cargo test -p fring-gpu --release -- --ignored` gives 21 passed (needs a GPU).
