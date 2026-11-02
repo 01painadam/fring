@@ -41,6 +41,33 @@ pub trait Backend {
 
     /// Statistics since the previous call (see [`StepStats`]).
     fn stats(&mut self) -> Result<StepStats>;
+
+    /// The chaos indicator of every particle since the start of the run
+    /// (ICR-003, ADR 0008), or `None` when the config has no
+    /// `[diagnostics.chaos]` table or the backend does not support it. A GPU
+    /// backend reads its accumulators back here, so do not call this every step.
+    fn chaos(&mut self) -> Result<Option<ChaosReport>> {
+        Ok(None)
+    }
+}
+
+/// Chaos indicator per particle (ICR-003, ADR 0008), in particle order.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct ChaosReport {
+    /// Simulation time in seconds since the epoch.
+    pub time_s: f64,
+    /// Number of renormalisations done (the last is at `n_renorm * K * h`
+    /// after the start).
+    pub n_renorm: u64,
+    /// Finite-time Lyapunov exponent L / t in s⁻¹ (t = `n_renorm * K * h`).
+    pub ftle_per_s: Vec<f64>,
+    /// L: sum of ln(d / d0) over all renormalisations (dimensionless).
+    pub log_growth: Vec<f64>,
+    /// Mean MEGNO: the mean of Y_j over all renormalisations. About 2 for a
+    /// regular orbit; about λ t / 2 for a chaotic one.
+    pub megno_mean: Vec<f64>,
+    /// Bit 0: a separation was zero or not finite (the interval was skipped).
+    pub flags: Vec<u32>,
 }
 
 /// Diagnostics that a backend reports (`docs/PLAN.md` section 7.7).

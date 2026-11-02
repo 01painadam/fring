@@ -108,6 +108,9 @@ impl Stream {
     pub const INITIAL_CONDITIONS: Stream = Stream(1);
     /// Collision candidates, acceptance and impact geometry.
     pub const COLLISIONS: Stream = Stream(2);
+    /// Direction of the initial shadow offset of the chaos indicator
+    /// (ICR-003, ADR 0008). Counter: index = particle id, step = 0, draw = 0.
+    pub const CHAOS_SHADOW: Stream = Stream(3);
 }
 
 /// The counter for one block of four random words.

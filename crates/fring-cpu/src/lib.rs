@@ -21,10 +21,13 @@
 
 pub mod integrate;
 
+use fring_model::config::ChaosConfig;
+use fring_model::physics::chaos::{ChaosAccum, renormalise, shadow_direction};
 use fring_model::physics::{KickTable, SaturnField, interpolate_moons};
+use fring_model::rng::Philox;
 use fring_model::{
-    Backend, Error, InitialState, MoonEphemeris, MoonState, ParticleView, Particles, Result,
-    RunConfig, StepStats, System,
+    Backend, ChaosReport, Error, InitialState, MoonEphemeris, MoonState, ParticleView, Particles,
+    Result, RunConfig, StepStats, System,
 };
 use integrate::{State, advance_chunk, particle_energy};
 use rayon::prelude::*;
@@ -36,6 +39,13 @@ pub const BLOCK_STEPS: u64 = 4096;
 
 /// Particles per rayon task. Only the scheduling depends on it, not the result.
 const CHUNK: usize = 128;
+
+/// Shadow particles and sums of the chaos indicator (ICR-003, ADR 0008).
+struct ChaosState {
+    cfg: ChaosConfig,
+    shadow: Vec<State>,
+    acc: Vec<ChaosAccum>,
+}
 
 /// The CPU reference backend (f64, Saturn's field and the moons of the
 /// ephemeris, particles in parallel).
@@ -56,6 +66,8 @@ pub struct CpuBackend {
     energy0: Vec<f64>,
     /// Largest |dE/E| seen at any call of `stats`.
     max_rel_energy_error: f64,
+    /// `Some` only with `[diagnostics.chaos]`; without it there is no extra work.
+    chaos: Option<ChaosState>,
 }
 
 impl CpuBackend {
@@ -98,7 +110,7 @@ impl Backend for CpuBackend {
         }
         let field = SaturnField::<f64>::from_params(&system.saturn);
         let p = &init.particles;
-        let state = (0..p.len())
+        let state: Vec<State> = (0..p.len())
             .map(|i| {
                 [
                     p.x_km[i],
@@ -117,6 +129,26 @@ impl Backend for CpuBackend {
         } else {
             Vec::new()
         };
+        let chaos = config
+            .diagnostics
+            .as_ref()
+            .and_then(|d| d.chaos)
+            .map(|cfg| {
+                let rng = Philox::from_seed(config.run.seed);
+                let shadow = state
+                    .iter()
+                    .zip(&p.id)
+                    .map(|(s, &id): (&State, &u32)| {
+                        let d = shadow_direction(&rng, id) * cfg.offset_km;
+                        [s[0] + d.x, s[1] + d.y, s[2] + d.z, s[3], s[4], s[5]]
+                    })
+                    .collect();
+                ChaosState {
+                    cfg,
+                    shadow,
+                    acc: vec![ChaosAccum::default(); p.len()],
+                }
+            });
         Ok(Self {
             field,
             table: KickTable::for_ephemeris(eph),
@@ -130,6 +162,7 @@ impl Backend for CpuBackend {
             snapshot_stale: false,
             energy0,
             max_rel_energy_error: 0.0,
+            chaos,
         })
     }
 
@@ -139,8 +172,14 @@ impl Backend for CpuBackend {
     fn step(&mut self, n_steps: u64) -> Result<()> {
         let mut done = 0;
         while done < n_steps {
-            let block = (n_steps - done).min(BLOCK_STEPS);
             let first_step = self.steps_total + done;
+            let mut block = (n_steps - done).min(BLOCK_STEPS);
+            if let Some(c) = &self.chaos {
+                // Blocks end at multiples of K, so the renormalisation steps
+                // do not depend on how the caller splits the run.
+                let k = u64::from(c.cfg.renorm_steps);
+                block = block.min(k - first_step % k);
+            }
             let moons = self.has_moons();
             if moons {
                 self.table.fill(
@@ -153,22 +192,27 @@ impl Backend for CpuBackend {
             }
             let (field, h) = (&self.field, self.step_s);
             let table = moons.then_some(&self.table);
-            let failed: Vec<Option<usize>> = self
-                .state
-                .par_chunks_mut(CHUNK)
-                .map(|chunk| advance_chunk(field, table, chunk, h, block))
-                .collect();
+            let mut failed = advance_all(field, table, &mut self.state, h, block);
+            if let Some(c) = &mut self.chaos {
+                let f2 = advance_all(field, table, &mut c.shadow, h, block);
+                failed = failed.or(f2);
+            }
             self.snapshot_stale = true;
-            if let Some((c, i)) = failed
-                .iter()
-                .enumerate()
-                .find_map(|(c, f)| f.map(|i| (c, i)))
-            {
-                let index = c * CHUNK + i;
+            if let Some(index) = failed {
                 return Err(Error::Backend(format!(
                     "particle {} (index {index}) has an unbound or invalid orbit",
                     self.ids[index]
                 )));
+            }
+            if let Some(c) = &mut self.chaos {
+                if (first_step + block) % u64::from(c.cfg.renorm_steps) == 0 {
+                    let d0 = c.cfg.offset_km;
+                    self.state
+                        .par_iter()
+                        .zip(c.shadow.par_iter_mut())
+                        .zip(c.acc.par_iter_mut())
+                        .for_each(|((m, sh), a)| a.add(renormalise(m, sh, d0)));
+                }
             }
             done += block;
         }
@@ -198,6 +242,21 @@ impl Backend for CpuBackend {
         })
     }
 
+    fn chaos(&mut self) -> Result<Option<ChaosReport>> {
+        let Some(c) = &self.chaos else {
+            return Ok(None);
+        };
+        let interval_s = f64::from(c.cfg.renorm_steps) * self.step_s;
+        Ok(Some(ChaosReport {
+            time_s: self.time_s(),
+            n_renorm: c.acc.first().map_or(0, |a| a.j),
+            ftle_per_s: c.acc.iter().map(|a| a.ftle_per_s(interval_s)).collect(),
+            log_growth: c.acc.iter().map(|a| a.l).collect(),
+            megno_mean: c.acc.iter().map(|a| a.megno_mean()).collect(),
+            flags: c.acc.iter().map(|a| a.flags).collect(),
+        }))
+    }
+
     fn stats(&mut self) -> Result<StepStats> {
         // Computed here, not at every step, to keep the step loop cheap.
         let max_rel_energy_error = if self.has_moons() {
@@ -217,4 +276,23 @@ impl Backend for CpuBackend {
             ..Default::default()
         })
     }
+}
+
+/// Advances all states by one block in parallel chunks. Returns the index of
+/// the lowest particle with an unbound or invalid orbit.
+fn advance_all(
+    field: &SaturnField<f64>,
+    table: Option<&KickTable<f64>>,
+    state: &mut [State],
+    h: f64,
+    block: u64,
+) -> Option<usize> {
+    let failed: Vec<Option<usize>> = state
+        .par_chunks_mut(CHUNK)
+        .map(|chunk| advance_chunk(field, table, chunk, h, block))
+        .collect();
+    failed
+        .iter()
+        .enumerate()
+        .find_map(|(c, f)| f.map(|i| c * CHUNK + i))
 }

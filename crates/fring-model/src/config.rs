@@ -45,6 +45,41 @@ pub struct RunConfig {
     pub collisions: Collisions,
     /// `[output]`: output cadence.
     pub output: OutputConfig,
+    /// `[diagnostics]`: optional extra diagnostics (ICR-003). Absent means
+    /// none, and a backend then does no extra work.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub diagnostics: Option<DiagnosticsConfig>,
+}
+
+/// `[diagnostics]` section (ICR-003).
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DiagnosticsConfig {
+    /// `[diagnostics.chaos]`: shadow particle and MEGNO per particle.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub chaos: Option<ChaosConfig>,
+}
+
+/// The method of the chaos indicator.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ChaosMethod {
+    /// A second particle with a small position offset, renormalised
+    /// periodically (ADR 0008).
+    Shadow,
+}
+
+/// `[diagnostics.chaos]` section (ICR-003, ADR 0008).
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ChaosConfig {
+    /// Method (only `"shadow"`).
+    pub method: ChaosMethod,
+    /// Initial and renormalised position separation d0 of the shadow, km (> 0).
+    pub offset_km: f64,
+    /// Renormalise at every global step number that is a multiple of this
+    /// (at least 1).
+    pub renorm_steps: u32,
 }
 
 /// `[run]` section.
@@ -323,6 +358,13 @@ impl RunConfig {
         self.particles.distribution.validate()?;
         self.collisions.validate()?;
 
+        if let Some(chaos) = self.diagnostics.as_ref().and_then(|d| d.chaos) {
+            positive("diagnostics.chaos.offset_km", chaos.offset_km)?;
+            require(
+                chaos.renorm_steps >= 1,
+                "diagnostics.chaos.renorm_steps must be at least 1".to_string(),
+            )?;
+        }
         require(
             self.output.frame_every_steps >= 1,
             "output.frame_every_steps must be at least 1".to_string(),
