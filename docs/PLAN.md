@@ -271,6 +271,9 @@ Task format: ID, owner, description, acceptance criteria. Tasks in the same phas
 - **W1 (A7).** `fring-web` scaffold: Rust to wasm32 with wgpu (WebGPU), renders particles in the rotating frame. *Done when:* it runs in current Chrome and Safari.
 - **W2 (A7).** Live test-particle mode using the `fring-gpu` shaders: about 10⁵ particles, controls for time speed, Pandora on/off, and initial band. *Done when:* runs at 30 fps or more on the Mac mini; deploys as a static site.
 
+- **A2-ANALYSIS (A8; added at gate G2, does not block gate G3).** (a) Closest-approach distribution to Pandora for the particles of the 10-year chaos map (A1-ANALYSIS harness). (b) Chaos map of core-like eccentric orbits (e = 0.0024, apse aligned with the core) across the quiet zone, at 10 and 30 years, against the circular map. *Done when:* a note in `docs/results/` says whether the outer edge of the map needs sub-stepping, and whether eccentric core orbits are more or less chaotic than circular ones.
+- **L3 (A1; added at gate G2, does not block gate G3).** Compare the masses and orbital elements of Prometheus and Pandora in `params/` with those that GR03a and GR03b used. *Done when:* a short note in `docs/literature/` says whether the difference explains the factor of 1.4 in the moons' Lyapunov rate (A1-ANALYSIS: 0.22 per year in the chaotic runs; GR03: 0.30 to 0.35).
+
 **Gate G3 (AJ):** first public demo.
 
 ### Phase 4: collisions
@@ -283,7 +286,10 @@ Task format: ID, owner, description, acceptance criteria. Tasks in the same phas
 - **D1 (A3).** Co-moving arc domain with azimuthal wrapping. *Done when:* wrap preserves energy in the local frame; unit tests for boundary cases.
 - **D2 (A6).** Arc error test: test particles (no collisions) in full ring versus arc for core width and eccentricity over 5 years, for Δθ in {5°, 10°, 30°}. *Done when:* report recommends the smallest Δθ with error < 5 %.
 
-**Gate G4 (AJ):** collision models validated; arc size chosen.
+- **E1 (A2, A3; added at gate G2).** Close encounters with Prometheus (section 7.3): per-particle sub-stepping on the CPU and the GPU, and ICR-004 so that a particle that becomes unbound or invalid is flagged and frozen instead of stopping the run. A1-ANALYSIS found 5.4 % of particles from below 140,050 km within 1 Hill radius in 10 years. *Done when:* particles that pass within 1 Hill radius agree with REBOUND (IAS15) statistically (section 10), and a 30-year chaos-map run over 139,700 to 141,100 km completes.
+- **A3-ANALYSIS (A8; added at gate G2).** 30-year chaos map over the full band 139,700 to 141,100 km with sub-stepping. *Done when:* the inner-edge numbers of A1-ANALYSIS are confirmed or replaced.
+
+**Gate G4 (AJ):** collision models validated; arc size chosen; close encounters handled (E1).
 
 ### Phase 5: science runs
 
