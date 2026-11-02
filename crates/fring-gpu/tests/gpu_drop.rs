@@ -18,8 +18,8 @@ use fring_gpu::wh_gpu::{DEFAULT_WORKGROUP, WhKernels};
 /// GPU the test may fail without any fault. Regenerate these numbers only
 /// with a decision of A0: they are the proof that ICR-006 leaves the results
 /// of live particles bit for bit unchanged.
-const GOLDEN_D: u64 = 0;
-const GOLDEN_DP: u64 = 0;
+const GOLDEN_D: u64 = 0x7d03_1159_242d_8d73;
+const GOLDEN_DP: u64 = 0xb2fc_1bda_9983_cfef;
 
 fn run_hash(mode: Mode) -> u64 {
     let gpu = Gpu::new().expect("GPU");
