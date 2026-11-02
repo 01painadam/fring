@@ -19,13 +19,14 @@
 use crate::view::ViewTransform;
 use fring_model::config::Distribution;
 use fring_model::params::{
-    RingParams, moons_from_toml_str, ring_from_toml_str, saturn_from_toml_str,
+    RingParams, moon_radii_from_toml_str, moons_from_toml_str, ring_from_toml_str,
+    saturn_from_toml_str,
 };
 use fring_model::physics::{
     DEFAULT_INTERVAL_S, MoonInit, SaturnField, build_ephemeris, generate_particles,
     interpolate_moons, reference_mean_motion,
 };
-use fring_model::{InitialState, MoonEphemeris, Result, SaturnParams, System};
+use fring_model::{Error, InitialState, MoonEphemeris, Result, SaturnParams, System};
 
 const SATURN_TOML: &str = include_str!("../../../params/saturn.toml");
 const MOONS_TOML: &str = include_str!("../../../params/moons.toml");
@@ -52,10 +53,11 @@ pub const MAX_STEPS_PER_FRAME: u64 = 200;
 /// Frames of GPU work that may be queued before the page stops stepping.
 pub const MAX_IN_FLIGHT: u32 = 2;
 /// Compute budget of the integrator, particle-steps per second. Source: the
-/// W2-GPU benchmark (mode Dp, about 9.5e8 particle-steps/s on the Mac mini),
-/// with 30 % of the frame kept for rendering, so about 6.6e8. The speed limit
-/// for a particle count follows from it ([`max_hours_for`]).
-pub const COMPUTE_BUDGET_PARTICLE_STEPS_PER_S: f64 = 6.6e8;
+/// W2-DROP-GPU benchmark (mode Dp with the moon-radius rule on, 7.9e8 to 8.3e8
+/// particle-steps/s on the Mac mini), with 30 % of the frame kept for
+/// rendering, so about 5.5e8. The speed limit for a particle count follows from
+/// it ([`max_hours_for`]).
+pub const COMPUTE_BUDGET_PARTICLE_STEPS_PER_S: f64 = 5.5e8;
 /// The particle counts that the page offers.
 pub const PARTICLE_COUNTS: [u32; 4] = [10_000, 100_000, 300_000, 1_000_000];
 /// Added to the colour id of an instance that belongs to the faint reference
@@ -117,6 +119,33 @@ pub struct Setup {
     pub moons: Vec<MoonInit>,
     field: SaturnField<f64>,
     n0_rad_s: f64,
+}
+
+/// Mean radii (km) of the moons of `system`, in the order of its tracks, read
+/// from the text of `params/moons.toml` and matched BY NAME. The result goes to
+/// `GpuStepper::set_moon_radii_km` (ICR-006).
+///
+/// # Errors
+/// A track whose name has no radius in the text, or a bad text.
+pub fn moon_radii_for(system: &System, moons_toml: &str) -> Result<Vec<f64>> {
+    let table = moon_radii_from_toml_str(moons_toml)?;
+    system
+        .moons
+        .tracks
+        .iter()
+        .map(|t| {
+            table
+                .iter()
+                .find(|(name, _)| *name == t.name)
+                .map(|(_, r)| *r)
+                .ok_or_else(|| Error::Config(format!("no radius_km for moon {:?}", t.name)))
+        })
+        .collect()
+}
+
+/// The moon radii of `system` from the built-in `params/moons.toml`.
+pub fn builtin_moon_radii_for(system: &System) -> Result<Vec<f64>> {
+    moon_radii_for(system, MOONS_TOML)
 }
 
 impl Setup {
@@ -484,7 +513,7 @@ impl CompareMode {
 
 /// The fastest speed (simulated hours per real second) that the compute budget
 /// allows for `count` particles: `min(500, budget * 360 s / 3600 s / count)`.
-/// This is 500 h/s at 10^5, 220 h/s at 3x10^5 and 66 h/s at 10^6.
+/// This is 500 h/s at 10^5, 183 h/s at 3x10^5 and 55 h/s at 10^6.
 pub fn max_hours_for(count: u32) -> f64 {
     let h = COMPUTE_BUDGET_PARTICLE_STEPS_PER_S * STEP_S / 3600.0 / f64::from(count.max(1));
     h.clamp(MIN_HOURS_PER_S, MAX_HOURS_PER_S)
@@ -509,6 +538,48 @@ pub fn state_bytes(cap: u64) -> u64 {
 /// well, and a larger `ref_bytes`.
 pub fn ref_bytes(cap: u64) -> u64 {
     2 * cap * 8
+}
+
+/// Bytes of the status buffer of the stepper (ICR-006): 8 header words and one
+/// drop-reason word for each of the `cap` particles.
+pub fn status_bytes(cap: u64) -> u64 {
+    (8 + cap) * 4
+}
+
+/// Steps to run in a frame so that the run does not pass the end of the moon
+/// data. `left_s` is the time left, `step_s` the step. Returns the steps and
+/// `true` if the run has ended (not more than one step left): then no step runs.
+pub fn limit_to_end(steps: u64, left_s: f64, step_s: f64) -> (u64, bool) {
+    if left_s <= step_s {
+        (0, true)
+    } else {
+        (steps.min((left_s / step_s) as u64), false)
+    }
+}
+
+/// The line under the time readout: the drop counts (ICR-006: unbound, inside
+/// Prometheus, inside Pandora). The Pandora part is left out if Pandora is off.
+pub fn drop_text(counts: [u32; 3], pandora_on: bool) -> String {
+    let group = |n: u32| {
+        let s = n.to_string();
+        let mut out = String::new();
+        for (k, c) in s.chars().enumerate() {
+            if k > 0 && (s.len() - k).is_multiple_of(3) {
+                out.push(',');
+            }
+            out.push(c);
+        }
+        out
+    };
+    let mut t = format!(
+        "Dropped: {} unbound \u{b7} {} inside Prometheus",
+        group(counts[0]),
+        group(counts[1])
+    );
+    if pandora_on {
+        t.push_str(&format!(" \u{b7} {} inside Pandora", group(counts[2])));
+    }
+    t
 }
 
 /// Instances in the instance buffer for `count` particles: the live picture
@@ -887,11 +958,47 @@ mod tests {
     }
 
     #[test]
+    fn moon_radii_follow_the_tracks_by_name() {
+        let s = Setup::builtin().unwrap();
+        let full = s.build_ephemeris(5.0 * 86_400.0).unwrap();
+        let on = builtin_moon_radii_for(&s.system(&full, true)).unwrap();
+        assert_eq!(on, vec![43.09, 40.63]);
+        let off = builtin_moon_radii_for(&s.system(&full, false)).unwrap();
+        assert_eq!(off, vec![43.09]);
+        // A name without a radius is an error.
+        let text = "[[moon]]\nname = \"prometheus\"\nradius_km = 43.09\n";
+        assert!(moon_radii_for(&s.system(&full, true), text).is_err());
+    }
+
+    #[test]
+    fn drop_text_shows_the_counts_and_leaves_out_pandora_when_off() {
+        assert_eq!(
+            drop_text([12, 45, 3], true),
+            "Dropped: 12 unbound \u{b7} 45 inside Prometheus \u{b7} 3 inside Pandora"
+        );
+        assert_eq!(
+            drop_text([0, 0, 0], false),
+            "Dropped: 0 unbound \u{b7} 0 inside Prometheus"
+        );
+        assert!(drop_text([1234, 0, 0], true).starts_with("Dropped: 1,234 unbound"));
+    }
+
+    #[test]
+    fn the_run_stops_at_the_end_of_the_moon_data() {
+        assert_eq!(limit_to_end(100, 1.0e6, STEP_S), (100, false));
+        // 10.5 steps left: at most 10 steps.
+        assert_eq!(limit_to_end(100, 10.5 * STEP_S, STEP_S), (10, false));
+        assert_eq!(limit_to_end(100, 1.5 * STEP_S, STEP_S), (1, false));
+        assert_eq!(limit_to_end(100, STEP_S, STEP_S), (0, true));
+        assert_eq!(limit_to_end(100, -5.0, STEP_S), (0, true));
+    }
+
+    #[test]
     fn speed_limit_follows_the_compute_budget() {
         assert_eq!(max_hours_for(10_000), MAX_HOURS_PER_S);
         assert_eq!(max_hours_for(100_000), MAX_HOURS_PER_S);
-        assert!((max_hours_for(300_000) - 220.0).abs() < 1e-9);
-        assert!((max_hours_for(1_000_000) - 66.0).abs() < 1e-9);
+        assert!((max_hours_for(300_000) - 550.0 / 3.0).abs() < 1e-9);
+        assert!((max_hours_for(1_000_000) - 55.0).abs() < 1e-9);
         // 1 h/s is 10 steps/s, so the limit in particle-steps/s is the budget.
         let steps_per_s = max_hours_for(1_000_000) * 3600.0 / STEP_S;
         assert!((steps_per_s * 1e6 - COMPUTE_BUDGET_PARTICLE_STEPS_PER_S).abs() < 1.0);

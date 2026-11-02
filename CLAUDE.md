@@ -38,7 +38,7 @@ Use Haiku (or do it without a model call) for formatting, changelogs and small e
 
 ## Toolchain on AJ's Mac
 
-Rust comes from Homebrew `rustup`, which is keg-only. If `cargo` is not found, start the command with `export PATH="/opt/homebrew/opt/rustup/bin:$PATH" &&`.
+Rust comes from Homebrew `rustup`, which is keg-only. If `cargo` is not found, start the command with `export PATH="/opt/homebrew/opt/rustup/bin:$HOME/.cargo/bin:$PATH" &&`. `~/.cargo/bin` holds `wasm-bindgen`, which `apps/fring-web/scripts/build.sh` needs.
 
 ## Before the session ends
 

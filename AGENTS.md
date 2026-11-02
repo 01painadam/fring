@@ -175,4 +175,5 @@ apps/fring-web/scripts/build.sh                              # wasm32 build (pro
 python3 -m http.server 8080 -d apps/fring-web/dist           # then open http://localhost:8080 in Chrome or Safari 26
 cargo test -p fring-web                                      # host tests: scene, frames, camera
 cargo check -p fring-web --target wasm32-unknown-unknown
+cargo clippy -p fring-web --target wasm32-unknown-unknown -- -D warnings   # web.rs is wasm32 only; host clippy does not see it
 ```

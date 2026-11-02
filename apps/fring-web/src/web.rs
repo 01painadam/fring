@@ -13,15 +13,16 @@
 use crate::live::{
     BLOCK_STEPS, Band, COLOUR_FAINT_OFFSET, CompareMode, END_MARGIN_S, FLOATS_PER_INSTANCE,
     Governor, MAX_IN_FLIGHT, PANDORA, PARTICLE_COUNT, ProjectionUniform, SPAN_S, STEP_S, Setup,
-    StepPlanner, ViewFrame, count_fits, head_instances_styled, instance_bytes, max_hours_for,
-    ref_base_slot, ref_bytes, view_transform,
+    StepPlanner, ViewFrame, builtin_moon_radii_for, count_fits, drop_text, head_instances_styled,
+    instance_bytes, limit_to_end, max_hours_for, ref_base_slot, ref_bytes, status_bytes,
+    view_transform,
 };
 use crate::view::{Camera, half_local_x, split_halves};
 use fring_gpu::gpu::Gpu;
 use fring_gpu::probe::SelfTest;
 use fring_gpu::stepper::GpuStepper;
 use fring_gpu::wh::Mode;
-use fring_gpu::wh_gpu::{DEFAULT_WORKGROUP, NO_FAILURE, WhKernels};
+use fring_gpu::wh_gpu::{DEFAULT_WORKGROUP, WhKernels};
 use fring_model::MoonEphemeris;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU8, AtomicU32, Ordering};
@@ -30,8 +31,13 @@ use wasm_bindgen::prelude::*;
 const SHADER: &str = include_str!("../shaders/points.wgsl");
 const PROJECT_SHADER: &str = include_str!("../shaders/project.wgsl");
 
-/// How often the failure flag of the stepper is read back, ms.
+/// How often the drop counts of the stepper are read back, ms.
 const STATUS_PERIOD_MS: f64 = 1000.0;
+/// Bytes read back from the status buffer: header words 0 to 7.
+const STATUS_READ_BYTES: u64 = 32;
+
+/// The message at the end of the moon data.
+const END_MESSAGE: &str = "End of the moon data. Press Restart to start again from t = 0.";
 
 // States of the read-back of the failure flag.
 const READ_IDLE: u8 = 0;
@@ -49,9 +55,14 @@ enum Phase {
     Failed(String),
 }
 
-/// A small `MAP_READ` buffer for `status_buffer()` and the state of its map.
+/// A small `MAP_READ` buffer for words 0 to 7 of `status_buffer()` (ICR-006) and
+/// the state of its map.
 struct StatusReader {
     buffer: wgpu::Buffer,
+    /// Run number now; every new stepper adds 1.
+    epoch: u32,
+    /// Run number at the time that the read in flight was started.
+    read_epoch: u32,
     state: Arc<AtomicU8>,
     last_ms: f64,
 }
@@ -77,6 +88,8 @@ pub struct App {
     project_bind: Option<wgpu::BindGroup>,
     // Reference picture: a copy of planes 0 and 1 (x, y) of the state, with its time.
     ref_buffer: Option<wgpu::Buffer>,
+    /// Copy of the status buffer (drop reasons, ICR-006) with the same time as `ref_buffer`.
+    ref_status: Option<wgpu::Buffer>,
     /// Own uniform and bind group for the projection of the reference (a
     /// second `write_buffer` to the live uniform would overwrite the first).
     ref_uniform: wgpu::Buffer,
@@ -109,7 +122,10 @@ pub struct App {
     governor: Governor,
     in_flight: Arc<AtomicU32>,
     status: StatusReader,
-    failed_index: Option<u32>,
+    /// Particles dropped in this run: unbound, inside moon 0 and moon 1 (words 1 to 3).
+    drops: [u32; 3],
+    /// True at the end of the moon ephemeris: stepping stops until a new run.
+    ended: bool,
     steps_last: u64,
     limited: bool,
     note: String,
@@ -279,7 +295,7 @@ impl App {
         });
         let status_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("status read-back"),
-            size: 4,
+            size: STATUS_READ_BYTES,
             usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
@@ -304,6 +320,7 @@ impl App {
             project_uniform,
             project_bind: None,
             ref_buffer: None,
+            ref_status: None,
             ref_uniform,
             ref_bind: None,
             ref_head_n: 0,
@@ -329,10 +346,13 @@ impl App {
             in_flight: Arc::new(AtomicU32::new(0)),
             status: StatusReader {
                 buffer: status_buffer,
+                epoch: 0,
+                read_epoch: 0,
                 state: Arc::new(AtomicU8::new(READ_IDLE)),
                 last_ms: 0.0,
             },
-            failed_index: None,
+            drops: [0; 3],
+            ended: false,
             steps_last: 0,
             limited: false,
             note: String::new(),
@@ -358,15 +378,15 @@ impl App {
         .to_string()
     }
 
-    /// A message for the readout: the reason of a failure, a particle that
-    /// failed, or a note (such as a restart at the end of the ephemeris). Empty
-    /// if there is nothing to say.
+    /// A message for the readout: the reason of a failure, or the end of the
+    /// moon data (built from the state, so it goes with Restart). Empty if there
+    /// is nothing to say.
     pub fn message(&self) -> String {
         if let Phase::Failed(m) = &self.phase {
             return m.clone();
         }
-        if let Some(i) = self.failed_index {
-            return format!("a particle failed (index {i}); reset to continue");
+        if self.ended {
+            return END_MESSAGE.to_string();
         }
         self.note.clone()
     }
@@ -503,12 +523,23 @@ impl App {
         self.ref_time_s / 86_400.0
     }
 
+    /// The drop counts for the page, as one line (zeros at t = 0).
+    pub fn dropped_text(&self) -> String {
+        drop_text(self.drops, self.pandora_on)
+    }
+
+    /// True at the end of the moon data: stepping has stopped and only a new
+    /// run (Restart, or any change that rebuilds the run) goes on.
+    pub fn ended(&self) -> bool {
+        self.ended
+    }
+
     /// Simulated time in days (the time of the particle state).
     pub fn time_days(&self) -> f64 {
         self.stepper.as_ref().map_or(0.0, |s| s.time_s()) / 86_400.0
     }
 
-    /// End of the moon ephemeris in days: the run restarts shortly before it.
+    /// End of the moon ephemeris in days: the run pauses shortly before it.
     pub fn span_days(&self) -> f64 {
         self.full
             .as_ref()
@@ -646,7 +677,7 @@ impl App {
             });
             self.instances_n = self.count;
         }
-        let stepper = GpuStepper::new(
+        let mut stepper = GpuStepper::new(
             &self.gpu,
             kernels,
             &system,
@@ -656,6 +687,9 @@ impl App {
             Mode::Dp,
             None,
         )?;
+        // ICR-006: a particle that comes inside a moon is dropped. One radius
+        // for each track of the system, matched by name (params/moons.toml).
+        stepper.set_moon_radii_km(&builtin_moon_radii_for(&system)?)?;
         self.project_bind = Some(self.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("project"),
             layout: &self.project_pipeline.get_bind_group_layout(0),
@@ -672,6 +706,10 @@ impl App {
                     binding: 2,
                     resource: self.project_uniform.as_entire_binding(),
                 },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: stepper.status_buffer().as_entire_binding(),
+                },
             ],
         }));
         // The reference is the new initial state (t = 0). It holds planes 0 and 1
@@ -685,16 +723,31 @@ impl App {
                 mapped_at_creation: false,
             }));
         }
-        if let Some(reference) = &self.ref_buffer {
+        let want_status = status_bytes(stepper.capacity() as u64);
+        if self
+            .ref_status
+            .as_ref()
+            .is_none_or(|b| b.size() != want_status)
+        {
+            self.ref_status = Some(self.device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("reference status"),
+                size: want_status,
+                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            }));
+        }
+        if let (Some(reference), Some(ref_status)) = (&self.ref_buffer, &self.ref_status) {
             let mut encoder = self
                 .device
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                     label: Some("reference at t = 0"),
                 });
             encoder.copy_buffer_to_buffer(stepper.state_buffer(), 0, reference, 0, want);
+            // No particle is dropped at t = 0: the reasons are all 0.
+            encoder.copy_buffer_to_buffer(stepper.status_buffer(), 0, ref_status, 0, want_status);
             self.queue.submit([encoder.finish()]);
         }
-        if let Some(reference) = &self.ref_buffer {
+        if let (Some(reference), Some(ref_status)) = (&self.ref_buffer, &self.ref_status) {
             self.ref_bind = Some(self.device.create_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some("project reference"),
                 layout: &self.project_pipeline.get_bind_group_layout(0),
@@ -711,6 +764,10 @@ impl App {
                         binding: 2,
                         resource: self.ref_uniform.as_entire_binding(),
                     },
+                    wgpu::BindGroupEntry {
+                        binding: 3,
+                        resource: ref_status.as_entire_binding(),
+                    },
                 ],
             }));
         }
@@ -719,7 +776,10 @@ impl App {
         self.ref_custom = false;
         self.ref_pending = false;
         self.stepper = Some(stepper);
-        self.failed_index = None;
+        // Counts of the old run must not show in the new one.
+        self.drops = [0; 3];
+        self.ended = false;
+        self.status.epoch = self.status.epoch.wrapping_add(1);
         self.planner = StepPlanner::new();
         self.note = if lost {
             "The reference was reset to t = 0.".to_string()
@@ -729,22 +789,27 @@ impl App {
         Ok(())
     }
 
-    /// Reads the failure flag if its map has finished (never blocks).
+    /// Reads the drop counts if the map has finished (never blocks). A read
+    /// that was started in an earlier run is ignored.
     fn poll_status(&mut self) {
         let state = self.status.state.load(Ordering::Acquire);
         if state == READ_READY {
-            let value = {
+            let words: Option<[u32; 8]> = {
                 let view = self.status.buffer.get_mapped_range(..);
-                view.ok()
-                    .map(|v| u32::from_le_bytes([v[0], v[1], v[2], v[3]]))
+                view.ok().map(|v| {
+                    let mut w = [0u32; 8];
+                    for (k, c) in v.as_chunks::<4>().0.iter().take(8).enumerate() {
+                        w[k] = u32::from_le_bytes(*c);
+                    }
+                    w
+                })
             };
             self.status.buffer.unmap();
             self.status.state.store(READ_IDLE, Ordering::Release);
-            if let Some(v) = value
-                && v != NO_FAILURE
-                && self.failed_index.is_none()
+            if let Some(w) = words
+                && self.status.read_epoch == self.status.epoch
             {
-                self.failed_index = Some(v);
+                self.drops = [w[1], w[2], w[3]];
             }
         } else if state == READ_FAILED {
             self.status.state.store(READ_IDLE, Ordering::Release);
@@ -757,7 +822,7 @@ impl App {
         self.governor.observe(dt_s);
 
         // 1. How many steps (C: the moons and the particles share one time).
-        let (mut restart, mut steps) = (false, 0u64);
+        let (mut ended_now, mut steps) = (false, 0u64);
         let in_flight = self.in_flight.load(Ordering::Acquire);
         if let (Some(stepper), Some(full)) = (&self.stepper, &self.full) {
             let (planned, limited) = self.planner.plan(
@@ -765,27 +830,22 @@ impl App {
                 self.hours_per_s.min(max_hours_for(self.count)),
                 self.governor.cap(),
             );
-            let running = !self.paused && self.failed_index.is_none();
+            let running = !self.paused && !self.ended;
             let busy = in_flight >= MAX_IN_FLIGHT;
             steps = if running && !busy { planned } else { 0 };
             self.limited = running && (limited || busy);
             if running {
                 let left_s = full.end_s() - END_MARGIN_S - stepper.time_s();
-                if left_s <= STEP_S {
-                    restart = true;
-                } else {
-                    steps = steps.min((left_s / STEP_S) as u64);
-                }
+                let (n, ended) = limit_to_end(steps, left_s, STEP_S);
+                steps = n;
+                ended_now = ended;
             }
         }
-        if restart {
-            self.make_stepper().map_err(err)?;
-            self.note = format!(
-                "Reached the end of the 10-year moon ephemeris: started again from t = 0. {}",
-                self.note
-            )
-            .trim_end()
-            .to_string();
+        if ended_now {
+            // Only stepping stops. The time stays; the picture, the camera and
+            // "Set to now" go on. Read the final counts soon.
+            self.ended = true;
+            self.status.last_ms = f64::NEG_INFINITY;
             steps = 0;
         }
         self.steps_last = steps;
@@ -806,13 +866,22 @@ impl App {
             if self.ref_pending {
                 // Before this frame's steps: the reference is the state at the
                 // time that the page shows now.
-                if let Some(reference) = &self.ref_buffer {
+                if let (Some(reference), Some(ref_status)) = (&self.ref_buffer, &self.ref_status) {
                     encoder.copy_buffer_to_buffer(
                         stepper.state_buffer(),
                         0,
                         reference,
                         0,
                         ref_bytes(stepper.capacity() as u64),
+                    );
+                    // The drop reasons at the same time: a particle dropped
+                    // before this moment is hidden in the reference too.
+                    encoder.copy_buffer_to_buffer(
+                        stepper.status_buffer(),
+                        0,
+                        ref_status,
+                        0,
+                        status_bytes(stepper.capacity() as u64),
                     );
                     self.ref_time_s = stepper.time_s();
                     self.ref_custom = true;
@@ -907,8 +976,9 @@ impl App {
                     0,
                     &self.status.buffer,
                     0,
-                    4,
+                    STATUS_READ_BYTES,
                 );
+                self.status.read_epoch = self.status.epoch;
                 self.status.state.store(READ_PENDING, Ordering::Release);
                 self.status.last_ms = now_ms;
                 want_map = true;

@@ -85,6 +85,11 @@ fn run(gpu: &Gpu, pts: &[[f64; 2]], cap: usize, u: &ProjectionUniform) -> Vec<[f
         wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
     );
     q.write_buffer(&uni, 0, &u.to_bytes());
+    // No particle is dropped: all reason words are 0 (zero-initialised).
+    let status = mk(
+        ((8 + cap) * 4) as u64,
+        wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+    );
     let stage = mk(
         inst_size,
         wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
@@ -116,6 +121,10 @@ fn run(gpu: &Gpu, pts: &[[f64; 2]], cap: usize, u: &ProjectionUniform) -> Vec<[f
             wgpu::BindGroupEntry {
                 binding: 2,
                 resource: uni.as_entire_binding(),
+            },
+            wgpu::BindGroupEntry {
+                binding: 3,
+                resource: status.as_entire_binding(),
             },
         ],
     });
