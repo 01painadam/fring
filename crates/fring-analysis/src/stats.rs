@@ -149,6 +149,9 @@ pub fn ks_two_sample(a: &[f64], b: &[f64]) -> (f64, f64) {
     }
     let ne = n1 * n2 / (n1 + n2);
     let lam = (ne.sqrt() + 0.12 + 0.11 / ne.sqrt()) * d;
+    if lam < 0.2 {
+        return (d, 1.0); // the series does not converge for small lambda; p > 0.99999
+    }
     let mut p = 0.0;
     for k in 1..=100 {
         let kf = k as f64;
