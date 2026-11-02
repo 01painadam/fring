@@ -142,7 +142,7 @@ These commands work after their tasks are done. Until then, the apps only print 
 ```sh
 cargo run -p fring-run --release -- --config apps/fring-run/configs/<name>.toml [--out <dir>] [--quiet]
 cargo test -p fring-run --release -- --ignored                  # acceptance: 10^4 particles, 1 year
-cargo run -p fring-bench --release                              # after B1
+cargo run -p fring-bench --release                              # about 2.5 minutes; results go in docs/benchmarks.md
 ```
 
 Validation commands (A6; a `uv` project in `validation/`, Python 3.12, needs `uv`):
