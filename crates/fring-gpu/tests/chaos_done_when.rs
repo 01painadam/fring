@@ -1,7 +1,8 @@
 //! Task G3, done when: the GPU chaos indicator matches the CPU indicator for
 //! 1,000 particles (ADR 0008). Chaotic orbits are compared by statistics, and
 //! every limit is tied to a baseline: a CPU run against a second CPU run in
-//! which every particle starts 1e-7 km away.
+//! which every particle starts 1e-4 km away (the size of the GPU-CPU
+//! deviation; A0 and AJ, 2026-11-02, ADR 0008).
 //!
 //! Particles: circular, uniform in a over 139,600 to 140,600 km and in
 //! longitude, both moons, h = 356.2537 s, 150,000 steps (about 1000 orbits),
@@ -293,7 +294,7 @@ fn gpu_chaos_indicator_matches_cpu_for_1000_particles() {
     let (base, _) = run::<CpuBackend>(
         &config,
         &system,
-        &displaced(&init, env_f64("FRING_G3_BASE_KM", 1e-7)),
+        &displaced(&init, env_f64("FRING_G3_BASE_KM", 1e-4)),
     );
     println!("CPU run {t_cpu:.1} s, n_renorm {}", cpu.n_renorm);
     summary("cpu", &cpu);

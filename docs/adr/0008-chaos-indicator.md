@@ -1,6 +1,6 @@
 # 0008: Chaos indicator on the CPU and the GPU (task G3)
 
-Status: proposed by A3 for A0; numbers below are from the M4 (2026-11-02)
+Status: accepted by A0 2026-11-02 (d0 = 1 km, K = 100, radial shadow direction, baseline 1e-4 km; AJ approved the baseline change); AJ reviews at gate G2. Numbers are from the M4 (2026-11-02)
 Date: 2026-11-02
 Author: A3 (and A2 for the CPU part)
 
@@ -33,7 +33,7 @@ On a regular orbit a radial offset delta grows linearly, because of the Kepler s
 
 ## The sweep and the choice of d0 and K
 
-Set: 1,000 circular particles, a uniform in 139,600 to 140,600 km, uniform longitude, both moons, h = 356.2537 s, 150,000 steps (about 1000 orbits). Baseline: the same CPU run with every particle moved by 1e-7 km. Files: `docs/adr/0008/sweep_*.txt`. D+ column: GPU against CPU, regular on both (557 of 1,000 at d0 = 1 km).
+Set: 1,000 circular particles, a uniform in 139,600 to 140,600 km, uniform longitude, both moons, h = 356.2537 s, 150,000 steps (about 1000 orbits). Sweep baseline: the same CPU run with every particle moved by 1e-7 km (the done-when baseline is 1e-4 km, see below). Files: `docs/adr/0008/sweep_*.txt`. D+ column: GPU against CPU, regular on both (557 of 1,000 at d0 = 1 km).
 
 | d0 (km) | CPU vs CPU: regular dL p95 / max | GPU D+: regular dL p95 / max | GPU D+ class agreement |
 |---|---|---|---|
@@ -60,8 +60,11 @@ Regular: mean Y <= 2.5. Chaotic: mean Y >= 5. In between: uncertain. At 1000 orb
 | regular on both: dL median / p95 / max | 4.3e-4 / 4.2e-3 / 0.074 | 4.4e-4 / 5.4e-3 / 0.13 | 1.3e-2 / 0.15 / 2.0 |
 | chaotic on both: FTLE quantile difference 10/50/90 % | 0.4 / 0.5 / 1.3 % | 0.0 / 0.6 / 1.9 % | 1.5 / 0.3 / 0.2 % |
 | baseline (CPU, 1e-7 km): same | 100 %; 0.0000243 / 0.00036 / 0.050; 0.1 / 0.2 / 0.5 % | | |
+| baseline (CPU, 1e-4 km, the rule): same | 100 % (836 compared); 7.6e-4 / 1.7e-2 / 0.78; 1.4 / 0.9 / 2.6 % | | |
 
-Rules 1, 2 and 4 pass for D+ and C, and the limit of 15 % in rule 3 passes with a factor of 8. **Rule 3 "at most 2 times the baseline difference" fails** for D+ (0.42 / 0.47 / 1.26 % against 2 x 0.09 / 0.19 / 0.48 %) and for C (50 / 90 % quantile). The baseline difference is below 3 %, which is the case that A0 named: the rule is not changed here (`done_when_spec_baseline_1e-7.txt`). The cause is that a 1e-7 km displacement is too small to decorrelate the chaotic orbits within 1000 orbits (growth e^10 about 2e4 turns 1e-7 km into 2e-3 km), while the GPU orbits differ from the CPU by 1e-4 km and more (G2: dA up to 0.01 km). With a baseline displacement of 1e-4 km (`FRING_G3_BASE_KM=1e-4`) all rules pass (`done_when_baseline_1e-4.txt`). A0 decides.
+Rules 1, 2 and 4 pass for D+ and C, and the limit of 15 % in rule 3 passes with a factor of 8. **Rule 3 "at most 2 times the baseline difference" fails** for D+ (0.42 / 0.47 / 1.26 % against 2 x 0.09 / 0.19 / 0.48 %) and for C (50 / 90 % quantile). The baseline difference is below 3 %, which is the case that A0 named: the rule is not changed here (`done_when_spec_baseline_1e-7.txt`). The cause is that a 1e-7 km displacement is too small to decorrelate the chaotic orbits within 1000 orbits (growth e^10 about 2e4 turns 1e-7 km into 2e-3 km), while the GPU orbits differ from the CPU by 1e-4 km and more (G2: dA up to 0.01 km). With a baseline displacement of 1e-4 km (`FRING_G3_BASE_KM=1e-4`) all rules pass (`done_when_baseline_1e-4.txt`).
+
+**Decision (A0, AJ approved, 2026-11-02): the baseline displacement is 1e-4 km.** The baseline must compare like with like: two CPU runs whose particles differ by about as much as the GPU and CPU orbits differ (1e-4 km and more), not by 1e-7 km, which stays correlated for 1000 orbits. Rule 3 is then: chaotic FTLE quantiles differ by at most 15 % and by at most 2 times the baseline difference (2.8 / 1.8 / 5.2 %). D+ (0.4 / 0.5 / 1.3 %) and C (0.0 / 0.6 / 1.9 %) pass. The 1e-7 km result stays in `done_when_spec_baseline_1e-7.txt` as a record. This is not a relaxed tolerance on the GPU: the 15 % limit and rules 1, 2 and 4 are unchanged, and the GPU numbers are the same in both runs.
 
 ## Consequences
 
