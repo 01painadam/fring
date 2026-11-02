@@ -18,9 +18,9 @@ pub mod ds;
 pub mod gpu;
 pub mod probe;
 pub mod spike;
-pub mod stepper;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod spike_gpu;
+pub mod stepper;
 pub mod wf32;
 pub mod wh;
 pub mod wh_gpu;
