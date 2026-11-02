@@ -2,7 +2,8 @@
 //!
 //! No file I/O: the caller reads the file (or uses `include_str!`) and passes
 //! the text, so the same code works in the web build. Unknown tables and fields
-//! (`[meta]`, `naif_id`, `radius_km`) are ignored.
+//! (`[meta]`, `naif_id`, and `radius_km` except in [`moon_radii_from_toml_str`])
+//! are ignored.
 
 use crate::physics::MoonInit;
 use crate::{BodyState, Error, Result, SaturnParams, Vec3};
@@ -108,6 +109,39 @@ pub fn moons_from_toml_str(text: &str) -> Result<Vec<MoonInit>> {
         .collect()
 }
 
+#[derive(Deserialize)]
+struct MoonRadiiFile {
+    moon: Vec<MoonRadiusEntry>,
+}
+
+#[derive(Deserialize)]
+struct MoonRadiusEntry {
+    name: String,
+    radius_km: f64,
+}
+
+/// Reads the name and mean radius (km) of each `[[moon]]` entry of
+/// `params/moons.toml`, in file order. Checks that each radius is finite and
+/// positive. The orbit code does not use the radii; the web uses them for the
+/// drop rule "inside a moon" (ICR-006, `GpuStepper::set_moon_radii_km`). Match
+/// them to the moon tracks by name, not by position.
+pub fn moon_radii_from_toml_str(text: &str) -> Result<Vec<(String, f64)>> {
+    let file: MoonRadiiFile =
+        toml::from_str(text).map_err(|e| Error::Config(format!("moon radii: {e}")))?;
+    file.moon
+        .into_iter()
+        .map(|m| {
+            if !(m.radius_km.is_finite() && m.radius_km > 0.0) {
+                return Err(Error::Config(format!(
+                    "moon radii: moon {:?} has radius_km {} (must be finite and > 0)",
+                    m.name, m.radius_km
+                )));
+            }
+            Ok((m.name, m.radius_km))
+        })
+        .collect()
+}
+
 /// Reads the `[core]` and `[targets]` tables of `params/ring.toml`. Checks that
 /// every value is finite, a0 > 0, 0 <= e < 1, and 0 <= min width <= max width.
 pub fn ring_from_toml_str(text: &str) -> Result<RingParams> {
@@ -157,6 +191,35 @@ mod tests {
     fn reports_a_missing_field() {
         assert!(matches!(
             moons_from_toml_str("[[moon]]\nname='a'\n"),
+            Err(Error::Config(_))
+        ));
+    }
+
+    const MOONS_TOML: &str = include_str!("../../../params/moons.toml");
+
+    #[test]
+    fn reads_the_moon_radii_in_file_order() {
+        let r = moon_radii_from_toml_str(MOONS_TOML).unwrap();
+        assert_eq!(
+            r,
+            vec![
+                ("prometheus".to_string(), 43.09),
+                ("pandora".to_string(), 40.63)
+            ]
+        );
+        // The orbit loader still reads the same file (it ignores radius_km).
+        assert_eq!(moons_from_toml_str(MOONS_TOML).unwrap().len(), 2);
+    }
+
+    #[test]
+    fn rejects_a_bad_or_missing_moon_radius() {
+        let bad = MOONS_TOML.replace("radius_km = 43.09", "radius_km = -1.0");
+        assert!(matches!(
+            moon_radii_from_toml_str(&bad),
+            Err(Error::Config(_))
+        ));
+        assert!(matches!(
+            moon_radii_from_toml_str("[[moon]]\nname='a'\n"),
             Err(Error::Config(_))
         ));
     }
