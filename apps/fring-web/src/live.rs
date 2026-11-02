@@ -170,7 +170,7 @@ impl Setup {
             moons.tracks.retain(|t| t.name != PANDORA);
         }
         System {
-            saturn: self.saturn.clone(),
+            saturn: self.saturn,
             moons,
         }
     }
