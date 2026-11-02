@@ -520,3 +520,47 @@ fn set_moon_radii_checks_its_arguments() {
     gpu.queue().submit([enc.finish()]);
     assert!(is_config(st.set_moon_radii_km(&RADII_KM)));
 }
+
+/// Information, not a pass/fail check: particle-steps per second of the
+/// stepper with the radius rule off and on (the rule costs a few relative
+/// vectors and segment tests for each drift). Quote the output in the handoff.
+#[test]
+#[ignore = "needs a GPU; timing"]
+fn rate_with_the_rule_off_and_on() {
+    let Some(gpu) = Gpu::new() else {
+        eprintln!("no GPU: skipped");
+        return;
+    };
+    let kernels = WhKernels::new(&gpu, DEFAULT_WORKGROUP).expect("self-test");
+    let steps = 300u64;
+    let system = system(H_S, steps, true);
+    for n in [100_000usize, 1_000_000] {
+        let (init, _) = ensemble(&system, n);
+        for mode in [Mode::D, Mode::Dp] {
+            for rule in [false, true] {
+                // A fresh stepper for each run: the time starts at 0 each time.
+                let mut best = f64::MAX;
+                for _ in 0..5 {
+                    let mut s2 =
+                        GpuStepper::new(&gpu, &kernels, &system, &init, H_S, 300, mode, None)
+                            .unwrap();
+                    if rule {
+                        s2.set_moon_radii_km(&RADII_KM).unwrap();
+                    }
+                    let mut enc = gpu.device().create_command_encoder(&Default::default());
+                    s2.encode_steps(&mut enc, steps).unwrap();
+                    let t0 = std::time::Instant::now();
+                    gpu.queue().submit([enc.finish()]);
+                    gpu.device()
+                        .poll(wgpu::PollType::wait_indefinitely())
+                        .expect("poll");
+                    best = best.min(t0.elapsed().as_secs_f64());
+                }
+                println!(
+                    "RATE {mode:?} n {n} rule {rule}: {:.4e} particle-steps/s",
+                    n as f64 * steps as f64 / best
+                );
+            }
+        }
+    }
+}
