@@ -214,3 +214,95 @@ fn wgsl_functions_match_their_rust_twins() {
     assert!(w < 1e-6);
     let _ = (&s.sp, &s.gms, &s.table);
 }
+
+/// ICR-006: `moon_rel` (a double-single difference, M24) and `seg_min_d2`
+/// against their Rust twins. The positions come from `state_from_f64` of real
+/// f64 values, so the low words are not zero.
+#[test]
+#[ignore = "needs a GPU"]
+fn moon_radius_functions_match_their_rust_twins() {
+    let Some((_gpu, k)) = gpu_and_kernels() else {
+        return;
+    };
+    let s = setup(1, 192);
+    // moon_rel: particle position minus moon 0 of row 0, on a ring of 300 km
+    // radius around the moon (with the low words of the moon position).
+    let mp = s.host.moons(0)[0];
+    let mut inp: Vec<State<M4>> = Vec::new();
+    for j in 0..192 {
+        let ph = 0.173 * j as f64;
+        let rad = 5.0 + 3.1 * j as f64;
+        let off = Vec3::new(
+            rad * ph.cos(),
+            rad * ph.sin(),
+            0.37 * rad * (2.0 * ph).sin(),
+        );
+        let p = Vec3::new(mp.x.to_f64(), mp.y.to_f64(), mp.z.to_f64()) + off;
+        inp.push(state_from_f64::<M4>(p, Vec3::new(0.0, 0.0, 0.0)));
+    }
+    assert!(
+        mp.x.lo != 0.0 || mp.y.lo != 0.0,
+        "low words must not be zero"
+    );
+    assert!(inp.iter().any(|st| st[0].lo != 0.0));
+    let mut g = inp.clone();
+    let (status, _) = k.apply("t_moon_rel", &s.prm, &s.packed, 1, 2, &mut g);
+    assert_eq!(status, NO_FAILURE);
+    let mut worst = 0.0f64;
+    for (st, o) in inp.iter().zip(&g) {
+        let t = wh::moon_rel(Vec3::new(st[0], st[1], st[2]), mp);
+        let truth =
+            (state_to_f64(st).0 - Vec3::new(mp.x.to_f64(), mp.y.to_f64(), mp.z.to_f64())).norm();
+        let got = Vec3::new(o[3].hi as f64, o[4].hi as f64, o[5].hi as f64);
+        let twin = Vec3::new(t[0] as f64, t[1] as f64, t[2] as f64);
+        worst = worst.max((got - twin).norm() / truth);
+        // Against the f64 truth: the DS difference keeps the km-scale
+        // separation to better than 1e-6 of its length.
+        assert!((got.norm() - truth).abs() / truth < 1e-6, "moon_rel vs f64");
+    }
+    println!("t_moon_rel     worst relative error vs twin {worst:.2e}");
+    assert!(worst < 1e-6);
+
+    // seg_min_d2: segments of all kinds (a, b in km), including the ones that
+    // cross the origin between the ends, zero length, and far away.
+    let mut inp: Vec<State<M4>> = Vec::new();
+    for j in 0..192 {
+        let x = j as f64;
+        let a = Vec3::new(-60.0 - 0.7 * x, 5.0 + 0.31 * x, 0.2 * x - 10.0);
+        let b = if j % 7 == 0 {
+            a
+        } else {
+            Vec3::new(55.0 + 0.9 * x, -3.0 + 0.2 * x, 4.0 - 0.1 * x)
+        };
+        inp.push(state_from_f64::<M4>(a, b));
+    }
+    let mut g = inp.clone();
+    let (status, _) = k.apply("t_segment_min", &s.prm, &s.packed, 1, 2, &mut g);
+    assert_eq!(status, NO_FAILURE);
+    let mut worst = 0.0f64;
+    for (st, o) in inp.iter().zip(&g) {
+        let f = |d: Ds<M4>| d.hi;
+        let t = wh::segment_min_d2::<M4>(
+            [f(st[0]), f(st[1]), f(st[2])],
+            [f(st[3]), f(st[4]), f(st[5])],
+        );
+        let got = o[3].hi;
+        worst = worst.max(rel(got as f64, t as f64));
+        // f64 truth.
+        let (a, b) = state_to_f64(st);
+        let d = b - a;
+        let dd = d.dot(d);
+        let sp = if dd > 0.0 {
+            (-a.dot(d) / dd).clamp(0.0, 1.0)
+        } else {
+            0.0
+        };
+        let c = a + d * sp;
+        assert!(
+            (got as f64 - c.dot(c)).abs() <= 1e-4 * c.dot(c).max(1.0),
+            "seg_min_d2 vs f64 truth"
+        );
+    }
+    println!("t_segment_min  worst relative error vs twin {worst:.2e}");
+    assert!(worst < 1e-5);
+}

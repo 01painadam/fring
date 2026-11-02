@@ -10,14 +10,17 @@
 // 1: kick table, ROW (36) f32 per step (wh::pack_table): moon j at 6 j (DS
 //    x, y, z), indirect term DS at 24, indirect term f32 (scaled by h/f32(h),
 //    for option D) at 30.
-// 2: run constants, see prm_* below.
+// 2: run constants, see prm_* below (11 vec4; ICR-006 radii in 9, flag in 10).
 // 3: per-dispatch control: n_steps, n_particles, cap, n_moons.
-// 4: status: status[0] = smallest index of a particle whose orbit is not
-//    bound (0xFFFFFFFF if none).
+// 4: status (ICR-006), 8 + cap words: status[0] = smallest index of a dropped
+//    particle (0xFFFFFFFF if none), status[1] = number dropped for an unbound
+//    or invalid orbit, status[2 + k] = number dropped inside moon k (k < 4;
+//    words 6 and 7 are reserved), status[8 + i] = reason of particle i (0
+//    live, 1 unbound or invalid orbit, 2 + k inside moon k).
 
 @group(0) @binding(0) var<storage, read_write> st: array<vec2<f32>>;
 @group(0) @binding(1) var<storage, read> tab: array<f32>;
-@group(0) @binding(2) var<uniform> prm: array<vec4<f32>, 9>;
+@group(0) @binding(2) var<uniform> prm: array<vec4<f32>, 11>;
 @group(0) @binding(3) var<uniform> ctl: vec4<u32>;
 @group(0) @binding(4) var<storage, read_write> status: array<atomic<u32>>;
 
@@ -40,6 +43,9 @@ fn prm_gm_moon_ds(j: u32) -> vec2<f32> {
     if ((j & 1u) == 0u) { return q.xy; }
     return q.zw;
 }
+// Moon radius squared, km^2, of moon j (0 = not checked); the rule flag (ICR-006).
+fn prm_r2(j: u32) -> f32 { return prm[9][j]; }
+fn prm_rule() -> f32 { return prm[10].x; }
 fn prm_n_steps() -> u32 { return ctl.x; }
 fn prm_n_particles() -> u32 { return ctl.y; }
 fn prm_cap() -> u32 { return ctl.z; }
@@ -355,26 +361,94 @@ fn kick_dir_plus(k: u32, p: V3, v: V3) -> V3 {
     return v3_add_w(v3_add(v, dv), small);
 }
 
+// ---- ICR-006: moon-radius rule. Rust twins: wh::moon_rel, wh::segment_min_d2 ----
+
+// Position of the particle relative to moon j in table row `row`, p - m, f32 of
+// the DS difference (the large equal parts cancel in DS first).
+fn moon_rel(row: u32, j: u32, p: V3) -> vec3<f32> {
+    let m = moon_ds(row, j);
+    return vec3<f32>(ds_sub(p.x, m.x).x, ds_sub(p.y, m.y).x, ds_sub(p.z, m.z).x);
+}
+
+// True if the row holds a moon position (the host writes 1e30 into x of moon 0
+// for a time outside the ephemeris).
+fn row_valid(row: u32) -> bool { return tab[ROW * row] < 1.0e20; }
+
+// Smallest squared distance from the origin to the segment a -> b.
+fn seg_min_d2(a: vec3<f32>, b: vec3<f32>) -> f32 {
+    let d = b - a;
+    let dd = dot_f(d, d);
+    var s = 0.0;
+    if (dd > 0.0) { s = clamp(-dot_f(a, d) / dd, 0.0, 1.0); }
+    let c = a + d * s;
+    return dot_f(c, c);
+}
+
+// Relative positions to each moon at the end of the last checked drift.
+var<private> rprev: array<vec3<f32>, 4>;
+var<private> rvalid: bool;
+
+// Starts the rule at the sync time at the start of the block (table row `row`).
+fn rule_start(row: u32, p: V3) {
+    rvalid = row_valid(row);
+    if (rvalid) {
+        for (var j = 0u; j < prm_n_moons(); j++) { rprev[j] = moon_rel(row, j, p); }
+    }
+}
+
+// The drift that ended at p, where the moons are at table row `row`. Returns 0
+// if no moon was hit, else 1 + the lowest moon index hit. A drift with no
+// moon position at either end is skipped.
+fn rule_step(row: u32, p: V3) -> u32 {
+    let now_valid = row_valid(row);
+    var hit = 0u;
+    if (now_valid) {
+        for (var j = 0u; j < prm_n_moons(); j++) {
+            let b = moon_rel(row, j, p);
+            let r2 = prm_r2(j);
+            if (rvalid && hit == 0u && r2 > 0.0 && seg_min_d2(rprev[j], b) < r2) { hit = j + 1u; }
+            rprev[j] = b;
+        }
+    }
+    rvalid = now_valid;
+    return hit;
+}
+
 // ---- Entry points: one block of prm_n_steps() steps per particle ----
+
+// ICR-006: a particle with a reason other than 0 is frozen. Its thread
+// returns at once (one u32 load per particle per block).
+fn is_dropped(i: u32) -> bool { return atomicLoad(&status[8u + i]) != 0u; }
+
+// Sets the reason of particle i (1 unbound or invalid orbit, 2 + k inside
+// moon k), counts it in word `reason`, and lowers word 0. Each thread calls
+// it once for its own particle, so the counts are exact.
+fn drop_particle(i: u32, reason: u32) {
+    atomicStore(&status[8u + i], reason);
+    atomicAdd(&status[reason], 1u);
+    atomicMin(&status[0], i);
+}
 
 @compute @workgroup_size(WG_SIZE)
 fn step_d(@builtin(global_invocation_id) id: vec3<u32>, @builtin(num_workgroups) nw: vec3<u32>) {
     ds_one = prm_one();
     let i = id.y * nw.x * u32(WG_SIZE) + id.x;
     if (i >= prm_n_particles()) { return; }
+    if (is_dropped(i)) { return; }
     let n = prm_n_steps();
     let h = prm_h();
     let half = prm_half();
     var o = drift_d(load_p(i), load_v(i), half);
     var ok = o.ok;
     for (var k = 0u; k < n; k++) {
+        if (!ok) { break; }
         let v = kick_dir(k, o.p, o.v);
         var dt = h;
         if (k + 1u == n) { dt = half; }
         o = drift_d(o.p, v, dt);
         ok = ok && o.ok;
     }
-    if (ok) { store(i, o.p, o.v); } else { atomicMin(&status[0], i); }
+    if (ok) { store(i, o.p, o.v); } else { drop_particle(i, 1u); }
 }
 
 @compute @workgroup_size(WG_SIZE)
@@ -382,19 +456,109 @@ fn step_dp(@builtin(global_invocation_id) id: vec3<u32>, @builtin(num_workgroups
     ds_one = prm_one();
     let i = id.y * nw.x * u32(WG_SIZE) + id.x;
     if (i >= prm_n_particles()) { return; }
+    if (is_dropped(i)) { return; }
     let n = prm_n_steps();
     let h = prm_h();
     let half = prm_half();
     var o = drift_d(load_p(i), load_v(i), half);
     var ok = o.ok;
     for (var k = 0u; k < n; k++) {
+        if (!ok) { break; }
         let v = kick_dir_plus(k, o.p, o.v);
         var dt = h;
         if (k + 1u == n) { dt = half; }
         o = drift_d(o.p, v, dt);
         ok = ok && o.ok;
     }
-    if (ok) { store(i, o.p, o.v); } else { atomicMin(&status[0], i); }
+    if (ok) { store(i, o.p, o.v); } else { drop_particle(i, 1u); }
+}
+
+// As step_d, with the moon-radius rule (ICR-006): a particle whose path comes
+// within the radius of moon k, in any drift of the block, is dropped with
+// reason 2 + k and not stored. Table rows n and n + 1 hold the moons at the
+// sync times at the start and at the end of the block.
+@compute @workgroup_size(WG_SIZE)
+fn step_d_r(@builtin(global_invocation_id) id: vec3<u32>, @builtin(num_workgroups) nw: vec3<u32>) {
+    ds_one = prm_one();
+    let i = id.y * nw.x * u32(WG_SIZE) + id.x;
+    if (i >= prm_n_particles()) { return; }
+    if (is_dropped(i)) { return; }
+    let n = prm_n_steps();
+    let h = prm_h();
+    let half = prm_half();
+    let p0 = load_p(i);
+    rule_start(n, p0);
+    var o = drift_d(p0, load_v(i), half);
+    var ok = o.ok;
+    var reason = 0u;
+    if (ok) {
+        let hit = rule_step(0u, o.p);
+        if (hit != 0u) { reason = hit + 1u; }
+    }
+    for (var k = 0u; k < n; k++) {
+        if (!ok || reason != 0u) { break; }
+        let v = kick_dir(k, o.p, o.v);
+        var dt = h;
+        var row = k + 1u;
+        if (k + 1u == n) { dt = half; row = n + 1u; }
+        o = drift_d(o.p, v, dt);
+        ok = ok && o.ok;
+        if (ok) {
+            let hit = rule_step(row, o.p);
+            if (hit != 0u) { reason = hit + 1u; }
+        }
+    }
+    if (!ok) {
+        drop_particle(i, 1u);
+    } else if (reason != 0u) {
+        drop_particle(i, reason);
+    } else {
+        store(i, o.p, o.v);
+    }
+}
+
+// As step_dp, with the moon-radius rule (ICR-006): a particle whose path comes
+// within the radius of moon k, in any drift of the block, is dropped with
+// reason 2 + k and not stored. Table rows n and n + 1 hold the moons at the
+// sync times at the start and at the end of the block.
+@compute @workgroup_size(WG_SIZE)
+fn step_dp_r(@builtin(global_invocation_id) id: vec3<u32>, @builtin(num_workgroups) nw: vec3<u32>) {
+    ds_one = prm_one();
+    let i = id.y * nw.x * u32(WG_SIZE) + id.x;
+    if (i >= prm_n_particles()) { return; }
+    if (is_dropped(i)) { return; }
+    let n = prm_n_steps();
+    let h = prm_h();
+    let half = prm_half();
+    let p0 = load_p(i);
+    rule_start(n, p0);
+    var o = drift_d(p0, load_v(i), half);
+    var ok = o.ok;
+    var reason = 0u;
+    if (ok) {
+        let hit = rule_step(0u, o.p);
+        if (hit != 0u) { reason = hit + 1u; }
+    }
+    for (var k = 0u; k < n; k++) {
+        if (!ok || reason != 0u) { break; }
+        let v = kick_dir_plus(k, o.p, o.v);
+        var dt = h;
+        var row = k + 1u;
+        if (k + 1u == n) { dt = half; row = n + 1u; }
+        o = drift_d(o.p, v, dt);
+        ok = ok && o.ok;
+        if (ok) {
+            let hit = rule_step(row, o.p);
+            if (hit != 0u) { reason = hit + 1u; }
+        }
+    }
+    if (!ok) {
+        drop_particle(i, 1u);
+    } else if (reason != 0u) {
+        drop_particle(i, reason);
+    } else {
+        store(i, o.p, o.v);
+    }
 }
 
 @compute @workgroup_size(WG_SIZE)
@@ -495,4 +659,28 @@ fn t_kick_dir_plus(@builtin(global_invocation_id) id: vec3<u32>, @builtin(num_wo
     if (i >= prm_n_particles()) { return; }
     let p = load_p(i);
     store(i, p, kick_dir_plus(0u, p, load_v(i)));
+}
+
+
+// ICR-006 test entry points. t_moon_rel: p - m for moon 0 of table row 0, in vx, vy, vz (hi).
+@compute @workgroup_size(WG_SIZE)
+fn t_moon_rel(@builtin(global_invocation_id) id: vec3<u32>, @builtin(num_workgroups) nw: vec3<u32>) {
+    ds_one = prm_one();
+    let i = id.y * nw.x * u32(WG_SIZE) + id.x;
+    if (i >= prm_n_particles()) { return; }
+    let p = load_p(i);
+    let r = moon_rel(0u, 0u, p);
+    store(i, p, V3(vec2<f32>(r.x, 0.0), vec2<f32>(r.y, 0.0), vec2<f32>(r.z, 0.0)));
+}
+
+// t_segment_min: a = hi of (x, y, z), b = hi of (vx, vy, vz); result in vx.
+@compute @workgroup_size(WG_SIZE)
+fn t_segment_min(@builtin(global_invocation_id) id: vec3<u32>, @builtin(num_workgroups) nw: vec3<u32>) {
+    ds_one = prm_one();
+    let i = id.y * nw.x * u32(WG_SIZE) + id.x;
+    if (i >= prm_n_particles()) { return; }
+    let p = load_p(i);
+    let v = load_v(i);
+    let d2 = seg_min_d2(v3_hi(p), v3_hi(v));
+    store(i, p, V3(vec2<f32>(d2, 0.0), z2(), z2()));
 }

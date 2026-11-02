@@ -28,6 +28,35 @@ pub const DEFAULT_WORKGROUP: u32 = 64;
 /// `status[0]` when no particle failed.
 pub const NO_FAILURE: u32 = u32::MAX;
 
+/// Words before the per-particle reasons in the status buffer (ICR-006):
+/// word 0 is the smallest index of a dropped particle (or [`NO_FAILURE`]),
+/// word 1 the number dropped for an unbound or invalid orbit, and words 2 to 7
+/// the number dropped inside moon 0 to 5. The kernels take at most 4 moons
+/// ([`crate::wh::MAX_MOONS`]), so words 6 and 7 stay reserved.
+pub const STATUS_HEADER_WORDS: usize = 8;
+/// Drop reason of a live particle (word `8 + i` of the status buffer).
+pub const REASON_LIVE: u32 = 0;
+/// Drop reason: unbound or invalid orbit.
+pub const REASON_UNBOUND: u32 = 1;
+
+/// Drop reason: inside moon `k` (the moon order of the `System`).
+pub const fn reason_inside_moon(k: u32) -> u32 {
+    2 + k
+}
+
+/// Number of `u32` words of the status buffer for `cap` particles.
+pub const fn status_words(cap: usize) -> usize {
+    STATUS_HEADER_WORDS + cap
+}
+
+/// The initial contents of the status buffer: word 0 is [`NO_FAILURE`], all
+/// other words are 0.
+pub fn status_init_bytes(cap: usize) -> Vec<u8> {
+    let mut b = vec![0u8; 4 * status_words(cap)];
+    b[..4].copy_from_slice(&NO_FAILURE.to_le_bytes());
+    b
+}
+
 /// Compiled shader module and layout of the production kernels.
 #[derive(Clone)]
 pub struct WhKernels {
@@ -254,8 +283,8 @@ impl WhKernels {
             0,
             &ubytes(&crate::wh::control(n_steps, n, cap, n_moons)),
         );
-        let status_buf = mk(4, rw);
-        q.write_buffer(&status_buf, 0, &NO_FAILURE.to_le_bytes());
+        let status_buf = mk((4 * status_words(cap)) as u64, rw);
+        q.write_buffer(&status_buf, 0, &status_init_bytes(cap));
         let bind = self.bind_group(&state_buf, &table_buf, &prm_buf, &ctl_buf, &status_buf);
         let pipe = self.pipeline(name);
         q.submit([]);

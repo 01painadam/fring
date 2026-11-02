@@ -80,3 +80,32 @@ pub fn ensemble(system: &System, n: usize) -> (InitialState, Vec<usize>) {
         kinds,
     )
 }
+
+/// Copies a buffer to the host (blocking; for tests).
+pub fn read_buffer(gpu: &fring_gpu::gpu::Gpu, buf: &wgpu::Buffer) -> Vec<u8> {
+    let d = gpu.device();
+    let stage = d.create_buffer(&wgpu::BufferDescriptor {
+        label: None,
+        size: buf.size(),
+        usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+        mapped_at_creation: false,
+    });
+    let mut enc = d.create_command_encoder(&Default::default());
+    enc.copy_buffer_to_buffer(buf, 0, &stage, 0, buf.size());
+    gpu.queue().submit([enc.finish()]);
+    stage.map_async(wgpu::MapMode::Read, .., |r| r.expect("map failed"));
+    d.poll(wgpu::PollType::wait_indefinitely()).expect("poll");
+    let v = stage.get_mapped_range(..).expect("range").to_vec();
+    stage.unmap();
+    v
+}
+
+/// FNV-1a 64-bit hash of bytes (for the golden-bits tests).
+pub fn fnv1a(bytes: &[u8]) -> u64 {
+    let mut h = 0xcbf2_9ce4_8422_2325_u64;
+    for b in bytes {
+        h ^= u64::from(*b);
+        h = h.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    h
+}
