@@ -52,7 +52,7 @@ Rules (full text in `AGENTS.md` and `CLAUDE.md`):
 
 | ID | Task | Role | Status | Branch | Blocked by |
 |---|---|---|---|---|---|
-| W1 | `fring-web` scaffold: wasm32 + WebGPU, particles in the rotating frame | A7 | todo | | Gate G2 |
+| W1 | `fring-web` scaffold: wasm32 + WebGPU, particles in the rotating frame | A7 | done | ws/a7-w1 | Gate G2 |
 | W2 | Live test-particle mode, about 10⁵ particles, controls, static deploy | A7 | todo | | W1 |
 | A2-ANALYSIS | Pandora close approaches; chaos map of core-like eccentric orbits (gate G2 follow-up; does not block gate G3) | A8 | todo | | Gate G2 |
 | L3 | Moon masses and elements in `params/` against GR03: do they explain the factor 1.4 in the Lyapunov rate? (gate G2 follow-up; does not block gate G3) | A1 | todo | | Gate G2 |
