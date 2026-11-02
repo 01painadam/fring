@@ -11,9 +11,10 @@
 //! compiles the kernels, builds the moon ephemeris and makes the stepper.
 
 use crate::live::{
-    BLOCK_STEPS, Band, END_MARGIN_S, FLOATS_PER_INSTANCE, Governor, MAX_IN_FLIGHT, PANDORA,
-    PARTICLE_COUNT, ProjectionUniform, SPAN_S, STEP_S, Setup, StepPlanner, ViewFrame, count_fits,
-    head_instances, instance_bytes, max_hours_for, ref_bytes, view_transform,
+    BLOCK_STEPS, Band, COLOUR_FAINT_OFFSET, CompareMode, END_MARGIN_S, FLOATS_PER_INSTANCE,
+    Governor, MAX_IN_FLIGHT, PANDORA, PARTICLE_COUNT, ProjectionUniform, SPAN_S, STEP_S, Setup,
+    StepPlanner, ViewFrame, count_fits, head_instances_styled, instance_bytes, max_hours_for,
+    ref_base_slot, ref_bytes, view_transform,
 };
 use crate::view::Camera;
 use fring_gpu::gpu::Gpu;
@@ -76,6 +77,13 @@ pub struct App {
     project_bind: Option<wgpu::BindGroup>,
     // Reference picture: a copy of planes 0 and 1 (x, y) of the state, with its time.
     ref_buffer: Option<wgpu::Buffer>,
+    /// Own uniform and bind group for the projection of the reference (a
+    /// second `write_buffer` to the live uniform would overwrite the first).
+    ref_uniform: wgpu::Buffer,
+    ref_bind: Option<wgpu::BindGroup>,
+    /// Instances in the head of the reference picture (written each frame).
+    ref_head_n: usize,
+    compare: CompareMode,
     /// Time of the reference state, s.
     ref_time_s: f64,
     /// True after "Set to now": the reference is not the initial state.
@@ -263,6 +271,12 @@ impl App {
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
+        let ref_uniform = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("project reference"),
+            size: 48,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
         let status_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("status read-back"),
             size: 4,
@@ -290,6 +304,10 @@ impl App {
             project_uniform,
             project_bind: None,
             ref_buffer: None,
+            ref_uniform,
+            ref_bind: None,
+            ref_head_n: 0,
+            compare: CompareMode::Off,
             ref_time_s: 0.0,
             ref_custom: false,
             ref_pending: false,
@@ -455,6 +473,13 @@ impl App {
         self.camera.zoom_about(x_px, y_px, factor, size);
     }
 
+    /// Compare control: 0 off, 1 side by side, 2 overlay.
+    pub fn set_compare(&mut self, index: u32) -> Result<(), JsValue> {
+        self.compare = CompareMode::from_index(index)
+            .ok_or_else(|| err(format!("no compare mode {index}")))?;
+        Ok(())
+    }
+
     /// Stores the current live state as the new reference (a copy on the GPU,
     /// no read-back). The copy happens at the start of the next frame, before
     /// that frame's steps, so the reference time is the time shown now.
@@ -587,6 +612,7 @@ impl App {
         // Free the old buffers first, so that the peak memory is one run.
         self.stepper = None;
         self.project_bind = None;
+        self.ref_bind = None;
         if self.instances_n != self.count {
             self.instances = self.device.create_buffer(&wgpu::BufferDescriptor {
                 label: Some("instances"),
@@ -645,6 +671,26 @@ impl App {
                 });
             encoder.copy_buffer_to_buffer(stepper.state_buffer(), 0, reference, 0, want);
             self.queue.submit([encoder.finish()]);
+        }
+        if let Some(reference) = &self.ref_buffer {
+            self.ref_bind = Some(self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("project reference"),
+                layout: &self.project_pipeline.get_bind_group_layout(0),
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: reference.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: self.instances.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: self.ref_uniform.as_entire_binding(),
+                    },
+                ],
+            }));
         }
         self.ref_time_s = stepper.time_s();
         let lost = self.ref_custom;
@@ -760,13 +806,15 @@ impl App {
             let t = stepper.time_s();
             let moons = self.setup.moon_positions(full, t).map_err(err)?;
             let view = view_transform(self.view, self.setup.n0_rad_s(), t, &moons);
-            head_n = head_instances(
+            head_n = head_instances_styled(
                 &self.setup,
                 &view,
                 self.camera.centre_km,
                 px_per_km,
                 &moons,
                 self.pandora_on,
+                true,
+                0.0,
                 &mut self.scratch,
             );
             floats_to_le_bytes(&self.scratch, &mut self.bytes);
@@ -784,6 +832,48 @@ impl App {
                 let mut pass = encoder.begin_compute_pass(&Default::default());
                 pass.set_pipeline(&self.project_pipeline);
                 pass.set_bind_group(0, bind, &[]);
+                pass.dispatch_workgroups((stepper.len() as u32).div_ceil(64), 1, 1);
+            }
+            // The reference picture, at its own time (frame angle and moons).
+            // Not encoded at all when Compare is off.
+            self.ref_head_n = 0;
+            if self.compare != CompareMode::Off
+                && let Some(ref_bind) = &self.ref_bind
+            {
+                let t_ref = self.ref_time_s;
+                let ref_moons = self.setup.moon_positions(full, t_ref).map_err(err)?;
+                let ref_view = view_transform(self.view, self.setup.n0_rad_s(), t_ref, &ref_moons);
+                let overlay = self.compare == CompareMode::Overlay;
+                self.ref_head_n = head_instances_styled(
+                    &self.setup,
+                    &ref_view,
+                    self.camera.centre_km,
+                    px_per_km,
+                    &ref_moons,
+                    self.pandora_on,
+                    !overlay,
+                    if overlay { COLOUR_FAINT_OFFSET } else { 0.0 },
+                    &mut self.scratch,
+                );
+                floats_to_le_bytes(&self.scratch, &mut self.bytes);
+                let base = ref_base_slot(self.count);
+                self.queue.write_buffer(
+                    &self.instances,
+                    u64::from(base) * (FLOATS_PER_INSTANCE * 4) as u64,
+                    &self.bytes,
+                );
+                let u_ref = ProjectionUniform::new(
+                    &ref_view,
+                    self.camera.centre_km,
+                    stepper.len() as u32,
+                    stepper.capacity() as u32,
+                    base + self.ref_head_n as u32,
+                );
+                self.queue
+                    .write_buffer(&self.ref_uniform, 0, &u_ref.to_bytes());
+                let mut pass = encoder.begin_compute_pass(&Default::default());
+                pass.set_pipeline(&self.project_pipeline);
+                pass.set_bind_group(0, ref_bind, &[]);
                 pass.dispatch_workgroups((stepper.len() as u32).div_ceil(64), 1, 1);
             }
             // B: about once a second, copy the failure flag for a later frame.

@@ -11,9 +11,10 @@ Done when: the three modes and "Set to now" work in Chrome on the Mac mini; the 
 - Commit 2: `App::set_particle_count` (pre-check `count_fits`, instances buffer sized by count, old buffers freed first, speed clamp by `max_hours_for`); native test `one_million_particles_fit_and_run`. Note: the workgroup size is 64, so 10^6 particles give cap 1,000,000 (state 48 MB, reference 16 MB, instances 32 MB).
 - Commit 3: `index.html`: Particles select (the old band select is now labelled Band), message before the rebuild, speed readout shows the limit.
 - Commit 4: `App::set_reference_now` (copy of planes 0 and 1, 16*cap bytes, before the steps of the next frame), reference buffer made and filled at every `make_stepper` (t = 0), `ref_time_s`; message when a "Set to now" reference is lost; native test `reference_copy_is_the_state_at_the_time_of_the_copy`.
+- Commit 5: second projection pass for the reference (own uniform and bind group, own time for the frame angle and moons, written into the second half of the instance buffer), skipped when Compare is Off; `App::set_compare`; native test `reference_projection_matches_the_twin_in_the_second_half_of_the_buffer` (26 particles within 500 km, worst error 0.151 of the tolerance, non-zero low words).
 
 ## Next step (one concrete action)
-Commit 5: project the reference with its own uniform buffer, bind group and time (`web.rs`), only when Compare is not Off; add the projection check to `tests/compare_gpu.rs`.
+Commit 6: draw the faint reference in Overlay (`points.wgsl` ids >= 10, `web.rs` draw order) and add the Compare select to `index.html` (Off, Overlay for now).
 
 ## How to verify the current state
 `cargo test -p fring-web` (host tests pass); `cargo check -p fring-web --target wasm32-unknown-unknown`.
