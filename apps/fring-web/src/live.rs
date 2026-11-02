@@ -899,27 +899,29 @@ mod tests {
 
     #[test]
     fn buffer_sizes_at_one_million_particles() {
-        let cap = capacity_for(1_000_000, 128);
-        assert_eq!(cap, 1_000_064);
-        assert_eq!(state_bytes(cap), 48_003_072);
-        assert_eq!(ref_bytes(cap), 16_001_024);
+        let cap = capacity_for(1_000_000, 64);
+        assert_eq!(cap, 1_000_000);
+        assert_eq!(state_bytes(cap), 48_000_000);
+        assert_eq!(ref_bytes(cap), 16_000_000);
         assert_eq!(ref_bytes(cap) % 4, 0, "copy_buffer_to_buffer alignment");
         assert_eq!(instance_bytes(1_000_000), 32_000_128);
         assert_eq!(ref_base_slot(1_000_000), 1_000_004);
+        // A count that is not a multiple of the workgroup size is padded.
+        assert_eq!(capacity_for(100_001, 64), 100_032);
         let (bind, buf) = (128 << 20, 256 << 20);
-        assert!(count_fits(1_000_000, 128, bind, buf, 65_535).is_ok());
+        assert!(count_fits(1_000_000, 64, bind, buf, 65_535).is_ok());
     }
 
     #[test]
     fn count_that_does_not_fit_gives_a_message() {
-        let msg = count_fits(1_000_000, 128, 32_000_000, 256 << 20, 65_535).unwrap_err();
+        let msg = count_fits(1_000_000, 64, 32_000_000, 256 << 20, 65_535).unwrap_err();
         assert!(
             msg.contains("1000000 particles") && msg.contains("state"),
             "{msg}"
         );
-        assert!(count_fits(10_000, 128, 32_000_000, 256 << 20, 65_535).is_ok());
+        assert!(count_fits(10_000, 64, 32_000_000, 256 << 20, 65_535).is_ok());
         // Too many workgroups for one dispatch.
-        assert!(count_fits(1_000_000, 128, u64::MAX, u64::MAX, 1000).is_err());
+        assert!(count_fits(1_000_000, 64, u64::MAX, u64::MAX, 1000).is_err());
     }
 
     #[test]

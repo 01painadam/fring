@@ -8,9 +8,10 @@ Done when: the three modes and "Set to now" work in Chrome on the Mac mini; the 
 
 ## Done
 - Commit 1: pure helpers in `live.rs` (compare mode, count list, speed limit from one budget constant, buffer sizes, `count_fits`, faint head instances), with host tests.
+- Commit 2: `App::set_particle_count` (pre-check `count_fits`, instances buffer sized by count, old buffers freed first, speed clamp by `max_hours_for`); native test `one_million_particles_fit_and_run`. Note: the workgroup size is 64, so 10^6 particles give cap 1,000,000 (state 48 MB, reference 16 MB, instances 32 MB).
 
 ## Next step (one concrete action)
-Commit 2: make the particle count a run-time setting in `web.rs` (instances buffer sized by count, rebuild path).
+Commit 3: add the Particles select and the speed-limit readout to `index.html` (calls `app.set_particle_count`, shows `app.max_speed_hours_per_s()`).
 
 ## How to verify the current state
 `cargo test -p fring-web` (host tests pass); `cargo check -p fring-web --target wasm32-unknown-unknown`.

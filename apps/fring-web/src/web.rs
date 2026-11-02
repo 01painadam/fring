@@ -12,8 +12,8 @@
 
 use crate::live::{
     BLOCK_STEPS, Band, END_MARGIN_S, FLOATS_PER_INSTANCE, Governor, MAX_IN_FLIGHT, PANDORA,
-    PARTICLE_COUNT, ProjectionUniform, SPAN_S, STEP_S, Setup, StepPlanner, ViewFrame,
-    head_instances, view_transform,
+    PARTICLE_COUNT, ProjectionUniform, SPAN_S, STEP_S, Setup, StepPlanner, ViewFrame, count_fits,
+    head_instances, instance_bytes, max_hours_for, view_transform,
 };
 use crate::view::Camera;
 use fring_gpu::gpu::Gpu;
@@ -68,6 +68,8 @@ pub struct App {
     uniform: wgpu::Buffer,
     bind_group: wgpu::BindGroup,
     instances: wgpu::Buffer,
+    /// Particle count that `instances` was sized for.
+    instances_n: u32,
     // Projection of the double-single state into `instances`.
     project_pipeline: wgpu::ComputePipeline,
     project_uniform: wgpu::Buffer,
@@ -79,6 +81,8 @@ pub struct App {
     kernels: Option<WhKernels>,
     stepper: Option<GpuStepper>,
     pandora_on: bool,
+    /// Number of particles of the running (or next) stepper.
+    count: u32,
     band: Band,
     view: ViewFrame,
     camera: Camera,
@@ -225,7 +229,7 @@ impl App {
         // vertex buffer and a storage buffer.
         let instances = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("instances"),
-            size: ((4 + PARTICLE_COUNT as usize) * FLOATS_PER_INSTANCE * 4) as u64,
+            size: instance_bytes(PARTICLE_COUNT),
             usage: wgpu::BufferUsages::VERTEX
                 | wgpu::BufferUsages::STORAGE
                 | wgpu::BufferUsages::COPY_DST,
@@ -273,6 +277,7 @@ impl App {
             uniform,
             bind_group,
             instances,
+            instances_n: PARTICLE_COUNT,
             project_pipeline,
             project_uniform,
             project_bind: None,
@@ -282,6 +287,7 @@ impl App {
             kernels: None,
             stepper: None,
             pandora_on: true,
+            count: PARTICLE_COUNT,
             band,
             view,
             camera,
@@ -463,7 +469,38 @@ impl App {
 
     /// Number of particles.
     pub fn particle_count(&self) -> u32 {
-        PARTICLE_COUNT
+        self.count
+    }
+
+    /// The fastest speed (simulated hours per real second) that the compute
+    /// budget allows for the current particle count.
+    pub fn max_speed_hours_per_s(&self) -> f64 {
+        max_hours_for(self.count)
+    }
+
+    /// Sets the number of particles and starts again from t = 0. A count that
+    /// does not fit the device is an error and changes nothing. Blocks for the
+    /// time that the initial state takes (the page shows a message first).
+    pub fn set_particle_count(&mut self, count: u32) -> Result<(), JsValue> {
+        let l = &self.gpu.limits;
+        count_fits(
+            count,
+            DEFAULT_WORKGROUP,
+            l.max_storage_buffer_binding_size,
+            l.max_buffer_size,
+            l.max_compute_workgroups_per_dimension,
+        )
+        .map_err(err)?;
+        self.setup.initial(self.band, count).map_err(err)?;
+        let old = self.count;
+        self.count = count;
+        if let Err(e) = self.restart() {
+            // Go back to the old count (best effort) and say what went wrong.
+            self.count = old;
+            let _ = self.restart();
+            return Err(e);
+        }
+        Ok(())
     }
 
     /// Width of the view in km.
@@ -522,7 +559,21 @@ impl App {
             return Ok(());
         };
         let system = self.setup.system(full, self.pandora_on);
-        let init = self.setup.initial(self.band, PARTICLE_COUNT)?;
+        let init = self.setup.initial(self.band, self.count)?;
+        // Free the old buffers first, so that the peak memory is one run.
+        self.stepper = None;
+        self.project_bind = None;
+        if self.instances_n != self.count {
+            self.instances = self.device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("instances"),
+                size: instance_bytes(self.count),
+                usage: wgpu::BufferUsages::VERTEX
+                    | wgpu::BufferUsages::STORAGE
+                    | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            });
+            self.instances_n = self.count;
+        }
         let stepper = GpuStepper::new(
             &self.gpu,
             kernels,
@@ -589,9 +640,11 @@ impl App {
         let (mut restart, mut steps) = (false, 0u64);
         let in_flight = self.in_flight.load(Ordering::Acquire);
         if let (Some(stepper), Some(full)) = (&self.stepper, &self.full) {
-            let (planned, limited) = self
-                .planner
-                .plan(dt_s, self.hours_per_s, self.governor.cap());
+            let (planned, limited) = self.planner.plan(
+                dt_s,
+                self.hours_per_s.min(max_hours_for(self.count)),
+                self.governor.cap(),
+            );
             let running = !self.paused && self.failed_index.is_none();
             let busy = in_flight >= MAX_IN_FLIGHT;
             steps = if running && !busy { planned } else { 0 };
