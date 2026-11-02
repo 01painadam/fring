@@ -52,10 +52,11 @@ pub const MAX_STEPS_PER_FRAME: u64 = 200;
 /// Frames of GPU work that may be queued before the page stops stepping.
 pub const MAX_IN_FLIGHT: u32 = 2;
 /// Compute budget of the integrator, particle-steps per second. Source: the
-/// W2-GPU benchmark (mode Dp, about 9.5e8 particle-steps/s on the Mac mini),
-/// with 30 % of the frame kept for rendering, so about 6.6e8. The speed limit
-/// for a particle count follows from it ([`max_hours_for`]).
-pub const COMPUTE_BUDGET_PARTICLE_STEPS_PER_S: f64 = 6.6e8;
+/// W2-DROP-GPU benchmark (mode Dp with the moon-radius rule on, 7.9e8 to 8.3e8
+/// particle-steps/s on the Mac mini), with 30 % of the frame kept for
+/// rendering, so about 5.5e8. The speed limit for a particle count follows from
+/// it ([`max_hours_for`]).
+pub const COMPUTE_BUDGET_PARTICLE_STEPS_PER_S: f64 = 5.5e8;
 /// The particle counts that the page offers.
 pub const PARTICLE_COUNTS: [u32; 4] = [10_000, 100_000, 300_000, 1_000_000];
 /// Added to the colour id of an instance that belongs to the faint reference
@@ -484,7 +485,7 @@ impl CompareMode {
 
 /// The fastest speed (simulated hours per real second) that the compute budget
 /// allows for `count` particles: `min(500, budget * 360 s / 3600 s / count)`.
-/// This is 500 h/s at 10^5, 220 h/s at 3x10^5 and 66 h/s at 10^6.
+/// This is 500 h/s at 10^5, 183 h/s at 3x10^5 and 55 h/s at 10^6.
 pub fn max_hours_for(count: u32) -> f64 {
     let h = COMPUTE_BUDGET_PARTICLE_STEPS_PER_S * STEP_S / 3600.0 / f64::from(count.max(1));
     h.clamp(MIN_HOURS_PER_S, MAX_HOURS_PER_S)
@@ -890,8 +891,8 @@ mod tests {
     fn speed_limit_follows_the_compute_budget() {
         assert_eq!(max_hours_for(10_000), MAX_HOURS_PER_S);
         assert_eq!(max_hours_for(100_000), MAX_HOURS_PER_S);
-        assert!((max_hours_for(300_000) - 220.0).abs() < 1e-9);
-        assert!((max_hours_for(1_000_000) - 66.0).abs() < 1e-9);
+        assert!((max_hours_for(300_000) - 550.0 / 3.0).abs() < 1e-9);
+        assert!((max_hours_for(1_000_000) - 55.0).abs() < 1e-9);
         // 1 h/s is 10 steps/s, so the limit in particle-steps/s is the budget.
         let steps_per_s = max_hours_for(1_000_000) * 3600.0 / STEP_S;
         assert!((steps_per_s * 1e6 - COMPUTE_BUDGET_PARTICLE_STEPS_PER_S).abs() < 1.0);
