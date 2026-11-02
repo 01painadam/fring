@@ -13,7 +13,7 @@
 use crate::live::{
     BLOCK_STEPS, Band, END_MARGIN_S, FLOATS_PER_INSTANCE, Governor, MAX_IN_FLIGHT, PANDORA,
     PARTICLE_COUNT, ProjectionUniform, SPAN_S, STEP_S, Setup, StepPlanner, ViewFrame, count_fits,
-    head_instances, instance_bytes, max_hours_for, view_transform,
+    head_instances, instance_bytes, max_hours_for, ref_bytes, view_transform,
 };
 use crate::view::Camera;
 use fring_gpu::gpu::Gpu;
@@ -74,6 +74,14 @@ pub struct App {
     project_pipeline: wgpu::ComputePipeline,
     project_uniform: wgpu::Buffer,
     project_bind: Option<wgpu::BindGroup>,
+    // Reference picture: a copy of planes 0 and 1 (x, y) of the state, with its time.
+    ref_buffer: Option<wgpu::Buffer>,
+    /// Time of the reference state, s.
+    ref_time_s: f64,
+    /// True after "Set to now": the reference is not the initial state.
+    ref_custom: bool,
+    /// "Set to now" was asked; the next frame does the copy.
+    ref_pending: bool,
     // Simulation.
     phase: Phase,
     setup: Setup,
@@ -281,6 +289,10 @@ impl App {
             project_pipeline,
             project_uniform,
             project_bind: None,
+            ref_buffer: None,
+            ref_time_s: 0.0,
+            ref_custom: false,
+            ref_pending: false,
             phase: Phase::SelfTesting(Box::new(self_test)),
             setup,
             full: None,
@@ -443,6 +455,18 @@ impl App {
         self.camera.zoom_about(x_px, y_px, factor, size);
     }
 
+    /// Stores the current live state as the new reference (a copy on the GPU,
+    /// no read-back). The copy happens at the start of the next frame, before
+    /// that frame's steps, so the reference time is the time shown now.
+    pub fn set_reference_now(&mut self) {
+        self.ref_pending = true;
+    }
+
+    /// Time of the reference state in days (0 after every restart).
+    pub fn reference_time_days(&self) -> f64 {
+        self.ref_time_s / 86_400.0
+    }
+
     /// Simulated time in days (the time of the particle state).
     pub fn time_days(&self) -> f64 {
         self.stepper.as_ref().map_or(0.0, |s| s.time_s()) / 86_400.0
@@ -602,10 +626,38 @@ impl App {
                 },
             ],
         }));
+        // The reference is the new initial state (t = 0). It holds planes 0 and 1
+        // (x, y) only; a view that reads z would need plane 2 as well.
+        let want = ref_bytes(stepper.capacity() as u64);
+        if self.ref_buffer.as_ref().is_none_or(|b| b.size() != want) {
+            self.ref_buffer = Some(self.device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("reference"),
+                size: want,
+                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            }));
+        }
+        if let Some(reference) = &self.ref_buffer {
+            let mut encoder = self
+                .device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("reference at t = 0"),
+                });
+            encoder.copy_buffer_to_buffer(stepper.state_buffer(), 0, reference, 0, want);
+            self.queue.submit([encoder.finish()]);
+        }
+        self.ref_time_s = stepper.time_s();
+        let lost = self.ref_custom;
+        self.ref_custom = false;
+        self.ref_pending = false;
         self.stepper = Some(stepper);
         self.failed_index = None;
         self.planner = StepPlanner::new();
-        self.note.clear();
+        self.note = if lost {
+            "The reference was reset to t = 0.".to_string()
+        } else {
+            String::new()
+        };
         Ok(())
     }
 
@@ -660,8 +712,12 @@ impl App {
         }
         if restart {
             self.make_stepper().map_err(err)?;
-            self.note = "Reached the end of the 10-year moon ephemeris: started again from t = 0."
-                .to_string();
+            self.note = format!(
+                "Reached the end of the 10-year moon ephemeris: started again from t = 0. {}",
+                self.note
+            )
+            .trim_end()
+            .to_string();
             steps = 0;
         }
         self.steps_last = steps;
@@ -679,6 +735,22 @@ impl App {
         if let (Some(stepper), Some(full), Some(bind)) =
             (&mut self.stepper, &self.full, &self.project_bind)
         {
+            if self.ref_pending {
+                // Before this frame's steps: the reference is the state at the
+                // time that the page shows now.
+                if let Some(reference) = &self.ref_buffer {
+                    encoder.copy_buffer_to_buffer(
+                        stepper.state_buffer(),
+                        0,
+                        reference,
+                        0,
+                        ref_bytes(stepper.capacity() as u64),
+                    );
+                    self.ref_time_s = stepper.time_s();
+                    self.ref_custom = true;
+                }
+                self.ref_pending = false;
+            }
             if steps > 0
                 && let Err(e) = stepper.encode_steps(&mut encoder, steps)
             {
