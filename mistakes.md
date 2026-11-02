@@ -2,6 +2,28 @@
 
 Read this file at the start of a session. When a mistake costs time, add an entry so that no agent makes it twice. Newest first. Each entry: what happened, why, and the rule now.
 
+## 2026-11-02 (phase 2, A1-ANALYSIS)
+
+### M19. A0 read Kepler shear as chaos
+
+- **What:** at gate G1, A0 took the growth of a moon offset between years 1 and 12 (a factor of 11 to 25) as a Lyapunov rate of 0.22 to 0.29 per year, "as in the literature". A1-ANALYSIS showed that linear (shear) growth alone gives a factor of up to 12, which is ln(12)/11 = 0.23 per year. The plain rate L/t of a regular orbit falls only like ln(t)/t, and it was still 0.19 per year at 100 years. The converged rate (tangent vector, slope over years 30 to 100) is 0.22 per year in the 26 % of runs that are chaotic, and about 0.03 per year (not exponential) in the others.
+- **Rule:** a finite-time growth rate of an orbit separation is not a Lyapunov exponent. Compare it with the shear growth of a regular orbit (or use MEGNO, which gives 2 for linear growth), and fit the late-time slope of ln(d) only after the shear part is small.
+
+### M20. A shadow-orbit Lyapunov rate measured rounding noise
+
+- **What:** the first moon Lyapunov runs used shadow orbits with renormalisation. The rate depended on the start offset (0.95 per year at 1 cm, 0.09 at 100 m) and on the renormalisation interval. Rounding and restart noise in the radial direction grew by Kepler shear, and for a small offset it was larger than the real growth.
+- **Rule:** a Lyapunov estimate must not change with the offset d0 or the renormalisation interval. Show that it does not, or use the tangent (variational) vector, which has no difference of two orbits. The particle chaos indicator (ADR 0008) is on the d0 plateau, so it is not affected.
+
+### M21. IAS15 restarted with the running step was wrong by 10⁻⁴
+
+- **What:** `Ias15::new` restarted with the step of the running integration (1,500 s on a 52,000 s orbit) had a relative error of 10⁻⁴ in the first step.
+- **Rule:** start or restart IAS15 with a first step of about 1 % of the dynamical time, and let it adapt.
+
+### M22. The `a0_km` of `chaos.csv` is not the orbital radius
+
+- **What:** `a0_km` is the point-mass Keplerian semi-major axis (vis-viva with GM only). For a circular orbit near the core in J2 to J6 it is about 640 km larger than the orbital radius. A map against `a0_km` puts every particle in the wrong place.
+- **Rule:** for maps against radius, take the initial radius from the config (or recompute the initial states), not `a0_km`. `docs/snapshot-format.md` section 8a says this now.
+
 ## 2026-11-01 (phase 2)
 
 ### M17. A small sample hid the tail of an error distribution
