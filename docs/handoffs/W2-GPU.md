@@ -1,6 +1,6 @@
 # W2-GPU: GpuStepper, SelfTest, native-only blocking items
 Role: A3  Branch: ws/a3-w2-gpu  Status: review
-Updated: 2026-11-02 18:00
+Updated: 2026-11-02 17:13
 
 ## Goal and acceptance criteria
 ICR-005 items 1 to 5 in `crates/fring-gpu`. Done when: `GpuStepper` gives the same states, bit for bit, as `GpuBackend::step` (with and without moons and chaos); `SelfTest::submit` and `poll` give the same result as `self_test`; all existing tests pass; `cargo check -p fring-gpu --target wasm32-unknown-unknown` passes; `fring-bench` shows no slow-down.
@@ -11,6 +11,7 @@ ICR-005 items 1 to 5 in `crates/fring-gpu`. Done when: `GpuStepper` gives the sa
 - `cargo test --workspace`: 215 passed, 0 failed, 21 ignored. fmt and clippy clean.
 - `cargo test -p fring-gpu --release -- --ignored` (log `runs/logs/w2gpu-ignored.log`): all suites `ok`: chaos_done_when 1, done_when 1, gpu_backend 5, gpu_chaos 1, gpu_selftest 1, gpu_stepper 1, gpu_twins 1, gpu_wh 1.
 - `cargo check -p fring-gpu --target wasm32-unknown-unknown`: ok, also with `RUSTFLAGS="-D warnings"`.
+- A0 review (2026-11-02 17:13): commit 46fc3f1 runs `cargo fmt` (order of `pub mod stepper;` in `lib.rs`; `cargo fmt --check` failed before it). A0 ran the Definition of done on the pushed head: fmt, clippy, `cargo test --workspace` and the `--ignored` GPU tests give 227 passed, 0 failed (log `runs/logs/a0-review-w2gpu.log`); wasm32 check passes with and without `RUSTFLAGS="-D warnings"`. ICR-005 amendment item 4 lists the extra public items.
 - Bench (particle-steps/s, best of 3; CPU rows left out; `runs/bench/w2gpu-*.csv`):
 
 | backend | N | chaos | before 1 | before 2 | after | % vs mean before |
@@ -40,10 +41,10 @@ ICR-005 items 1 to 5 in `crates/fring-gpu`. Done when: `GpuStepper` gives the sa
 | gpu_c | 10000000 | false | 4.603e+08 | 4.619e+08 | 4.618e+08 | +0.1 |
 | gpu_c | 10000000 | true | 2.304e+08 | 2.233e+08 | 2.236e+08 | -1.4 |
 
-All changes are within run-to-run noise (before 1 against before 2 differ up to 1.3%).
+All changes are within run-to-run noise. Before 1 and before 2 differ by up to 3.2% (gpu_c, 10⁷, chaos: 2.304e+08 against 2.233e+08; A0 review corrected this from "1.3%"). The largest change, -1.4% on that row, is the mean of the two baselines against "after"; "after" is +0.1% against before 2.
 
 ## Next step (one concrete action)
-A0 reviews the branch and opens the pull request.
+A0 merges the W2-GPU pull request when CI is green on its head commit, then sets W2-GPU to `done` and starts W2 (A7).
 
 ## How to verify the current state
 ```sh
