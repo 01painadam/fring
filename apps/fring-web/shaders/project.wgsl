@@ -6,7 +6,7 @@
 //
 // Output: one vec4 per particle at instance index `first + i`:
 //   xy = position in the view plane, km, RELATIVE TO THE EYE,
-//   z  = disc diameter in pixels, w = colour id (0 = particle).
+//   z  = disc diameter in pixels (0 for a dropped particle), w = colour id (0 = particle).
 //
 // The host sends q = origin + R(-angle) eye as a double-single pair (f64 on the
 // host), so that the view position relative to the eye is R (p - q). The
@@ -38,6 +38,9 @@ struct Proj {
 @group(0) @binding(0) var<storage, read> state: array<f32>;
 @group(0) @binding(1) var<storage, read_write> inst: array<vec4<f32>>;
 @group(0) @binding(2) var<uniform> u: Proj;
+// ICR-006 status buffer (or a copy of it): word 8 + i is the drop reason of
+// particle i (0 live). A dropped particle is hidden: disc diameter 0.
+@group(0) @binding(3) var<storage, read> status: array<u32>;
 
 // A value that the compiler cannot see through: `select` with a condition that
 // is known only at run time (one < 0.5 is false). The compiler cannot move the
@@ -61,5 +64,6 @@ fn project(@builtin(global_invocation_id) gid: vec3<u32>) {
     let dy = dyh + (state[iy + 1u] - u.q_lo.y);
     let vx = u.rot.x * dx - u.rot.y * dy;
     let vy = u.rot.y * dx + u.rot.x * dy;
-    inst[u.first + i] = vec4<f32>(vx, vy, u.size_px, 0.0);
+    let live = status[8u + i] == 0u;
+    inst[u.first + i] = vec4<f32>(vx, vy, select(0.0, u.size_px, live), 0.0);
 }

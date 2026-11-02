@@ -199,7 +199,12 @@ fn reference_projection_matches_the_twin_in_the_second_half_of_the_buffer() {
     let bind = d.create_bind_group(&wgpu::BindGroupDescriptor {
         label: None,
         layout: &pipeline.get_bind_group_layout(0),
-        entries: &[entry(0, &reference), entry(1, &inst), entry(2, &uni)],
+        entries: &[
+            entry(0, &reference),
+            entry(1, &inst),
+            entry(2, &uni),
+            entry(3, st.status_buffer()),
+        ],
     });
     let mut enc = d.create_command_encoder(&Default::default());
     {
