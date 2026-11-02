@@ -14,6 +14,7 @@ pub mod layout;
 pub mod meta;
 pub mod moons;
 pub mod stats;
+pub mod sysinfo;
 
 pub use chaos::{CHAOS_COLUMNS, CHAOS_VERSION, ChaosRow, read_chaos_csv, write_chaos_csv};
 
