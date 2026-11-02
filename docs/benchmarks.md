@@ -74,16 +74,23 @@ Ratios (N = 10^6 to 10^7): D+ is 2.0 times faster than C and 0.86 times as fast 
 
 ## Comparison with the PLAN section 11 targets
 
-Test particles, no collisions yet. The targets are for an 8 h run of 1.8 x 10^6 steps (30 years at 100 steps per orbit).
+Test particles, no collisions yet. PLAN section 11 sets the targets for an 8 h (28,800 s) run of 30 years (about 18,000 orbits) at 100 steps per orbit: 1.8 x 10^6 steps. The production step is 150 steps per orbit (gate G1), so a 30-year run has 2.7 x 10^6 steps and needs 1.5 times the PLAN rate. The table uses the production step.
 
-| Target | Needed (particle-steps/s) | GPU D+, chaos off | GPU D+, chaos on | GPU C, chaos off | CPU f64 |
+| Target (150 steps per orbit) | Needed (particle-steps/s) | GPU D+, chaos off | GPU D+, chaos on | GPU C, chaos off | CPU f64 |
 |---|---:|---:|---:|---:|---:|
-| Must: 10^6 superparticles | 6 x 10^7 | 9.57 x 10^8 (16 times) | 4.72 x 10^8 (7.9 times) | 4.76 x 10^8 (7.9 times) | 6.78 x 10^7 (1.1 times) |
-| Stretch: 10^7 superparticles | 6 x 10^8 | 9.22 x 10^8 (1.5 times) | 4.56 x 10^8 (0.76 times) | 4.61 x 10^8 (0.77 times) | 6.33 x 10^7 (0.11 times) |
+| Must: 10^6 superparticles | 9.4 x 10^7 | 9.57 x 10^8 (10 times) | 4.72 x 10^8 (5.0 times) | 4.76 x 10^8 (5.1 times) | 6.78 x 10^7 (0.72 times) |
+| Stretch: 10^7 superparticles | 9.4 x 10^8 | 9.22 x 10^8 (0.98 times) | 4.56 x 10^8 (0.49 times) | 4.61 x 10^8 (0.49 times) | 6.33 x 10^7 (0.07 times) |
 
-- **Must:** met by a wide margin for test particles. 1.8 x 10^12 particle-steps at 9.57 x 10^8 per second is 1,880 s (31 minutes) of an 8 h budget. Collisions will use part of the rest.
-- **Stretch:** met with the indicator off (1.8 x 10^13 particle-steps in 19,500 s, 5.4 h), but not with it on (0.76 times; 11 h). Mode C is also below it.
-- The CPU backend reaches the must target at N = 10^6 only just, so it is a reference and a test tool, not a production path.
+Run time of 30 years at 150 steps per orbit (2.7 x 10^12 particle-steps for 10^6 particles, 2.7 x 10^13 for 10^7):
+
+| N | GPU D+, chaos off | GPU D+, chaos on |
+|---|---:|---:|
+| 10^6 | 2,820 s (47 min) | 5,720 s (1.6 h) |
+| 10^7 | 29,300 s (8.1 h) | 59,200 s (16.4 h) |
+
+- **Must:** met by a wide margin for test particles (10 times with D+, 5 times with the chaos indicator or mode C). Collisions will use part of the rest.
+- **Stretch:** just missed with D+ and the indicator off (8.1 h against 8 h). At the PLAN's 100 steps per orbit it would be met (5.4 h). With the indicator on, or with mode C, it takes about 16 h. The step review at S1 (150 against 300 steps per orbit, gate G1) also affects this target.
+- **CPU:** below the must target at the production step (0.72 times; it would be 1.1 times at 100 steps per orbit). It is a reference and a test tool, not a production path.
 - Collisions are not in these numbers. Re-run `fring-bench` when the collision kernels (A4) are in.
 
 ## Memory
