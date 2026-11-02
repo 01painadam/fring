@@ -42,7 +42,16 @@
     <button id="reset" type="button">Reset view</button>
   </div>
   <div class="row">
-    <label for="preset">Particles</label>
+    <label for="count">Particles</label>
+    <select id="count" autocomplete="off">
+      <option value="10000">10 000</option>
+      <option value="100000" selected>100 000</option>
+      <option value="300000">300 000</option>
+      <option value="1000000">1 000 000</option>
+    </select>
+  </div>
+  <div class="row">
+    <label for="preset">Band</label>
     <select id="preset" autocomplete="off">
       <option value="0">Core (narrow)</option>
       <option value="1">Band (circular, a0 +- a0 e)</option>
@@ -82,7 +91,7 @@
     <span><span class="dot" style="background:#ff9e33"></span>Prometheus</span>
     <span><span class="dot" style="background:#73f28c"></span>Pandora</span>
   </div>
-  <p class="note">100 000 test particles run live on your GPU (Wisdom-Holman, double-single arithmetic), pulled by Saturn (J2 to J6) and by the moons from a 10-year integration of the real moon orbits. Time starts at 1 January 2008. Seen from the north: orbits go anticlockwise. Inertial: fixed camera; the core goes round once in 14.85 h. Rotating: the camera turns with the core (mean motion n0), so the core stays still and the outer material falls behind. Moon views: the moon stays at the centre, Saturn is straight down. "Pandora pulls" switches off only Pandora's pull on the particles; Prometheus keeps its real path and Pandora's dot is hidden. Changing the particles or Pandora starts again from t = 0. Below about 6 h/s the motion is stepwise (one 360 s step every few frames). Drag to move, scroll to zoom.</p>
+  <p class="note">Test particles (10 000 to 1 000 000, your choice) run live on your GPU (Wisdom-Holman, double-single arithmetic), pulled by Saturn (J2 to J6) and by the moons from a 10-year integration of the real moon orbits. Time starts at 1 January 2008. Seen from the north: orbits go anticlockwise. Inertial: fixed camera; the core goes round once in 14.85 h. Rotating: the camera turns with the core (mean motion n0), so the core stays still and the outer material falls behind. Moon views: the moon stays at the centre, Saturn is straight down. "Pandora pulls" switches off only Pandora's pull on the particles; Prometheus keeps its real path and Pandora's dot is hidden. Changing the number of particles, the band or Pandora starts again from t = 0. At more than 100 000 particles the top speed is lower (the readout shows the limit). Below about 6 h/s the motion is stepwise (one 360 s step every few frames). Drag to move, scroll to zoom.</p>
   <p class="note" id="adapter"></p>
 </div>
 
@@ -135,12 +144,28 @@
     const setSpeed = () => {
       const h = Math.pow(10, parseFloat($("speed").value));
       app.set_speed_hours_per_s(h);
-      $("speed-out").textContent = h < 24 ? h.toFixed(1) + " h/s" : (h / 24).toFixed(1) + " d/s";
+      const fmt = (x) => (x < 24 ? x.toFixed(1) + " h/s" : (x / 24).toFixed(1) + " d/s");
+      const top = app.max_speed_hours_per_s();
+      $("speed-out").textContent = h <= top ? fmt(h) : fmt(top) + " (limit)";
     };
     $("speed").addEventListener("input", setSpeed);
     if (bench) $("speed").value = "2.7";
     setSpeed();
 
+    // Particle count: the rebuild blocks the page for a moment, so the message
+    // is shown first and the rebuild starts after the next paint.
+    let rebuildMs = 0;
+    $("count").addEventListener("change", (e) => {
+      const n = parseInt(e.target.value, 10);
+      $("message").textContent = "Building " + n.toLocaleString("en-GB") + " particles...";
+      requestAnimationFrame(() => setTimeout(() => {
+        const t0 = performance.now();
+        tell(() => app.set_particle_count(n));
+        rebuildMs = performance.now() - t0;
+        $("count").value = String(app.particle_count());
+        setSpeed();
+      }, 0));
+    });
     const tell = (f) => { try { f(); $("message").textContent = ""; } catch (e) { $("message").textContent = String(e); } };
     let paused = false;
     $("pause").addEventListener("click", () => {
