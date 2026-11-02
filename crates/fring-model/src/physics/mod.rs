@@ -31,7 +31,7 @@ pub mod moon_dynamics;
 pub mod moon_kick;
 pub mod wisdom_holman;
 
-pub use chaos::{ChaosAccum, shadow_direction};
+pub use chaos::{ChaosAccum, shadow_offset_km};
 pub use circular::{CircularFrequencies, circular_speed, frequencies};
 pub use ephemeris::{
     DEFAULT_EPSILON, DEFAULT_INTERVAL_S, MoonInit, build_ephemeris, build_ephemeris_with,

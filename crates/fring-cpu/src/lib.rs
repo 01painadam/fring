@@ -21,10 +21,10 @@
 
 pub mod integrate;
 
+use fring_model::Vec3;
 use fring_model::config::ChaosConfig;
-use fring_model::physics::chaos::{ChaosAccum, renormalise, shadow_direction};
+use fring_model::physics::chaos::{ChaosAccum, renormalise, shadow_offset_km};
 use fring_model::physics::{KickTable, SaturnField, interpolate_moons};
-use fring_model::rng::Philox;
 use fring_model::{
     Backend, ChaosReport, Error, InitialState, MoonEphemeris, MoonState, ParticleView, Particles,
     Result, RunConfig, StepStats, System,
@@ -134,12 +134,10 @@ impl Backend for CpuBackend {
             .as_ref()
             .and_then(|d| d.chaos)
             .map(|cfg| {
-                let rng = Philox::from_seed(config.run.seed);
                 let shadow = state
                     .iter()
-                    .zip(&p.id)
-                    .map(|(s, &id): (&State, &u32)| {
-                        let d = shadow_direction(&rng, id) * cfg.offset_km;
+                    .map(|s: &State| {
+                        let d = shadow_offset_km(Vec3::new(s[0], s[1], s[2]), cfg.offset_km);
                         [s[0] + d.x, s[1] + d.y, s[2] + d.z, s[3], s[4], s[5]]
                     })
                     .collect();

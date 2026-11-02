@@ -5,8 +5,8 @@
 //!
 //! # Definition
 //!
-//! A shadow particle starts at the particle position plus `d0` in a random
-//! direction (zero velocity offset). At every global step number that is a
+//! A shadow particle starts at the particle position plus `d0` along the
+//! radial direction (zero velocity offset). At every global step number that is a
 //! multiple of K, with `j = 1, 2, ...` counting the renormalisations:
 //!
 //! 1. d = |position of shadow − position of particle|, l_j = ln(d / d0);
@@ -18,22 +18,18 @@
 //! Y_j = λ j K h, and the mean ⟨Y⟩ = Ysum / j ≈ λ t / 2.
 
 use crate::Vec3;
-use crate::rng::{Counter, Philox, Stream};
 
-/// Unit vector for the initial shadow offset of particle `id`: uniform on the
-/// sphere, from the Philox stream [`Stream::CHAOS_SHADOW`] (index = `id`,
-/// step 0, draw 0). The same for every backend.
-pub fn shadow_direction(rng: &Philox, id: u32) -> Vec3<f64> {
-    let [u, w] = rng.uniform_f64(Counter {
-        index: id,
-        step: 0,
-        stream: Stream::CHAOS_SHADOW,
-        draw: 0,
-    });
-    let z = 2.0 * u - 1.0;
-    let r = (1.0 - z * z).sqrt();
-    let phi = 2.0 * std::f64::consts::PI * w;
-    Vec3::new(r * phi.cos(), r * phi.sin(), z)
+/// Initial shadow offset of a particle at inertial position `pos_km`: `d0_km`
+/// along the radial direction (the unit vector from Saturn's centre), position
+/// only, zero velocity offset. The same for every backend.
+///
+/// A radial offset changes the semi-major axis, so every regular orbit gets
+/// the Kepler shear and its separation grows linearly (MEGNO about 2) well
+/// above rounding noise. A random direction has a random along-track part
+/// that does not grow; for those orbits the sum of logarithms is dominated by
+/// rounding noise (ADR 0008).
+pub fn shadow_offset_km(pos_km: Vec3<f64>, d0_km: f64) -> Vec3<f64> {
+    pos_km * (d0_km / pos_km.norm())
 }
 
 /// Moves `shadow` back to the position separation `d0_km` from `main` along
@@ -106,12 +102,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn direction_is_unit_and_repeatable() {
-        let rng = Philox::from_seed(7);
-        let a = shadow_direction(&rng, 3);
-        assert!((a.norm() - 1.0).abs() < 1e-15);
-        assert_eq!(a, shadow_direction(&rng, 3));
-        assert_ne!(a, shadow_direction(&rng, 4));
+    fn offset_is_radial_and_has_length_d0() {
+        let p = Vec3::new(1.0e5, 6.0e4, 1.0e3);
+        let o = shadow_offset_km(p, 1e-3);
+        assert!((o.norm() - 1e-3).abs() < 1e-18);
+        assert!(o.cross(p).norm() < 1e-12);
     }
 
     #[test]
