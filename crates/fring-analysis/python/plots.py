@@ -255,25 +255,41 @@ def fig_closest():
     if not f.exists():
         return
     h = pd.read_csv(f)
-    cum = pd.read_csv(DATA / "closest_cum.csv")
     bars = (
         alt.Chart(h)
         .mark_bar(color="#0072B2")
         .encode(
-            x=alt.X("hill_lo:Q", title="Closest approach to Prometheus (Hill radii, 1 R_H = 63.4 km)", scale=alt.Scale(type="log", domain=[0.5, 100])),
+            x=alt.X("hill_lo:Q", title="Closest approach to Prometheus (Hill radii; 1 R_H = 63.4 km)", scale=alt.Scale(type="log", domain=[0.5, 100])),
             x2="hill_hi:Q",
             y=alt.Y("count:Q", title="Particles"),
             tooltip=["hill_lo", "hill_hi", "count"],
         )
     )
-    rules = alt.Chart(pd.DataFrame({"x": [1.0, 3.0]})).mark_rule(strokeDash=[4, 3], color="#D55E00").encode(x="x:Q")
-    n = int(cum["n_below"].max())
-    return save(
+    rules = alt.Chart(pd.DataFrame({"x": [1.0, 3.0, 7.3]})).mark_rule(strokeDash=[4, 3], color="#D55E00").encode(x="x:Q")
+    save(
         (bars + rules)
-        .properties(width=620, height=260, title="Closest approach to Prometheus, 20,000 particles, 10 years (dashed: 1 and 3 Hill radii)")
+        .properties(width=620, height=240, title="Closest approach to Prometheus in 10 years, 20,000 particles (dashed: 1, 3 and 7.3 Hill radii)")
         .configure_view(strokeWidth=0),
         "closest_approach",
     )
+    r = pd.read_csv(DATA / "closest_rbins.csv")
+    r["r"] = (0.5 * (r.r_lo_km + r.r_hi_km)).round(0)
+    long = r.melt(id_vars="r", value_vars=["frac_below_1_hill", "frac_below_3_hill", "frac_below_7p3_hill"], var_name="limit", value_name="fraction")
+    long["limit"] = long["limit"].map({"frac_below_1_hill": "closer than 1 R_H", "frac_below_3_hill": "closer than 3 R_H", "frac_below_7p3_hill": "closer than 7.3 R_H (459 km)"})
+    long["fraction"] = long["fraction"].round(4)
+    c = (
+        alt.Chart(long)
+        .mark_line(point=True)
+        .encode(
+            x=alt.X("r:Q", title="Initial orbital radius (km)", scale=alt.Scale(domain=[139700, 141100], nice=False)),
+            y=alt.Y("fraction:Q", title="Fraction of particles"),
+            color=alt.Color("limit:N", title=None, legend=alt.Legend(orient="bottom", columns=3)),
+            tooltip=["r", "limit", "fraction"],
+        )
+        .properties(width=620, height=240, title="Fraction of particles that come close to Prometheus in 10 years (50 km bins)")
+        .configure_view(strokeWidth=0)
+    )
+    save(c, "closest_by_radius")
 
 
 def fig_apse():
@@ -286,7 +302,25 @@ def fig_apse():
         "apse-prom": "+ Prometheus",
         "apse-pand": "+ Pandora",
         "apse-both": "+ both moons",
+        "apse-both-phase": "+ both, other apse phase and seed",
+        "apse-both-half": "+ both, half time step",
     }
+    fits["label"] = fits["run"].map(names)
+    lap = pd.read_csv(DATA / "laplace_secular.csv").set_index("name")["rate_deg_per_day"]
+    fits = pd.concat(
+        [
+            fits,
+            pd.DataFrame(
+                {
+                    "run": ["analytic"],
+                    "rate_deg_per_day": [lap["saturn_only"] + lap["sum_of_moons"]],
+                    "se_jackknife": [0.0],
+                }
+            ),
+        ],
+        ignore_index=True,
+    )
+    names["analytic"] = "Saturn + secular formula (Laplace)"
     fits["label"] = fits["run"].map(names)
     fits["lo"] = fits["rate_deg_per_day"] - fits["se_jackknife"]
     fits["hi"] = fits["rate_deg_per_day"] + fits["se_jackknife"]
@@ -311,7 +345,7 @@ def fig_apse():
     line = alt.Chart(obs).mark_rule(color="#D55E00").encode(x=alt.X("v:Q", scale=xs))
     chart = (band + line + err + pts).properties(
         width=560,
-        height=170,
+        height=230,
         title="Apse precession of core particles, 50-year runs (orange band: observed 2.70025 +- 0.00029)",
     )
     save(chart.configure_view(strokeWidth=0), "apse_rate")
@@ -340,7 +374,7 @@ def fig_lyapunov():
     if not f.exists():
         return
     c = pd.read_csv(f)
-    c = c.round(5)
+    c = c[c.t_years >= 1.0].round(4)
     long = []
     for col, sd, lab in [
         ("ftle_mean", "ftle_std", "plain L(T) / T"),
@@ -356,14 +390,14 @@ def fig_lyapunov():
     band = (
         alt.Chart(d)
         .mark_area(opacity=0.18)
-        .encode(x="t_years:Q", y="lo:Q", y2="hi:Q", color=alt.Color("method:N", title=None, legend=alt.Legend(orient="bottom", columns=1)))
+        .encode(x=alt.X("t_years:Q", scale=alt.Scale(domain=[1, 100], type="log")), y=alt.Y("lo:Q", scale=alt.Scale(domain=[0, 1.2], clamp=True)), y2="hi:Q", color=alt.Color("method:N", title=None, legend=alt.Legend(orient="bottom", columns=1)))
     )
     line = (
         alt.Chart(d)
         .mark_line()
         .encode(
-            x=alt.X("t_years:Q", title="Time T (years)"),
-            y=alt.Y("mean:Q", title="Lyapunov exponent (1/year)"),
+            x=alt.X("t_years:Q", title="Time T (years)", scale=alt.Scale(domain=[1, 100], type="log")),
+            y=alt.Y("mean:Q", title="Lyapunov exponent (1/year)", scale=alt.Scale(domain=[0, 1.2])),
             color="method:N",
             tooltip=["method", "t_years", "mean", "std"],
         )
@@ -378,6 +412,64 @@ def fig_lyapunov():
     )
 
 
+def fig_lyapunov_pairs():
+    f = DATA / "lyapunov_pairs.csv"
+    if not f.exists():
+        return
+    d = pd.read_csv(f)[["pair", "slope_30_end_per_yr"]].rename(columns={"slope_30_end_per_yr": "slope"})
+    d["slope"] = d["slope"].round(4)
+    hist = (
+        alt.Chart(d)
+        .mark_bar(color="#0072B2")
+        .encode(
+            x=alt.X("slope:Q", bin=alt.Bin(step=0.02), title="Growth rate of ln(separation), fitted over years 30 to 100 (1/year)"),
+            y=alt.Y("count():Q", title="Independent runs"),
+            tooltip=["count()"],
+        )
+    )
+    rules = (
+        alt.Chart(pd.DataFrame({"x": [0.1, 0.30, 0.35], "label": ["split used in the note", "literature low", "literature high"]}))
+        .mark_rule(strokeDash=[4, 3], color="#D55E00")
+        .encode(x="x:Q", tooltip=["label:N"])
+    )
+    save(
+        (hist + rules)
+        .properties(width=620, height=240, title="Lyapunov exponent of Prometheus and Pandora: 100 independent runs (two populations)")
+        .configure_view(strokeWidth=0),
+        "moon_lyapunov_pairs",
+    )
+
+
+def window_summary():
+    """Class fractions (weighted by particle count) in a few radius windows, for the note.
+    Also lambda = 2 <Y> / t from the median of the mean MEGNO (valid for chaotic orbits)."""
+    wins = [
+        ("inner edge, 139,700 to 139,950 km", 139700, 139950),
+        ("inner flank, 139,950 to 140,150 km", 139950, 140150),
+        ("core window, 140,197 to 140,247 km", 140197, 140247),
+        ("quiet zone, 140,150 to 140,700 km", 140150, 140700),
+        ("outer flank, 140,700 to 140,900 km", 140700, 140900),
+        ("outer edge, 140,900 to 141,100 km", 140900, 141100),
+    ]
+    rows = []
+    for tag, yrs in [("main5", 5), ("main10", 10), ("main30", 30)]:
+        p = pd.read_csv(DATA / f"{tag}_profile.csv")
+        for name, lo, hi in wins:
+            q = p[(p.r_lo_km >= lo) & (p.r_hi_km <= hi)]
+            if q.empty or q.n.sum() < 500:
+                continue
+            w = q.n / q.n.sum()
+            row = {"run_years": yrs, "window": name, "n": int(q.n.sum())}
+            for c in CLASSES:
+                row[c] = round(float((q[f"frac_{c}"] * w).sum()), 3)
+            row["median_megno"] = round(float(q.median_megno.median()), 1)
+            row["lambda_per_yr"] = round(2 * row["median_megno"] / yrs, 2)
+            rows.append(row)
+    t = pd.DataFrame(rows)
+    t.to_csv(DATA / "window_summary.csv", index=False)
+    print(t.to_string(index=False))
+
+
 FIGS = {
     "map": fig_chaos_map,
     "profile": fig_chaos_profile,
@@ -386,6 +478,8 @@ FIGS = {
     "closest": fig_closest,
     "apse": fig_apse,
     "lyapunov": fig_lyapunov,
+    "lyapunov_pairs": fig_lyapunov_pairs,
+    "windows": window_summary,
 }
 
 
