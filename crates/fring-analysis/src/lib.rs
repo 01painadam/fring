@@ -16,4 +16,4 @@ pub mod stats;
 
 /// Philox stream used by the analysis tools (initial kicks and shadow
 /// directions of the Lyapunov runs). Not used by the simulation.
-pub const ANALYSIS_STREAM: fring_model::rng::Stream = fring_model::rng::Stream(8);
+pub const ANALYSIS_STREAM: fring_model::rng::Stream = fring_model::rng::Stream::ANALYSIS;

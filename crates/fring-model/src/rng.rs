@@ -108,6 +108,10 @@ impl Stream {
     pub const INITIAL_CONDITIONS: Stream = Stream(1);
     /// Collision candidates, acceptance and impact geometry.
     pub const COLLISIONS: Stream = Stream(2);
+    /// Analysis tools (`fring-analysis`), for example the position kicks of
+    /// the moon Lyapunov runs (A1-ANALYSIS). Numbers 3 to 7 stay free for
+    /// the simulation.
+    pub const ANALYSIS: Stream = Stream(8);
 }
 
 /// The counter for one block of four random words.
