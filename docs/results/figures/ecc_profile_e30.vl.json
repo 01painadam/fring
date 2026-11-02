@@ -1,0 +1,844 @@
+{
+  "$schema": "https://vega.github.io/schema/vega-lite/v5.20.1.json",
+  "config": {
+    "view": {
+      "continuousHeight": 300,
+      "continuousWidth": 300,
+      "strokeWidth": 0
+    }
+  },
+  "datasets": {
+    "data-6f23c61876b50db6e630f975b0e93338": [
+      {
+        "a": 140162.5,
+        "hi": 2.7855,
+        "lo": 2.7468,
+        "orbits": "e = 0.00235",
+        "value": 2.7636
+      },
+      {
+        "a": 140187.5,
+        "hi": 2.4937,
+        "lo": 2.4682,
+        "orbits": "e = 0.00235",
+        "value": 2.48
+      },
+      {
+        "a": 140212.5,
+        "hi": 2.1863,
+        "lo": 2.1565,
+        "orbits": "e = 0.00235",
+        "value": 2.1717
+      },
+      {
+        "a": 140237.5,
+        "hi": 2.008,
+        "lo": 1.9853,
+        "orbits": "e = 0.00235",
+        "value": 1.9966
+      },
+      {
+        "a": 140262.5,
+        "hi": 1.7892,
+        "lo": 1.7622,
+        "orbits": "e = 0.00235",
+        "value": 1.7781
+      },
+      {
+        "a": 140287.5,
+        "hi": 1.6444,
+        "lo": 1.6219,
+        "orbits": "e = 0.00235",
+        "value": 1.6338
+      },
+      {
+        "a": 140312.5,
+        "hi": 1.5324,
+        "lo": 1.5134,
+        "orbits": "e = 0.00235",
+        "value": 1.5212
+      },
+      {
+        "a": 140337.5,
+        "hi": 1.4085,
+        "lo": 1.3907,
+        "orbits": "e = 0.00235",
+        "value": 1.3994
+      },
+      {
+        "a": 140362.5,
+        "hi": 1.352,
+        "lo": 1.3372,
+        "orbits": "e = 0.00235",
+        "value": 1.3433
+      },
+      {
+        "a": 140387.5,
+        "hi": 1.2594,
+        "lo": 1.2412,
+        "orbits": "e = 0.00235",
+        "value": 1.2513
+      },
+      {
+        "a": 140412.5,
+        "hi": 1.2473,
+        "lo": 1.2325,
+        "orbits": "e = 0.00235",
+        "value": 1.2407
+      },
+      {
+        "a": 140437.5,
+        "hi": 1.2297,
+        "lo": 1.2168,
+        "orbits": "e = 0.00235",
+        "value": 1.2223
+      },
+      {
+        "a": 140462.5,
+        "hi": 1.2699,
+        "lo": 1.2597,
+        "orbits": "e = 0.00235",
+        "value": 1.2654
+      },
+      {
+        "a": 140487.5,
+        "hi": 1.3372,
+        "lo": 1.3242,
+        "orbits": "e = 0.00235",
+        "value": 1.332
+      },
+      {
+        "a": 140512.5,
+        "hi": 1.4121,
+        "lo": 1.3996,
+        "orbits": "e = 0.00235",
+        "value": 1.4069
+      },
+      {
+        "a": 140537.5,
+        "hi": 1.5083,
+        "lo": 1.495,
+        "orbits": "e = 0.00235",
+        "value": 1.5018
+      },
+      {
+        "a": 140562.5,
+        "hi": 1.5748,
+        "lo": 1.5559,
+        "orbits": "e = 0.00235",
+        "value": 1.5647
+      },
+      {
+        "a": 140587.5,
+        "hi": 1.7253,
+        "lo": 1.7062,
+        "orbits": "e = 0.00235",
+        "value": 1.7152
+      },
+      {
+        "a": 140612.5,
+        "hi": 1.8884,
+        "lo": 1.8673,
+        "orbits": "e = 0.00235",
+        "value": 1.8785
+      },
+      {
+        "a": 140637.5,
+        "hi": 2.0296,
+        "lo": 2.0016,
+        "orbits": "e = 0.00235",
+        "value": 2.0143
+      },
+      {
+        "a": 140662.5,
+        "hi": 2.1885,
+        "lo": 2.1613,
+        "orbits": "e = 0.00235",
+        "value": 2.175
+      },
+      {
+        "a": 140687.5,
+        "hi": 2.3759,
+        "lo": 2.3337,
+        "orbits": "e = 0.00235",
+        "value": 2.3541
+      },
+      {
+        "a": 140162.5,
+        "hi": 1.0846,
+        "lo": 1.0587,
+        "orbits": "e = 0 (control)",
+        "value": 1.0708
+      },
+      {
+        "a": 140187.5,
+        "hi": 0.9317,
+        "lo": 0.9169,
+        "orbits": "e = 0 (control)",
+        "value": 0.924
+      },
+      {
+        "a": 140212.5,
+        "hi": 0.8708,
+        "lo": 0.8529,
+        "orbits": "e = 0 (control)",
+        "value": 0.8607
+      },
+      {
+        "a": 140237.5,
+        "hi": 0.914,
+        "lo": 0.9027,
+        "orbits": "e = 0 (control)",
+        "value": 0.9078
+      },
+      {
+        "a": 140262.5,
+        "hi": 0.8687,
+        "lo": 0.8558,
+        "orbits": "e = 0 (control)",
+        "value": 0.8608
+      },
+      {
+        "a": 140287.5,
+        "hi": 0.839,
+        "lo": 0.8276,
+        "orbits": "e = 0 (control)",
+        "value": 0.8344
+      },
+      {
+        "a": 140312.5,
+        "hi": 0.8889,
+        "lo": 0.8768,
+        "orbits": "e = 0 (control)",
+        "value": 0.8817
+      },
+      {
+        "a": 140337.5,
+        "hi": 0.8669,
+        "lo": 0.8571,
+        "orbits": "e = 0 (control)",
+        "value": 0.8614
+      },
+      {
+        "a": 140362.5,
+        "hi": 0.8691,
+        "lo": 0.8596,
+        "orbits": "e = 0 (control)",
+        "value": 0.8645
+      },
+      {
+        "a": 140387.5,
+        "hi": 0.8134,
+        "lo": 0.8024,
+        "orbits": "e = 0 (control)",
+        "value": 0.8076
+      },
+      {
+        "a": 140412.5,
+        "hi": 0.7606,
+        "lo": 0.7472,
+        "orbits": "e = 0 (control)",
+        "value": 0.7525
+      },
+      {
+        "a": 140437.5,
+        "hi": 0.8057,
+        "lo": 0.7953,
+        "orbits": "e = 0 (control)",
+        "value": 0.8004
+      },
+      {
+        "a": 140462.5,
+        "hi": 0.7961,
+        "lo": 0.7834,
+        "orbits": "e = 0 (control)",
+        "value": 0.7918
+      },
+      {
+        "a": 140487.5,
+        "hi": 0.8638,
+        "lo": 0.8535,
+        "orbits": "e = 0 (control)",
+        "value": 0.8591
+      },
+      {
+        "a": 140512.5,
+        "hi": 0.8202,
+        "lo": 0.806,
+        "orbits": "e = 0 (control)",
+        "value": 0.8126
+      },
+      {
+        "a": 140537.5,
+        "hi": 0.925,
+        "lo": 0.9112,
+        "orbits": "e = 0 (control)",
+        "value": 0.9174
+      },
+      {
+        "a": 140562.5,
+        "hi": 0.9198,
+        "lo": 0.9068,
+        "orbits": "e = 0 (control)",
+        "value": 0.9127
+      },
+      {
+        "a": 140587.5,
+        "hi": 0.9427,
+        "lo": 0.923,
+        "orbits": "e = 0 (control)",
+        "value": 0.9332
+      },
+      {
+        "a": 140612.5,
+        "hi": 0.9898,
+        "lo": 0.969,
+        "orbits": "e = 0 (control)",
+        "value": 0.9768
+      },
+      {
+        "a": 140637.5,
+        "hi": 1.0744,
+        "lo": 1.0493,
+        "orbits": "e = 0 (control)",
+        "value": 1.0616
+      },
+      {
+        "a": 140662.5,
+        "hi": 1.2689,
+        "lo": 1.2429,
+        "orbits": "e = 0 (control)",
+        "value": 1.2565
+      },
+      {
+        "a": 140687.5,
+        "hi": 1.3764,
+        "lo": 1.3466,
+        "orbits": "e = 0 (control)",
+        "value": 1.3653
+      }
+    ],
+    "data-d2b2fa98704acd0e86b54a2d285ec484": [
+      {
+        "a": 140162.5,
+        "hi": 0.9947,
+        "lo": 0.9833,
+        "orbits": "e = 0.00235",
+        "value": 0.989
+      },
+      {
+        "a": 140187.5,
+        "hi": 1.0024,
+        "lo": 0.9932,
+        "orbits": "e = 0.00235",
+        "value": 0.9978
+      },
+      {
+        "a": 140212.5,
+        "hi": 0.998,
+        "lo": 0.9888,
+        "orbits": "e = 0.00235",
+        "value": 0.9934
+      },
+      {
+        "a": 140237.5,
+        "hi": 1.0021,
+        "lo": 0.9955,
+        "orbits": "e = 0.00235",
+        "value": 0.9988
+      },
+      {
+        "a": 140262.5,
+        "hi": 0.9864,
+        "lo": 0.9764,
+        "orbits": "e = 0.00235",
+        "value": 0.9814
+      },
+      {
+        "a": 140287.5,
+        "hi": 0.994,
+        "lo": 0.9852,
+        "orbits": "e = 0.00235",
+        "value": 0.9896
+      },
+      {
+        "a": 140312.5,
+        "hi": 1.002,
+        "lo": 0.9968,
+        "orbits": "e = 0.00235",
+        "value": 0.9994
+      },
+      {
+        "a": 140337.5,
+        "hi": 1.0023,
+        "lo": 0.9969,
+        "orbits": "e = 0.00235",
+        "value": 0.9996
+      },
+      {
+        "a": 140362.5,
+        "hi": 1.0016,
+        "lo": 0.9968,
+        "orbits": "e = 0.00235",
+        "value": 0.9992
+      },
+      {
+        "a": 140387.5,
+        "hi": 1.0031,
+        "lo": 0.9945,
+        "orbits": "e = 0.00235",
+        "value": 0.9988
+      },
+      {
+        "a": 140412.5,
+        "hi": 1.0029,
+        "lo": 0.9947,
+        "orbits": "e = 0.00235",
+        "value": 0.9988
+      },
+      {
+        "a": 140437.5,
+        "hi": 0.9988,
+        "lo": 0.99,
+        "orbits": "e = 0.00235",
+        "value": 0.9944
+      },
+      {
+        "a": 140462.5,
+        "hi": 1.004,
+        "lo": 0.9952,
+        "orbits": "e = 0.00235",
+        "value": 0.9996
+      },
+      {
+        "a": 140487.5,
+        "hi": 1.0028,
+        "lo": 0.9952,
+        "orbits": "e = 0.00235",
+        "value": 0.999
+      },
+      {
+        "a": 140512.5,
+        "hi": 0.9979,
+        "lo": 0.9869,
+        "orbits": "e = 0.00235",
+        "value": 0.9924
+      },
+      {
+        "a": 140537.5,
+        "hi": 1.0025,
+        "lo": 0.9951,
+        "orbits": "e = 0.00235",
+        "value": 0.9988
+      },
+      {
+        "a": 140562.5,
+        "hi": 1.0015,
+        "lo": 0.9905,
+        "orbits": "e = 0.00235",
+        "value": 0.996
+      },
+      {
+        "a": 140587.5,
+        "hi": 0.997,
+        "lo": 0.985,
+        "orbits": "e = 0.00235",
+        "value": 0.991
+      },
+      {
+        "a": 140612.5,
+        "hi": 0.9999,
+        "lo": 0.9913,
+        "orbits": "e = 0.00235",
+        "value": 0.9956
+      },
+      {
+        "a": 140637.5,
+        "hi": 0.9968,
+        "lo": 0.9848,
+        "orbits": "e = 0.00235",
+        "value": 0.9908
+      },
+      {
+        "a": 140662.5,
+        "hi": 0.9831,
+        "lo": 0.9725,
+        "orbits": "e = 0.00235",
+        "value": 0.9778
+      },
+      {
+        "a": 140687.5,
+        "hi": 0.9843,
+        "lo": 0.9725,
+        "orbits": "e = 0.00235",
+        "value": 0.9784
+      },
+      {
+        "a": 140162.5,
+        "hi": 0.8173,
+        "lo": 0.8059,
+        "orbits": "e = 0 (control)",
+        "value": 0.8116
+      },
+      {
+        "a": 140187.5,
+        "hi": 0.8844,
+        "lo": 0.8752,
+        "orbits": "e = 0 (control)",
+        "value": 0.8798
+      },
+      {
+        "a": 140212.5,
+        "hi": 0.8916,
+        "lo": 0.8824,
+        "orbits": "e = 0 (control)",
+        "value": 0.887
+      },
+      {
+        "a": 140237.5,
+        "hi": 0.9457,
+        "lo": 0.9391,
+        "orbits": "e = 0 (control)",
+        "value": 0.9424
+      },
+      {
+        "a": 140262.5,
+        "hi": 0.8802,
+        "lo": 0.8702,
+        "orbits": "e = 0 (control)",
+        "value": 0.8752
+      },
+      {
+        "a": 140287.5,
+        "hi": 0.9104,
+        "lo": 0.9016,
+        "orbits": "e = 0 (control)",
+        "value": 0.906
+      },
+      {
+        "a": 140312.5,
+        "hi": 0.9692,
+        "lo": 0.964,
+        "orbits": "e = 0 (control)",
+        "value": 0.9666
+      },
+      {
+        "a": 140337.5,
+        "hi": 0.9647,
+        "lo": 0.9593,
+        "orbits": "e = 0 (control)",
+        "value": 0.962
+      },
+      {
+        "a": 140362.5,
+        "hi": 0.9742,
+        "lo": 0.9694,
+        "orbits": "e = 0 (control)",
+        "value": 0.9718
+      },
+      {
+        "a": 140387.5,
+        "hi": 0.9041,
+        "lo": 0.8955,
+        "orbits": "e = 0 (control)",
+        "value": 0.8998
+      },
+      {
+        "a": 140412.5,
+        "hi": 0.9127,
+        "lo": 0.9045,
+        "orbits": "e = 0 (control)",
+        "value": 0.9086
+      },
+      {
+        "a": 140437.5,
+        "hi": 0.9038,
+        "lo": 0.895,
+        "orbits": "e = 0 (control)",
+        "value": 0.8994
+      },
+      {
+        "a": 140462.5,
+        "hi": 0.8962,
+        "lo": 0.8874,
+        "orbits": "e = 0 (control)",
+        "value": 0.8918
+      },
+      {
+        "a": 140487.5,
+        "hi": 0.9246,
+        "lo": 0.917,
+        "orbits": "e = 0 (control)",
+        "value": 0.9208
+      },
+      {
+        "a": 140512.5,
+        "hi": 0.8333,
+        "lo": 0.8223,
+        "orbits": "e = 0 (control)",
+        "value": 0.8278
+      },
+      {
+        "a": 140537.5,
+        "hi": 0.9311,
+        "lo": 0.9237,
+        "orbits": "e = 0 (control)",
+        "value": 0.9274
+      },
+      {
+        "a": 140562.5,
+        "hi": 0.8285,
+        "lo": 0.8175,
+        "orbits": "e = 0 (control)",
+        "value": 0.823
+      },
+      {
+        "a": 140587.5,
+        "hi": 0.7894,
+        "lo": 0.7774,
+        "orbits": "e = 0 (control)",
+        "value": 0.7834
+      },
+      {
+        "a": 140612.5,
+        "hi": 0.9049,
+        "lo": 0.8963,
+        "orbits": "e = 0 (control)",
+        "value": 0.9006
+      },
+      {
+        "a": 140637.5,
+        "hi": 0.7874,
+        "lo": 0.7754,
+        "orbits": "e = 0 (control)",
+        "value": 0.7814
+      },
+      {
+        "a": 140662.5,
+        "hi": 0.8679,
+        "lo": 0.8573,
+        "orbits": "e = 0 (control)",
+        "value": 0.8626
+      },
+      {
+        "a": 140687.5,
+        "hi": 0.8179,
+        "lo": 0.8061,
+        "orbits": "e = 0 (control)",
+        "value": 0.812
+      }
+    ]
+  },
+  "vconcat": [
+    {
+      "data": {
+        "name": "data-d2b2fa98704acd0e86b54a2d285ec484"
+      },
+      "height": 200,
+      "layer": [
+        {
+          "encoding": {
+            "color": {
+              "field": "orbits",
+              "scale": {
+                "domain": [
+                  "e = 0.00235",
+                  "e = 0 (control)"
+                ],
+                "range": [
+                  "#D55E00",
+                  "#0072B2"
+                ]
+              },
+              "title": null,
+              "type": "nominal"
+            },
+            "x": {
+              "field": "a",
+              "scale": {
+                "domain": [
+                  140150,
+                  140700
+                ],
+                "nice": false
+              },
+              "title": "Guiding semi-major axis a (km)",
+              "type": "quantitative"
+            },
+            "y": {
+              "field": "lo",
+              "title": "Fraction chaotic (mean Y >= 5), 30 yr",
+              "type": "quantitative"
+            },
+            "y2": {
+              "field": "hi"
+            }
+          },
+          "mark": {
+            "opacity": 0.25,
+            "type": "errorband"
+          }
+        },
+        {
+          "encoding": {
+            "color": {
+              "field": "orbits",
+              "scale": {
+                "domain": [
+                  "e = 0.00235",
+                  "e = 0 (control)"
+                ],
+                "range": [
+                  "#D55E00",
+                  "#0072B2"
+                ]
+              },
+              "title": null,
+              "type": "nominal"
+            },
+            "tooltip": [
+              {
+                "field": "a",
+                "type": "quantitative"
+              },
+              {
+                "field": "orbits",
+                "type": "nominal"
+              },
+              {
+                "field": "value",
+                "type": "quantitative"
+              }
+            ],
+            "x": {
+              "field": "a",
+              "scale": {
+                "domain": [
+                  140150,
+                  140700
+                ],
+                "nice": false
+              },
+              "title": "Guiding semi-major axis a (km)",
+              "type": "quantitative"
+            },
+            "y": {
+              "field": "value",
+              "type": "quantitative"
+            }
+          },
+          "mark": {
+            "point": true,
+            "type": "line"
+          }
+        }
+      ],
+      "width": 620
+    },
+    {
+      "data": {
+        "name": "data-6f23c61876b50db6e630f975b0e93338"
+      },
+      "height": 200,
+      "layer": [
+        {
+          "encoding": {
+            "color": {
+              "field": "orbits",
+              "scale": {
+                "domain": [
+                  "e = 0.00235",
+                  "e = 0 (control)"
+                ],
+                "range": [
+                  "#D55E00",
+                  "#0072B2"
+                ]
+              },
+              "title": null,
+              "type": "nominal"
+            },
+            "x": {
+              "field": "a",
+              "scale": {
+                "domain": [
+                  140150,
+                  140700
+                ],
+                "nice": false
+              },
+              "title": "Guiding semi-major axis a (km)",
+              "type": "quantitative"
+            },
+            "y": {
+              "field": "lo",
+              "title": "Median lambda = 2 Y / t (1/yr), 30 yr",
+              "type": "quantitative"
+            },
+            "y2": {
+              "field": "hi"
+            }
+          },
+          "mark": {
+            "opacity": 0.25,
+            "type": "errorband"
+          }
+        },
+        {
+          "encoding": {
+            "color": {
+              "field": "orbits",
+              "scale": {
+                "domain": [
+                  "e = 0.00235",
+                  "e = 0 (control)"
+                ],
+                "range": [
+                  "#D55E00",
+                  "#0072B2"
+                ]
+              },
+              "title": null,
+              "type": "nominal"
+            },
+            "tooltip": [
+              {
+                "field": "a",
+                "type": "quantitative"
+              },
+              {
+                "field": "orbits",
+                "type": "nominal"
+              },
+              {
+                "field": "value",
+                "type": "quantitative"
+              }
+            ],
+            "x": {
+              "field": "a",
+              "scale": {
+                "domain": [
+                  140150,
+                  140700
+                ],
+                "nice": false
+              },
+              "title": "Guiding semi-major axis a (km)",
+              "type": "quantitative"
+            },
+            "y": {
+              "field": "value",
+              "type": "quantitative"
+            }
+          },
+          "mark": {
+            "point": true,
+            "type": "line"
+          }
+        }
+      ],
+      "width": 620
+    }
+  ]
+}
