@@ -144,7 +144,9 @@ impl TimeConfig {
 #[serde(deny_unknown_fields)]
 pub struct FrameConfig {
     /// Semi-major axis a₀ of the reference circular orbit, in km. The rotating
-    /// frame turns at the mean motion n(a₀), with J2 and J4 included.
+    /// frame turns at the mean motion n(a₀) of the J2 to J6 field
+    /// (`physics::frames::reference_mean_motion`), so a circular orbit at a₀
+    /// is at rest in it.
     pub reference_semi_major_axis_km: f64,
 }
 
