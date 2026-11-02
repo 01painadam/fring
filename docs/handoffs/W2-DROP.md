@@ -1,6 +1,6 @@
 # W2-DROP: the web run goes on when particles are dropped
-Role: A7  Branch: ws/a7-w2-drop  Status: review (code done; browser check by AJ not done)
-Updated: 2026-11-02
+Role: A7  Branch: ws/a7-w2-drop  Status: done (AJ approved the merge, 2026-11-02)
+Updated: 2026-11-02 21:40
 
 ## Goal and acceptance criteria
 (PLAN.md section 9, W2-DROP; ICR-006; AJ decisions of 2026-11-02.) The web run goes on when particles are dropped: the radius rule is on (radii from `params/moons.toml`); dropped particles are hidden in the live picture and in a "Set to now" reference (none at t = 0); the page shows the counts. At the end of the moon ephemeris the run pauses and does not restart; Restart starts again at t = 0.
@@ -32,8 +32,17 @@ Definition of done on the last code commit (exit codes read directly, zsh `eval`
 - `cargo clippy -p fring-web --target wasm32-unknown-unknown -- -D warnings`: 0
 - `apps/fring-web/scripts/build.sh`: 0, wasm size 916,957 bytes (it needs `~/.cargo/bin` in PATH for `wasm-bindgen`; without it, exit 1 with "wasm-bindgen not found")
 
+## Browser check (AJ, Chrome on the Mac mini, 2026-11-02)
+AJ ran B1 to B5 and both `?bench` commands below: "All good". The bench rows were not copied from the console, so this file has no fps numbers for W2-DROP. The 30 fps criterion at 10^5 and the stall re-check rest on AJ's statement.
+
+## A0 review (2026-11-02)
+- Definition of done again on the pushed head f783a18 (log `runs/logs/a0-review-w2-drop.log`, exit codes read directly): fmt, clippy, `cargo test --workspace` (256 passed, 0 failed, 37 ignored), `cargo test -p fring-web --release -- --ignored` and `cargo test -p fring-gpu --release -- --ignored` (GPU), the three wasm32 checks, wasm32 clippy of `fring-web` and `build.sh` (wasm 916,957 bytes): all exit 0.
+- Diff read in full: the reason copies are in the same encoder as the state copy and before `encode_steps`; the read epoch is set when the copy is encoded; the end path no longer rebuilds the stepper. No defect found.
+- Note: `drop_text` labels count words 2 and 3 as Prometheus and Pandora by position. This is correct because track 0 is Prometheus (`moon_radii_follow_the_tracks_by_name` gives [43.09, 40.63]); a new moon order would need a change there.
+- A0 commits on this branch: 30b4f14 (`moon_radii_from_toml_str` in `fring-model`), 68c17da (wasm32 clippy of `fring-web` in CI and `AGENTS.md`), 6fe1d0a (`~/.cargo/bin` in the PATH line of `CLAUDE.md`), a21325c (B2 band on the orbit of Prometheus).
+
 ## Next step (one concrete action)
-AJ: run the browser steps B1 to B5 and both `?bench` commands below in Chrome (not headless) on the Mac mini and write the numbers here. Then A0 reviews and opens the pull request.
+None for W2-DROP. Gate G3 needs AJ's evidence: the Safari 26 check (`?bench` and the M24 zoom check) and the choice of a public host.
 
 ## How to verify the current state
 Host and native: `cargo test -p fring-web --lib` (31 passed) and `cargo test -p fring-web --release -- --ignored` (needs a GPU).
@@ -49,9 +58,7 @@ Browser (AJ):
 - Stall re-check from W2-COMPARE: `http://localhost:8080/?bench&counts=1e4,3e5&modes=off,side`. In W2-COMPARE the 3x10^5 side cell had one frame of 6.4 s. Expected: no frame above about 100 ms. If it comes back, the cause is probably not the drop code; report the numbers.
 
 ## Open questions / blockers
-- None for the code. Not yet measured in a browser: the fps with the rule on, and the stall re-check.
-- `AGENTS.md` does not list `cargo clippy -p fring-web --target wasm32-unknown-unknown -- -D warnings` (host clippy does not compile `web.rs`). A0 may add it.
-- `build.sh` needs `wasm-bindgen` in PATH (`~/.cargo/bin`); this is not in the Homebrew rustup PATH line of `CLAUDE.md`.
+- None. The wasm32 clippy command and the `~/.cargo/bin` PATH note were added by A0 (68c17da, 6fe1d0a).
 
 ## Decisions made (link ADRs)
 - No ADR. Decisions of A0 and AJ of 2026-11-02: moon radii by name from `params/moons.toml` through `moon_radii_from_toml_str`; counts line under the time readout; at the end only stepping stops (message text above); the button keeps the name "Restart"; budget 5.5e8.
