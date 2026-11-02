@@ -22,14 +22,15 @@
 
 use crate::view::ViewTransform;
 use fring_model::config::Distribution;
-use fring_model::params::{moons_from_toml_str, saturn_from_toml_str};
+use fring_model::params::{
+    RingParams, moons_from_toml_str, ring_from_toml_str, saturn_from_toml_str,
+};
 use fring_model::physics::{
     EpicycleElements, SaturnField, epicycle_state, frames::inertial_to_rotating,
     frames::reference_mean_motion, frequencies,
 };
 use fring_model::rng::{Counter, Philox, Stream, box_muller};
-use fring_model::{Error, Result, Vec3};
-use serde::Deserialize;
+use fring_model::{Result, Vec3};
 
 /// `params/saturn.toml`, `params/moons.toml` and `params/ring.toml`, compiled in.
 const SATURN_TOML: &str = include_str!("../../../params/saturn.toml");
@@ -62,57 +63,6 @@ pub fn floats_to_le_bytes(data: &[f32], out: &mut Vec<u8>) {
     out.extend(data.iter().flat_map(|x| x.to_le_bytes()));
 }
 
-/// The values of `params/ring.toml` that W1 uses.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct RingParams {
-    /// Semi-major axis a0 of the F ring core, km. The rotating frame turns at n(a0).
-    pub a0_km: f64,
-    /// Epicyclic amplitude e (radial excursion `a e`).
-    pub eccentricity: f64,
-    /// Longitude of pericentre at the epoch, degrees.
-    pub apse_longitude_deg: f64,
-    /// Narrowest dust strand of the F ring, km. Used as the display width of the core.
-    pub dust_strand_width_min_km: f64,
-}
-
-#[derive(Deserialize)]
-struct RingFile {
-    core: CoreEntry,
-    targets: TargetsEntry,
-}
-
-#[derive(Deserialize)]
-struct CoreEntry {
-    semi_major_axis_km: f64,
-    eccentricity: f64,
-    apse_longitude_deg: f64,
-}
-
-#[derive(Deserialize)]
-struct TargetsEntry {
-    dust_strand_width_min_km: f64,
-}
-
-impl RingParams {
-    /// Reads the `[core]` and `[targets]` tables of `params/ring.toml`.
-    pub fn from_toml_str(text: &str) -> Result<Self> {
-        let f: RingFile =
-            toml::from_str(text).map_err(|e| Error::Config(format!("ring params: {e}")))?;
-        let ok = f.core.semi_major_axis_km > 0.0
-            && (0.0..1.0).contains(&f.core.eccentricity)
-            && f.targets.dust_strand_width_min_km >= 0.0;
-        if !ok {
-            return Err(Error::Config("ring params: value out of range".into()));
-        }
-        Ok(Self {
-            a0_km: f.core.semi_major_axis_km,
-            eccentricity: f.core.eccentricity,
-            apse_longitude_deg: f.core.apse_longitude_deg,
-            dust_strand_width_min_km: f.targets.dust_strand_width_min_km,
-        })
-    }
-}
-
 /// The initial band of the particles.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Preset {
@@ -128,16 +78,16 @@ impl Preset {
     pub fn distribution(self, ring: &RingParams) -> Distribution {
         match self {
             Preset::Core => Distribution::Core {
-                semi_major_axis_km: ring.a0_km,
+                semi_major_axis_km: ring.semi_major_axis_km,
                 sigma_semi_major_axis_km: ring.dust_strand_width_min_km,
                 eccentricity: ring.eccentricity,
                 apse_longitude_deg: ring.apse_longitude_deg,
             },
             Preset::Band => {
-                let half = ring.a0_km * ring.eccentricity;
+                let half = ring.semi_major_axis_km * ring.eccentricity;
                 Distribution::Band {
-                    min_semi_major_axis_km: ring.a0_km - half,
-                    max_semi_major_axis_km: ring.a0_km + half,
+                    min_semi_major_axis_km: ring.semi_major_axis_km - half,
+                    max_semi_major_axis_km: ring.semi_major_axis_km + half,
                 }
             }
         }
@@ -251,9 +201,9 @@ impl Scene {
         seed: u64,
     ) -> Result<Self> {
         let saturn = saturn_from_toml_str(saturn_toml)?;
-        let ring = RingParams::from_toml_str(ring_toml)?;
+        let ring = ring_from_toml_str(ring_toml)?;
         let field = SaturnField::<f64>::from_params(&saturn);
-        let n0_rad_s = reference_mean_motion(&field, ring.a0_km);
+        let n0_rad_s = reference_mean_motion(&field, ring.semi_major_axis_km);
         let dist = preset.distribution(&ring);
         let elements = (0..count).map(|id| elements_for(&dist, seed, id)).collect();
         let moons = moons_from_toml_str(moons_toml)?
@@ -273,7 +223,7 @@ impl Scene {
         Ok(Self {
             field,
             n0_rad_s,
-            a0_km: ring.a0_km,
+            a0_km: ring.semi_major_axis_km,
             saturn_radius_km: saturn.reference_radius_km,
             elements,
             moons,
@@ -428,15 +378,15 @@ mod tests {
 
     #[test]
     fn ring_params_come_from_the_params_file() {
-        let r = RingParams::from_toml_str(RING_TOML).unwrap();
-        assert_eq!(r.a0_km, 140222.43);
+        let r = ring_from_toml_str(RING_TOML).unwrap();
+        assert_eq!(r.semi_major_axis_km, 140222.43);
         assert_eq!(r.eccentricity, 0.00235);
         assert_eq!(r.dust_strand_width_min_km, 10.0);
     }
 
     #[test]
     fn bad_ring_params_are_an_error() {
-        assert!(RingParams::from_toml_str("[core]\nsemi_major_axis_km = 1.0").is_err());
+        assert!(ring_from_toml_str("[core]\nsemi_major_axis_km = 1.0").is_err());
     }
 
     /// The elements must give the same state at t = 0 as the shared initial
@@ -445,7 +395,7 @@ mod tests {
     fn elements_agree_with_initial_particle_at_t0() {
         let saturn = saturn_from_toml_str(SATURN_TOML).unwrap();
         let field = SaturnField::<f64>::from_params(&saturn);
-        let ring = RingParams::from_toml_str(RING_TOML).unwrap();
+        let ring = ring_from_toml_str(RING_TOML).unwrap();
         for preset in [Preset::Core, Preset::Band] {
             let dist = preset.distribution(&ring);
             for id in 0..200 {
