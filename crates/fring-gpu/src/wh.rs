@@ -19,8 +19,10 @@ use fring_model::{Error, Real, Result, Vec3};
 pub const MAX_MOONS: usize = 4;
 /// f32 words per step in the kick table.
 pub const ROW: usize = 36;
-/// 32-bit words of the run constants (9 vec4).
-pub const PARAM_WORDS: usize = 36;
+/// 32-bit words of the run constants (11 vec4; the last two hold the moon
+/// radii of ICR-006: R squared in km² for each moon at word 36, and the rule
+/// flag at word 40).
+pub const PARAM_WORDS: usize = 44;
 
 /// The number format of the kernels (ADR 0006).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -93,8 +95,20 @@ pub fn pack_table(table: &KickTable<f64>, scale: f64) -> Vec<f32> {
     out
 }
 
-/// The run constants for the uniform buffer (`prm` in `wh.wgsl`).
+/// The run constants for the uniform buffer (`prm` in `wh.wgsl`), with the
+/// moon-radius rule off.
 pub fn params<const M: u8>(c: &Consts<M>, gm_moons_km3_s2: &[f64]) -> Vec<f32> {
+    params_with_radii(c, gm_moons_km3_s2, None)
+}
+
+/// As [`params`], with the moon radii of the radius rule (ICR-006) in km, one
+/// for each moon (at most [`MAX_MOONS`]). A radius of 0 switches that moon off.
+/// `None` switches the rule off.
+pub fn params_with_radii<const M: u8>(
+    c: &Consts<M>,
+    gm_moons_km3_s2: &[f64],
+    radii_km: Option<&[f64]>,
+) -> Vec<f32> {
     let f = &c.field_d;
     let h = Ds::<M>::split(c.h_s);
     let half = Ds::<M>::split(0.5 * c.h_s);
@@ -120,6 +134,12 @@ pub fn params<const M: u8>(c: &Consts<M>, gm_moons_km3_s2: &[f64]) -> Vec<f32> {
     for d in gm_d {
         v.extend(ds2(d));
     }
+    let mut r2 = [0f32; MAX_MOONS];
+    for (j, r) in radii_km.unwrap_or(&[]).iter().enumerate().take(MAX_MOONS) {
+        r2[j] = (r * r) as f32;
+    }
+    v.extend(r2);
+    v.extend([f32::from(u8::from(radii_km.is_some())), 0.0, 0.0, 0.0]);
     debug_assert_eq!(v.len(), PARAM_WORDS);
     v
 }
@@ -423,4 +443,82 @@ pub fn kepler<const M: u8>(
     dt: Ds<M>,
 ) -> Option<(Vec3<Ds<M>>, Vec3<Ds<M>>)> {
     kepler_drift(c.field_d.gm_km3_s2, p, v, dt)
+}
+
+/// Twin of `moon_rel` in `wh.wgsl`: the position of the particle relative to
+/// a moon, `p - m`, as f32. The subtraction is done in double-single, so the
+/// large equal parts cancel before the rounding to f32.
+pub fn moon_rel<const M: u8>(p: Vec3<Ds<M>>, m: Vec3<Ds<M>>) -> [f32; 3] {
+    [(p.x - m.x).hi, (p.y - m.y).hi, (p.z - m.z).hi]
+}
+
+/// Twin of `seg_min_d2` in `wh.wgsl`: the smallest squared distance from the
+/// origin to the segment from `a` to `b` (km²), in f32 with the order of the
+/// shader.
+pub fn segment_min_d2<const M: u8>(a: [f32; 3], b: [f32; 3]) -> f32 {
+    let w = |x: f32| Wf32::<M>(x);
+    let dot = |u: [Wf32<M>; 3], v: [Wf32<M>; 3]| u[0] * v[0] + u[1] * v[1] + u[2] * v[2];
+    let (a, b) = (a.map(w), b.map(w));
+    let d = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+    let dd = dot(d, d);
+    let mut s = w(0.0);
+    if dd.0 > 0.0 {
+        s = Wf32::<M>(((-dot(a, d)) / dd).0.clamp(0.0, 1.0));
+    }
+    let c = [a[0] + d[0] * s, a[1] + d[1] * s, a[2] + d[2] * s];
+    dot(c, c).0
+}
+
+/// True if the moon row of the kick table holds a real position and not the
+/// sentinel for a time outside the ephemeris ([`SYNC_NONE_KM`]).
+pub fn moon_row_valid(x_hi_km: f32) -> bool {
+    x_hi_km < 1.0e20
+}
+
+/// The x position in the table that marks "no moon position" (a time outside
+/// the ephemeris): the radius rule skips that drift.
+pub const SYNC_NONE_KM: f32 = 1.0e30;
+
+#[cfg(test)]
+mod radius_tests {
+    use super::*;
+    use crate::wf32::model;
+
+    const M4: u8 = model::M4;
+
+    #[test]
+    fn segment_distance_cases() {
+        // Crosses 20 km from the centre, ends 70 km away: the minimum is 20.
+        let d = segment_min_d2::<M4>([-70.0, 20.0, 0.0], [70.0, 20.0, 0.0]);
+        assert!((d - 400.0).abs() < 1e-3, "{d}");
+        // Ends before the closest point: the end point is the minimum.
+        let d = segment_min_d2::<M4>([-70.0, 20.0, 0.0], [-30.0, 20.0, 0.0]);
+        assert!((d - (900.0 + 400.0)).abs() < 1e-2, "{d}");
+        // Zero length.
+        let d = segment_min_d2::<M4>([3.0, 4.0, 0.0], [3.0, 4.0, 0.0]);
+        assert_eq!(d, 25.0);
+        // Grazing at radius + 1 km is above the radius, at radius - 1 below.
+        let r = 43.09f32;
+        let above = segment_min_d2::<M4>([-60.0, r + 1.0, 0.0], [60.0, r + 1.0, 0.0]);
+        let below = segment_min_d2::<M4>([-60.0, r - 1.0, 0.0], [60.0, r - 1.0, 0.0]);
+        assert!(above > r * r && below < r * r);
+    }
+
+    #[test]
+    fn params_have_the_radii_and_the_flag() {
+        let sp =
+            fring_model::params::saturn_from_toml_str(include_str!("../../../params/saturn.toml"))
+                .unwrap();
+        let gms = [0.01071, 0.00926];
+        let c = Consts::<M4>::for_step(&sp, &gms, 360.0);
+        let off = params(&c, &gms);
+        assert_eq!(off.len(), PARAM_WORDS);
+        assert!(off[36..].iter().all(|x| *x == 0.0));
+        let on = params_with_radii(&c, &gms, Some(&[43.09, 40.63]));
+        assert_eq!(on[..36], off[..36]);
+        assert_eq!(on[36], (43.09f64 * 43.09) as f32);
+        assert_eq!(on[37], (40.63f64 * 40.63) as f32);
+        assert_eq!(on[38], 0.0);
+        assert_eq!(on[40], 1.0);
+    }
 }
