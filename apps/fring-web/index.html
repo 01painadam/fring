@@ -100,6 +100,7 @@
   </div>
   <div class="readout status" id="status"></div>
   <div class="readout" id="readout" aria-live="off"></div>
+  <div class="readout" id="dropped" aria-live="off"></div>
   <div class="readout warn" id="message" aria-live="polite"></div>
   <div class="readout" id="bench"></div>
   <div class="legend">
@@ -341,6 +342,7 @@
         const fps = dts.length > 1 ? (1000 * dts.length) / dts.reduce((a, b) => a + b[1], 0) : 0;
         $("readout").textContent = fmtTime(app.time_days(), app.span_days()) + "    view " + (w >= 1000 ? Math.round(w).toLocaleString("en-GB") : w.toFixed(1)) + " km    " + fps.toFixed(0) + " fps    " + app.steps_per_frame() + " steps/frame" + (app.speed_limited() ? " (speed limited)" : "") + (compareMode === 2 ? "    reference " + fmtDays(app.reference_time_days()) : "");
       }
+      if (n % 10 === 3 && phase === "running") $("dropped").textContent = app.dropped_text();
       if (n % 10 === 2 && phase === "running") {
         const refText = "reference " + (app.reference_is_custom() ? "set at " : "start, ") + fmtDays(app.reference_time_days());
         $("lab-ref").textContent = refText;

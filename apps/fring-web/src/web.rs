@@ -13,7 +13,7 @@
 use crate::live::{
     BLOCK_STEPS, Band, COLOUR_FAINT_OFFSET, CompareMode, END_MARGIN_S, FLOATS_PER_INSTANCE,
     Governor, MAX_IN_FLIGHT, PANDORA, PARTICLE_COUNT, ProjectionUniform, SPAN_S, STEP_S, Setup,
-    StepPlanner, ViewFrame, builtin_moon_radii_for, count_fits, head_instances_styled,
+    StepPlanner, ViewFrame, builtin_moon_radii_for, count_fits, drop_text, head_instances_styled,
     instance_bytes, max_hours_for, ref_base_slot, ref_bytes, status_bytes, view_transform,
 };
 use crate::view::{Camera, half_local_x, split_halves};
@@ -21,7 +21,7 @@ use fring_gpu::gpu::Gpu;
 use fring_gpu::probe::SelfTest;
 use fring_gpu::stepper::GpuStepper;
 use fring_gpu::wh::Mode;
-use fring_gpu::wh_gpu::{DEFAULT_WORKGROUP, NO_FAILURE, WhKernels};
+use fring_gpu::wh_gpu::{DEFAULT_WORKGROUP, WhKernels};
 use fring_model::MoonEphemeris;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU8, AtomicU32, Ordering};
@@ -30,8 +30,10 @@ use wasm_bindgen::prelude::*;
 const SHADER: &str = include_str!("../shaders/points.wgsl");
 const PROJECT_SHADER: &str = include_str!("../shaders/project.wgsl");
 
-/// How often the failure flag of the stepper is read back, ms.
+/// How often the drop counts of the stepper are read back, ms.
 const STATUS_PERIOD_MS: f64 = 1000.0;
+/// Bytes read back from the status buffer: header words 0 to 7.
+const STATUS_READ_BYTES: u64 = 32;
 
 // States of the read-back of the failure flag.
 const READ_IDLE: u8 = 0;
@@ -49,9 +51,14 @@ enum Phase {
     Failed(String),
 }
 
-/// A small `MAP_READ` buffer for `status_buffer()` and the state of its map.
+/// A small `MAP_READ` buffer for words 0 to 7 of `status_buffer()` (ICR-006) and
+/// the state of its map.
 struct StatusReader {
     buffer: wgpu::Buffer,
+    /// Run number now; every new stepper adds 1.
+    epoch: u32,
+    /// Run number at the time that the read in flight was started.
+    read_epoch: u32,
     state: Arc<AtomicU8>,
     last_ms: f64,
 }
@@ -111,7 +118,8 @@ pub struct App {
     governor: Governor,
     in_flight: Arc<AtomicU32>,
     status: StatusReader,
-    failed_index: Option<u32>,
+    /// Particles dropped in this run: unbound, inside moon 0 and moon 1 (words 1 to 3).
+    drops: [u32; 3],
     steps_last: u64,
     limited: bool,
     note: String,
@@ -281,7 +289,7 @@ impl App {
         });
         let status_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("status read-back"),
-            size: 4,
+            size: STATUS_READ_BYTES,
             usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
@@ -332,10 +340,12 @@ impl App {
             in_flight: Arc::new(AtomicU32::new(0)),
             status: StatusReader {
                 buffer: status_buffer,
+                epoch: 0,
+                read_epoch: 0,
                 state: Arc::new(AtomicU8::new(READ_IDLE)),
                 last_ms: 0.0,
             },
-            failed_index: None,
+            drops: [0; 3],
             steps_last: 0,
             limited: false,
             note: String::new(),
@@ -361,15 +371,11 @@ impl App {
         .to_string()
     }
 
-    /// A message for the readout: the reason of a failure, a particle that
-    /// failed, or a note (such as a restart at the end of the ephemeris). Empty
+    /// A message for the readout: the reason of a failure, or a note (such as a restart at the end of the ephemeris). Empty
     /// if there is nothing to say.
     pub fn message(&self) -> String {
         if let Phase::Failed(m) = &self.phase {
             return m.clone();
-        }
-        if let Some(i) = self.failed_index {
-            return format!("a particle failed (index {i}); reset to continue");
         }
         self.note.clone()
     }
@@ -504,6 +510,11 @@ impl App {
     /// Time of the reference state in days (0 after every restart).
     pub fn reference_time_days(&self) -> f64 {
         self.ref_time_s / 86_400.0
+    }
+
+    /// The drop counts for the page, as one line (zeros at t = 0).
+    pub fn dropped_text(&self) -> String {
+        drop_text(self.drops, self.pandora_on)
     }
 
     /// Simulated time in days (the time of the particle state).
@@ -748,7 +759,9 @@ impl App {
         self.ref_custom = false;
         self.ref_pending = false;
         self.stepper = Some(stepper);
-        self.failed_index = None;
+        // Counts of the old run must not show in the new one.
+        self.drops = [0; 3];
+        self.status.epoch = self.status.epoch.wrapping_add(1);
         self.planner = StepPlanner::new();
         self.note = if lost {
             "The reference was reset to t = 0.".to_string()
@@ -758,22 +771,27 @@ impl App {
         Ok(())
     }
 
-    /// Reads the failure flag if its map has finished (never blocks).
+    /// Reads the drop counts if the map has finished (never blocks). A read
+    /// that was started in an earlier run is ignored.
     fn poll_status(&mut self) {
         let state = self.status.state.load(Ordering::Acquire);
         if state == READ_READY {
-            let value = {
+            let words: Option<[u32; 8]> = {
                 let view = self.status.buffer.get_mapped_range(..);
-                view.ok()
-                    .map(|v| u32::from_le_bytes([v[0], v[1], v[2], v[3]]))
+                view.ok().map(|v| {
+                    let mut w = [0u32; 8];
+                    for (k, c) in v.as_chunks::<4>().0.iter().take(8).enumerate() {
+                        w[k] = u32::from_le_bytes(*c);
+                    }
+                    w
+                })
             };
             self.status.buffer.unmap();
             self.status.state.store(READ_IDLE, Ordering::Release);
-            if let Some(v) = value
-                && v != NO_FAILURE
-                && self.failed_index.is_none()
+            if let Some(w) = words
+                && self.status.read_epoch == self.status.epoch
             {
-                self.failed_index = Some(v);
+                self.drops = [w[1], w[2], w[3]];
             }
         } else if state == READ_FAILED {
             self.status.state.store(READ_IDLE, Ordering::Release);
@@ -794,7 +812,7 @@ impl App {
                 self.hours_per_s.min(max_hours_for(self.count)),
                 self.governor.cap(),
             );
-            let running = !self.paused && self.failed_index.is_none();
+            let running = !self.paused;
             let busy = in_flight >= MAX_IN_FLIGHT;
             steps = if running && !busy { planned } else { 0 };
             self.limited = running && (limited || busy);
@@ -945,8 +963,9 @@ impl App {
                     0,
                     &self.status.buffer,
                     0,
-                    4,
+                    STATUS_READ_BYTES,
                 );
+                self.status.read_epoch = self.status.epoch;
                 self.status.state.store(READ_PENDING, Ordering::Release);
                 self.status.last_ms = now_ms;
                 want_map = true;

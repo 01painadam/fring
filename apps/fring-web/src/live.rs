@@ -546,6 +546,31 @@ pub fn status_bytes(cap: u64) -> u64 {
     (8 + cap) * 4
 }
 
+/// The line under the time readout: the drop counts (ICR-006: unbound, inside
+/// Prometheus, inside Pandora). The Pandora part is left out if Pandora is off.
+pub fn drop_text(counts: [u32; 3], pandora_on: bool) -> String {
+    let group = |n: u32| {
+        let s = n.to_string();
+        let mut out = String::new();
+        for (k, c) in s.chars().enumerate() {
+            if k > 0 && (s.len() - k).is_multiple_of(3) {
+                out.push(',');
+            }
+            out.push(c);
+        }
+        out
+    };
+    let mut t = format!(
+        "Dropped: {} unbound \u{b7} {} inside Prometheus",
+        group(counts[0]),
+        group(counts[1])
+    );
+    if pandora_on {
+        t.push_str(&format!(" \u{b7} {} inside Pandora", group(counts[2])));
+    }
+    t
+}
+
 /// Instances in the instance buffer for `count` particles: the live picture
 /// (`HEAD_SLOTS` + `count`) and the reference picture, one after the other.
 pub fn instance_slots(count: u32) -> u64 {
@@ -932,6 +957,19 @@ mod tests {
         // A name without a radius is an error.
         let text = "[[moon]]\nname = \"prometheus\"\nradius_km = 43.09\n";
         assert!(moon_radii_for(&s.system(&full, true), text).is_err());
+    }
+
+    #[test]
+    fn drop_text_shows_the_counts_and_leaves_out_pandora_when_off() {
+        assert_eq!(
+            drop_text([12, 45, 3], true),
+            "Dropped: 12 unbound \u{b7} 45 inside Prometheus \u{b7} 3 inside Pandora"
+        );
+        assert_eq!(
+            drop_text([0, 0, 0], false),
+            "Dropped: 0 unbound \u{b7} 0 inside Prometheus"
+        );
+        assert!(drop_text([1234, 0, 0], true).starts_with("Dropped: 1,234 unbound"));
     }
 
     #[test]
