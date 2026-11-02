@@ -16,8 +16,9 @@
 //! of its `params/moons.toml` position and the mean motion of the field at that
 //! radius. W2 uses the real ephemeris.
 //!
-//! Two kinds of view (`ViewFrame`): the ring view (the rotating frame itself)
-//! and a moon view (centred on one moon and turning with it).
+//! Three kinds of view (`ViewFrame`): inertial (fixed camera on Saturn), rotating
+//! (the rotating frame itself: the camera turns with the core) and a moon view
+//! (centred on one moon and turning with it).
 
 use crate::view::ViewTransform;
 use fring_model::config::Distribution;
@@ -146,8 +147,11 @@ impl Preset {
 /// What the view follows.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ViewFrame {
-    /// The frame that turns at n0, centred on Saturn. The ring core stays still.
-    Ring,
+    /// Fixed camera, centred on Saturn: everything orbits anticlockwise.
+    Inertial,
+    /// The frame that turns at n0, centred on Saturn: the camera turns with the
+    /// ring core, so the core stays still.
+    Rotating,
     /// Centred on moon `k` (index into `Scene::moons`) and turning with it:
     /// Saturn is straight down and the orbital motion goes to the left.
     Moon(usize),
@@ -301,15 +305,25 @@ impl Scene {
         &self.moons
     }
 
-    /// Position of particle `i` in the rotating frame at time `t_s`, km.
-    pub fn particle_rotating_km(&self, i: usize, t_s: f64) -> Vec3<f64> {
+    /// Inertial position (km) and velocity (km/s) of particle `i` at time `t_s`.
+    fn particle_inertial_state(&self, i: usize, t_s: f64) -> (Vec3<f64>, Vec3<f64>) {
         let mut el = self.elements[i];
         let f = frequencies(&self.field, el.a_km);
         el.mean_anomaly_rad =
             (el.mean_anomaly_rad + f.kappa_rad_s * t_s).rem_euclid(std::f64::consts::TAU);
         el.mean_longitude_rad =
             (el.mean_longitude_rad + f.n_rad_s * t_s).rem_euclid(std::f64::consts::TAU);
-        let (pos, vel) = epicycle_state(&self.field, &el);
+        epicycle_state(&self.field, &el)
+    }
+
+    /// Position of particle `i` in the inertial frame at time `t_s`, km.
+    pub fn particle_inertial_km(&self, i: usize, t_s: f64) -> Vec3<f64> {
+        self.particle_inertial_state(i, t_s).0
+    }
+
+    /// Position of particle `i` in the rotating frame at time `t_s`, km.
+    pub fn particle_rotating_km(&self, i: usize, t_s: f64) -> Vec3<f64> {
+        let (pos, vel) = self.particle_inertial_state(i, t_s);
         inertial_to_rotating(pos, vel, self.n0_rad_s, t_s).0
     }
 
@@ -328,6 +342,12 @@ impl Scene {
 
     /// The map from the rotating frame to the view plane at time `t_s`.
     ///
+    /// For `Inertial` the plane turns by `+n0 t` (anticlockwise), which undoes
+    /// the turn of the rotating frame (the two frames agree at t = 0). The angle
+    /// is the same f64 product `n0 * t` as in `inertial_to_rotating`, with no
+    /// reduction by 2 pi, so the same cos and sin come back and the two turns
+    /// cancel to rounding (about 1e-16 of the radius, 1e-11 km at the ring).
+    ///
     /// For `Moon(k)` the moon goes to the origin, and the plane turns by
     /// `pi/2 - phi`, where `phi` is the moon's longitude in the rotating frame.
     /// So the moon's radius vector points up (Saturn is straight down), and the
@@ -337,7 +357,8 @@ impl Scene {
     /// If `k` is not a moon index.
     pub fn view_transform(&self, frame: ViewFrame, t_s: f64) -> ViewTransform {
         match frame {
-            ViewFrame::Ring => ViewTransform::IDENTITY,
+            ViewFrame::Inertial => ViewTransform::new([0.0, 0.0], self.n0_rad_s * t_s),
+            ViewFrame::Rotating => ViewTransform::IDENTITY,
             ViewFrame::Moon(k) => {
                 let p = self.moon_rotating_km(k, t_s);
                 let phi = p.y.atan2(p.x);
@@ -537,7 +558,7 @@ mod tests {
         p.y.atan2(p.x)
     }
 
-    /// In the ring view a moon inside a0 moves ahead (anticlockwise) and a moon
+    /// In the rotating view a moon inside a0 moves ahead (anticlockwise) and a moon
     /// outside a0 falls behind (clockwise), like the particles. The schematic
     /// radii are the radii at the epoch: Prometheus 139,160 km (a0 - 1,062 km),
     /// Pandora 142,228 km (a0 + 2,006 km). Kepler to first order gives
@@ -545,7 +566,7 @@ mod tests {
     /// second-order term changes this by 1.25 |r - a0| / a0 (0.9 % for
     /// Prometheus, 1.8 % for Pandora) and J2 by about 0.3 %, so the tolerance is 3 %.
     #[test]
-    fn prometheus_moves_ahead_and_pandora_falls_behind_in_the_ring_view() {
+    fn prometheus_moves_ahead_and_pandora_falls_behind_in_the_rotating_view() {
         let s = scene(Preset::Core, 1);
         assert_eq!(s.moons()[0].name, "prometheus");
         assert_eq!(s.moons()[1].name, "pandora");
@@ -558,6 +579,50 @@ mod tests {
             assert!(
                 ((drift - kepler) / kepler).abs() < 0.03,
                 "moon {k}: drift {drift}, Kepler {kepler} rad/day"
+            );
+        }
+    }
+
+    /// The inertial view turns the rotating-frame positions back by n0 t, so it
+    /// must give the inertial positions of the epicycles. The two turns use the
+    /// same f64 cos and sin, so the error is rounding only: about 1e-16 of
+    /// 1.4e5 km per operation, 1e-10 km at most. The tolerance is 1e-8 km. The
+    /// last time is about 100 years (n0 t = 3.8e5 rad).
+    #[test]
+    fn inertial_view_gives_the_inertial_positions() {
+        let s = scene(Preset::Core, 50);
+        for t in [0.0, 1.0e5, 3.0e7, 3.2e9] {
+            let view = s.view_transform(ViewFrame::Inertial, t);
+            for i in 0..s.len() {
+                let p = s.particle_rotating_km(i, t);
+                let v = view.apply([p.x, p.y]);
+                let q = s.particle_inertial_km(i, t);
+                let err = (v[0] - q.x).hypot(v[1] - q.y);
+                assert!(err < 1e-8, "t = {t} s, particle {i}: error {err} km");
+            }
+        }
+    }
+
+    /// In the inertial view each moon goes anticlockwise at its own mean motion:
+    /// in one hour Prometheus turns by n t = 0.43 rad. The tolerance 1e-9 rad is
+    /// far above rounding (about 1e-15 rad).
+    #[test]
+    fn moons_orbit_anticlockwise_at_their_own_mean_motion_in_the_inertial_view() {
+        use std::f64::consts::{PI, TAU};
+        let s = scene(Preset::Core, 1);
+        let (t0, dt) = (5.0e6, 3600.0);
+        for k in 0..s.moons().len() {
+            let lon = |t: f64| {
+                let m = s.moon_rotating_km(k, t);
+                let v = s.view_transform(ViewFrame::Inertial, t).apply([m.x, m.y]);
+                v[1].atan2(v[0])
+            };
+            let turned = (lon(t0 + dt) - lon(t0) + PI).rem_euclid(TAU) - PI;
+            let expected = s.moons()[k].n_rad_s * dt;
+            assert!(expected > 0.0);
+            assert!(
+                (turned - expected).abs() < 1e-9,
+                "moon {k}: turned {turned} rad, expected {expected} rad"
             );
         }
     }
@@ -640,7 +705,7 @@ mod tests {
         let t = 3.0e6;
         let height_px = 1000.0;
         let mut out = Vec::new();
-        for frame in [ViewFrame::Ring, ViewFrame::Moon(0)] {
+        for frame in [ViewFrame::Inertial, ViewFrame::Rotating, ViewFrame::Moon(0)] {
             let view = s.view_transform(frame, t);
             // Exact (f64) view-plane positions, to compare with the f32 output.
             let exact: Vec<[f64; 2]> = (0..s.len())

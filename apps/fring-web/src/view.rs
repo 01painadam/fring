@@ -4,8 +4,9 @@
 //! Units: km for the world, pixels for the screen. Screen y points down, world y up.
 //!
 //! The "world" of the camera is the view plane. `ViewTransform` maps the
-//! rotating frame into it: in the ring view the two are the same; in a moon
-//! view the plane is centred on the moon and turns with it.
+//! rotating frame into it: in the rotating view the two are the same; the
+//! inertial view turns it back by n0 t; in a moon view the plane is centred on
+//! the moon and turns with it.
 
 /// Smallest half-height of the view, km.
 pub const MIN_HALF_HEIGHT_KM: f64 = 5.0;
@@ -23,7 +24,7 @@ pub struct ViewTransform {
 }
 
 impl ViewTransform {
-    /// The ring view: the view plane is the rotating frame.
+    /// The rotating view: the view plane is the rotating frame.
     pub const IDENTITY: Self = Self {
         origin_km: [0.0, 0.0],
         cos: 1.0,

@@ -29,10 +29,10 @@
 </style>
 </head>
 <body>
-<canvas id="view" aria-label="Particles of Saturn's F ring in the rotating frame"></canvas>
+<canvas id="view" aria-label="Particles of Saturn's F ring and its shepherd moons"></canvas>
 
 <div class="panel" id="panel">
-  <h1>Saturn's F ring, rotating frame</h1>
+  <h1>Saturn's F ring</h1>
   <div class="row">
     <button id="pause" type="button">Pause</button>
     <button id="reset" type="button">Reset view</button>
@@ -45,9 +45,10 @@
   <div class="row">
     <label for="frame">View</label>
     <select id="frame" autocomplete="off">
-      <option value="0">Ring (turns at n0)</option>
-      <option value="1">On Prometheus</option>
-      <option value="2">On Pandora</option>
+      <option value="0" selected>Inertial (fixed camera)</option>
+      <option value="1">Rotating (camera turns with the core)</option>
+      <option value="2">On Prometheus</option>
+      <option value="3">On Pandora</option>
     </select>
   </div>
   <div class="row">
@@ -60,7 +61,7 @@
     <span><span class="dot" style="background:#ff9e33"></span>Prometheus (schematic)</span>
     <span><span class="dot" style="background:#73f28c"></span>Pandora (schematic)</span>
   </div>
-  <p class="note">Seen from the north: orbits go anticlockwise. Ring view: the frame turns at the mean motion n0 of the ring core. So material outside the core (Pandora, the outer half of the band, the apocentre side of the core) falls behind and moves clockwise; material inside (Prometheus, the inner half) moves ahead, anticlockwise. Moon views: the moon stays at the centre, Saturn is straight down and the orbital motion goes to the left. Moons are on circular orbits here, not the real ephemeris. Drag to move, scroll to zoom.</p>
+  <p class="note">Seen from the north: orbits go anticlockwise. Inertial: fixed camera; the core goes round once in 14.85 h. Rotating: the camera turns with the core (mean motion n0), so the core stays still, and material outside it (Pandora, the outer half of the band, the apocentre side of the core) falls behind and moves clockwise; material inside (Prometheus, the inner half) moves ahead, anticlockwise. Moon views: the moon stays at the centre, Saturn is straight down and the orbital motion goes to the left. Moons are on circular orbits here, not the real ephemeris. Drag to move, scroll to zoom.</p>
   <p class="note" id="adapter"></p>
 </div>
 

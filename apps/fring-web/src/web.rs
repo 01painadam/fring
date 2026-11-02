@@ -50,7 +50,7 @@ fn preset_from_index(i: u32) -> Preset {
 /// The camera that a view starts with (and goes back to on "Reset view").
 fn initial_camera(scene: &Scene, view: ViewFrame) -> Camera {
     match view {
-        ViewFrame::Ring => Camera::whole_ring(scene.a0_km()),
+        ViewFrame::Inertial | ViewFrame::Rotating => Camera::whole_ring(scene.a0_km()),
         ViewFrame::Moon(k) => Camera::moon_view(scene.moon_gap_km(k)),
     }
 }
@@ -162,7 +162,7 @@ impl App {
             usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
-        let camera = initial_camera(&scene, ViewFrame::Ring);
+        let camera = initial_camera(&scene, ViewFrame::Inertial);
         Ok(App {
             surface,
             device,
@@ -173,7 +173,7 @@ impl App {
             bind_group,
             instances,
             scene,
-            view: ViewFrame::Ring,
+            view: ViewFrame::Inertial,
             camera,
             t_s: 0.0,
             hours_per_s: 6.0,
@@ -217,13 +217,15 @@ impl App {
         Ok(())
     }
 
-    /// 0 = ring view (the frame that turns at n0); `k + 1` = centred on moon `k`
-    /// (1 Prometheus, 2 Pandora, the order of `params/moons.toml`). The camera
-    /// goes to the start position of that view.
+    /// 0 = inertial (fixed camera, the start view); 1 = rotating (the frame
+    /// that turns at n0); `k + 2` = centred on moon `k` (2 Prometheus, 3 Pandora,
+    /// the order of `params/moons.toml`). The camera goes to the start position
+    /// of that view.
     pub fn set_view(&mut self, index: u32) -> Result<(), JsValue> {
         let view = match index as usize {
-            0 => ViewFrame::Ring,
-            i if i <= self.scene.moons().len() => ViewFrame::Moon(i - 1),
+            0 => ViewFrame::Inertial,
+            1 => ViewFrame::Rotating,
+            i if i - 2 < self.scene.moons().len() => ViewFrame::Moon(i - 2),
             _ => return Err(err(format!("no view {index}"))),
         };
         self.view = view;
