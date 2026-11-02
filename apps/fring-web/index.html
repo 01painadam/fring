@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>fring: Saturn's F ring</title>
+<style>
+  :root { color-scheme: dark; --bg: #05060a; --panel: rgba(14, 18, 28, 0.82); --fg: #e6ebf5; --muted: #9aa6bd; --line: #2b3550; --accent: #9ed1ff; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); font: 14px/1.4 system-ui, sans-serif; }
+  canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; }
+  canvas.drag { cursor: grabbing; }
+  .panel { position: fixed; top: 12px; left: 12px; max-width: min(320px, calc(100vw - 24px)); padding: 12px 14px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; backdrop-filter: blur(6px); }
+  h1 { margin: 0 0 6px; font-size: 16px; font-weight: 600; }
+  .row { display: flex; align-items: center; gap: 8px; margin: 8px 0; flex-wrap: wrap; }
+  label { color: var(--muted); }
+  button, select { font: inherit; color: var(--fg); background: #1a2236; border: 1px solid var(--line); border-radius: 6px; padding: 5px 10px; min-height: 32px; }
+  button:hover, select:hover { border-color: var(--accent); }
+  input[type=range] { flex: 1; min-width: 120px; accent-color: var(--accent); }
+  .readout { font-variant-numeric: tabular-nums; color: var(--fg); }
+  .legend { display: flex; gap: 12px; flex-wrap: wrap; color: var(--muted); font-size: 13px; }
+  .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 5px; vertical-align: -1px; }
+  .note { margin: 6px 0 0; color: var(--muted); font-size: 12px; }
+  #error { display: none; position: fixed; inset: 0; padding: 24px; place-content: center; text-align: center; background: var(--bg); }
+  #error.show { display: grid; }
+  #error h2 { margin: 0 0 8px; }
+  #error p { margin: 4px auto; max-width: 52ch; color: var(--muted); }
+  #error code { color: var(--fg); }
+</style>
+</head>
+<body>
+<canvas id="view" aria-label="Particles of Saturn's F ring and its shepherd moons"></canvas>
+
+<div class="panel" id="panel">
+  <h1>Saturn's F ring</h1>
+  <div class="row">
+    <button id="pause" type="button">Pause</button>
+    <button id="reset" type="button">Reset view</button>
+    <label for="preset">Particles</label>
+    <select id="preset" autocomplete="off">
+      <option value="0">Core (narrow)</option>
+      <option value="1">Band (circular)</option>
+    </select>
+  </div>
+  <div class="row">
+    <label for="frame">View</label>
+    <select id="frame" autocomplete="off">
+      <option value="0" selected>Inertial (fixed camera)</option>
+      <option value="1">Rotating (camera turns with the core)</option>
+      <option value="2">On Prometheus</option>
+      <option value="3">On Pandora</option>
+    </select>
+  </div>
+  <div class="row">
+    <label for="speed">Speed</label>
+    <input id="speed" type="range" min="-1" max="2.4" step="0.01" value="0.78">
+    <span class="readout" id="speed-out"></span>
+  </div>
+  <div class="readout" id="readout" aria-live="off"></div>
+  <div class="legend">
+    <span><span class="dot" style="background:#ff9e33"></span>Prometheus (schematic)</span>
+    <span><span class="dot" style="background:#73f28c"></span>Pandora (schematic)</span>
+  </div>
+  <p class="note">Seen from the north: orbits go anticlockwise. Inertial: fixed camera; the core goes round once in 14.85 h. Rotating: the camera turns with the core (mean motion n0), so the core stays still, and material outside it (Pandora, the outer half of the band, the apocentre side of the core) falls behind and moves clockwise; material inside (Prometheus, the inner half) moves ahead, anticlockwise. Moon views: the moon stays at the centre, Saturn is straight down and the orbital motion goes to the left. Moons are on circular orbits here, not the real ephemeris. Drag to move, scroll to zoom.</p>
+  <p class="note" id="adapter"></p>
+</div>
+
+<div id="error" role="alert">
+  <div>
+    <h2 id="error-title">This page needs WebGPU</h2>
+    <p id="error-text">Use Chrome 113 or later, or Safari 26 or later, on a computer with a GPU.</p>
+  </div>
+</div>
+
+<script type="module">
+  const $ = (id) => document.getElementById(id);
+  const canvas = $("view");
+
+  function fail(title, text) {
+    $("error-title").textContent = title;
+    $("error-text").textContent = text;
+    $("error").classList.add("show");
+    $("panel").style.display = "none";
+  }
+
+  async function main() {
+    if (!navigator.gpu) {
+      fail("This page needs WebGPU", "Your browser does not offer WebGPU. Use Chrome 113 or later, or Safari 26 or later, on a computer with a GPU.");
+      return;
+    }
+    const { default: init, App } = await import("./fring_web.js");
+    await init();
+
+    const dpr = () => window.devicePixelRatio || 1;
+    const fit = () => {
+      canvas.width = Math.max(1, Math.round(canvas.clientWidth * dpr()));
+      canvas.height = Math.max(1, Math.round(canvas.clientHeight * dpr()));
+    };
+    fit();
+    const app = await App.create(canvas);
+    $("adapter").textContent = "GPU: " + app.adapter_name();
+
+    const onResize = () => { fit(); app.resize(canvas.width, canvas.height); };
+    new ResizeObserver(onResize).observe(canvas);
+
+    // Speed: slider is log10 of simulated hours per real second.
+    const setSpeed = () => {
+      const h = Math.pow(10, parseFloat($("speed").value));
+      app.set_speed_hours_per_s(h);
+      $("speed-out").textContent = h < 10 ? h.toFixed(1) + " h/s" : (h / 24).toFixed(1) + " d/s";
+    };
+    $("speed").addEventListener("input", setSpeed);
+    setSpeed();
+
+    let paused = false;
+    $("pause").addEventListener("click", () => {
+      paused = !paused;
+      app.set_paused(paused);
+      $("pause").textContent = paused ? "Play" : "Pause";
+    });
+    $("reset").addEventListener("click", () => app.reset_view());
+    $("preset").addEventListener("change", (e) => app.set_preset(parseInt(e.target.value, 10)));
+    $("frame").addEventListener("change", (e) => app.set_view(parseInt(e.target.value, 10)));
+
+    // Pointer: drag to pan, wheel to zoom. Positions in canvas pixels.
+    let drag = null;
+    canvas.addEventListener("pointerdown", (e) => {
+      drag = { x: e.clientX, y: e.clientY };
+      canvas.setPointerCapture(e.pointerId);
+      canvas.classList.add("drag");
+    });
+    canvas.addEventListener("pointermove", (e) => {
+      if (!drag) return;
+      app.pan((e.clientX - drag.x) * dpr(), (e.clientY - drag.y) * dpr());
+      drag = { x: e.clientX, y: e.clientY };
+    });
+    const end = () => { drag = null; canvas.classList.remove("drag"); };
+    canvas.addEventListener("pointerup", end);
+    canvas.addEventListener("pointercancel", end);
+    canvas.addEventListener("wheel", (e) => {
+      e.preventDefault();
+      const r = canvas.getBoundingClientRect();
+      app.zoom((e.clientX - r.left) * dpr(), (e.clientY - r.top) * dpr(), Math.exp(e.deltaY * 0.0015));
+    }, { passive: false });
+
+    let n = 0;
+    const loop = (now) => {
+      try {
+        app.frame(now);
+      } catch (e) {
+        fail("The drawing stopped", String(e));
+        return;
+      }
+      if (n++ % 10 === 0) {
+        const w = app.view_width_km();
+        $("readout").textContent = "t = " + app.time_days().toFixed(2) + " d    view width " + (w >= 1000 ? Math.round(w).toLocaleString("en-GB") : w.toFixed(1)) + " km";
+      }
+      requestAnimationFrame(loop);
+    };
+    requestAnimationFrame(loop);
+  }
+
+  main().catch((e) => fail("This page could not start", String(e)));
+</script>
+</body>
+</html>
