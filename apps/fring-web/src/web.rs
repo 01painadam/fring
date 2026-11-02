@@ -14,7 +14,8 @@ use crate::live::{
     BLOCK_STEPS, Band, COLOUR_FAINT_OFFSET, CompareMode, END_MARGIN_S, FLOATS_PER_INSTANCE,
     Governor, MAX_IN_FLIGHT, PANDORA, PARTICLE_COUNT, ProjectionUniform, SPAN_S, STEP_S, Setup,
     StepPlanner, ViewFrame, builtin_moon_radii_for, count_fits, drop_text, head_instances_styled,
-    instance_bytes, max_hours_for, ref_base_slot, ref_bytes, status_bytes, view_transform,
+    instance_bytes, limit_to_end, max_hours_for, ref_base_slot, ref_bytes, status_bytes,
+    view_transform,
 };
 use crate::view::{Camera, half_local_x, split_halves};
 use fring_gpu::gpu::Gpu;
@@ -34,6 +35,9 @@ const PROJECT_SHADER: &str = include_str!("../shaders/project.wgsl");
 const STATUS_PERIOD_MS: f64 = 1000.0;
 /// Bytes read back from the status buffer: header words 0 to 7.
 const STATUS_READ_BYTES: u64 = 32;
+
+/// The message at the end of the moon data.
+const END_MESSAGE: &str = "End of the moon data. Press Restart to start again from t = 0.";
 
 // States of the read-back of the failure flag.
 const READ_IDLE: u8 = 0;
@@ -120,6 +124,8 @@ pub struct App {
     status: StatusReader,
     /// Particles dropped in this run: unbound, inside moon 0 and moon 1 (words 1 to 3).
     drops: [u32; 3],
+    /// True at the end of the moon ephemeris: stepping stops until a new run.
+    ended: bool,
     steps_last: u64,
     limited: bool,
     note: String,
@@ -346,6 +352,7 @@ impl App {
                 last_ms: 0.0,
             },
             drops: [0; 3],
+            ended: false,
             steps_last: 0,
             limited: false,
             note: String::new(),
@@ -371,11 +378,15 @@ impl App {
         .to_string()
     }
 
-    /// A message for the readout: the reason of a failure, or a note (such as a restart at the end of the ephemeris). Empty
-    /// if there is nothing to say.
+    /// A message for the readout: the reason of a failure, or the end of the
+    /// moon data (built from the state, so it goes with Restart). Empty if there
+    /// is nothing to say.
     pub fn message(&self) -> String {
         if let Phase::Failed(m) = &self.phase {
             return m.clone();
+        }
+        if self.ended {
+            return END_MESSAGE.to_string();
         }
         self.note.clone()
     }
@@ -517,12 +528,18 @@ impl App {
         drop_text(self.drops, self.pandora_on)
     }
 
+    /// True at the end of the moon data: stepping has stopped and only a new
+    /// run (Restart, or any change that rebuilds the run) goes on.
+    pub fn ended(&self) -> bool {
+        self.ended
+    }
+
     /// Simulated time in days (the time of the particle state).
     pub fn time_days(&self) -> f64 {
         self.stepper.as_ref().map_or(0.0, |s| s.time_s()) / 86_400.0
     }
 
-    /// End of the moon ephemeris in days: the run restarts shortly before it.
+    /// End of the moon ephemeris in days: the run pauses shortly before it.
     pub fn span_days(&self) -> f64 {
         self.full
             .as_ref()
@@ -761,6 +778,7 @@ impl App {
         self.stepper = Some(stepper);
         // Counts of the old run must not show in the new one.
         self.drops = [0; 3];
+        self.ended = false;
         self.status.epoch = self.status.epoch.wrapping_add(1);
         self.planner = StepPlanner::new();
         self.note = if lost {
@@ -804,7 +822,7 @@ impl App {
         self.governor.observe(dt_s);
 
         // 1. How many steps (C: the moons and the particles share one time).
-        let (mut restart, mut steps) = (false, 0u64);
+        let (mut ended_now, mut steps) = (false, 0u64);
         let in_flight = self.in_flight.load(Ordering::Acquire);
         if let (Some(stepper), Some(full)) = (&self.stepper, &self.full) {
             let (planned, limited) = self.planner.plan(
@@ -812,27 +830,22 @@ impl App {
                 self.hours_per_s.min(max_hours_for(self.count)),
                 self.governor.cap(),
             );
-            let running = !self.paused;
+            let running = !self.paused && !self.ended;
             let busy = in_flight >= MAX_IN_FLIGHT;
             steps = if running && !busy { planned } else { 0 };
             self.limited = running && (limited || busy);
             if running {
                 let left_s = full.end_s() - END_MARGIN_S - stepper.time_s();
-                if left_s <= STEP_S {
-                    restart = true;
-                } else {
-                    steps = steps.min((left_s / STEP_S) as u64);
-                }
+                let (n, ended) = limit_to_end(steps, left_s, STEP_S);
+                steps = n;
+                ended_now = ended;
             }
         }
-        if restart {
-            self.make_stepper().map_err(err)?;
-            self.note = format!(
-                "Reached the end of the 10-year moon ephemeris: started again from t = 0. {}",
-                self.note
-            )
-            .trim_end()
-            .to_string();
+        if ended_now {
+            // Only stepping stops. The time stays; the picture, the camera and
+            // "Set to now" go on. Read the final counts soon.
+            self.ended = true;
+            self.status.last_ms = f64::NEG_INFINITY;
             steps = 0;
         }
         self.steps_last = steps;

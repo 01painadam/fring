@@ -185,6 +185,7 @@
     });
     const tell = (f) => { try { f(); $("message").textContent = ""; } catch (e) { $("message").textContent = String(e); } };
     let paused = false;
+    let endShown = false;
     $("pause").addEventListener("click", () => {
       paused = !paused;
       app.set_paused(paused);
@@ -353,6 +354,9 @@
       if (phase === "running" && n % 10 === 1) {
         const m = app.message();
         if (m) $("message").textContent = m;
+        else if (endShown) $("message").textContent = "";
+        endShown = app.ended();
+        $("pause").disabled = app.ended();
       }
       requestAnimationFrame(loop);
     };

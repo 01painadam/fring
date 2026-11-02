@@ -546,6 +546,17 @@ pub fn status_bytes(cap: u64) -> u64 {
     (8 + cap) * 4
 }
 
+/// Steps to run in a frame so that the run does not pass the end of the moon
+/// data. `left_s` is the time left, `step_s` the step. Returns the steps and
+/// `true` if the run has ended (not more than one step left): then no step runs.
+pub fn limit_to_end(steps: u64, left_s: f64, step_s: f64) -> (u64, bool) {
+    if left_s <= step_s {
+        (0, true)
+    } else {
+        (steps.min((left_s / step_s) as u64), false)
+    }
+}
+
 /// The line under the time readout: the drop counts (ICR-006: unbound, inside
 /// Prometheus, inside Pandora). The Pandora part is left out if Pandora is off.
 pub fn drop_text(counts: [u32; 3], pandora_on: bool) -> String {
@@ -970,6 +981,16 @@ mod tests {
             "Dropped: 0 unbound \u{b7} 0 inside Prometheus"
         );
         assert!(drop_text([1234, 0, 0], true).starts_with("Dropped: 1,234 unbound"));
+    }
+
+    #[test]
+    fn the_run_stops_at_the_end_of_the_moon_data() {
+        assert_eq!(limit_to_end(100, 1.0e6, STEP_S), (100, false));
+        // 10.5 steps left: at most 10 steps.
+        assert_eq!(limit_to_end(100, 10.5 * STEP_S, STEP_S), (10, false));
+        assert_eq!(limit_to_end(100, 1.5 * STEP_S, STEP_S), (1, false));
+        assert_eq!(limit_to_end(100, STEP_S, STEP_S), (0, true));
+        assert_eq!(limit_to_end(100, -5.0, STEP_S), (0, true));
     }
 
     #[test]
