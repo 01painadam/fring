@@ -46,3 +46,25 @@ fn rule_off_state_bits_are_the_golden_bits() {
     assert_eq!(d, GOLDEN_D, "mode D");
     assert_eq!(dp, GOLDEN_DP, "mode Dp");
 }
+
+#[test]
+#[ignore = "needs a GPU"]
+fn status_buffer_has_8_plus_cap_words_with_word_0_no_failure() {
+    let Some(gpu) = Gpu::new() else {
+        eprintln!("no GPU: skipped");
+        return;
+    };
+    let kernels = WhKernels::new(&gpu, DEFAULT_WORKGROUP).expect("self-test");
+    let system = system(H_S, 10, true);
+    let (init, _) = ensemble(&system, 100);
+    let st = GpuStepper::new(&gpu, &kernels, &system, &init, H_S, 7, Mode::Dp, None).unwrap();
+    let b = read_buffer(&gpu, st.status_buffer());
+    assert_eq!(b.len(), 4 * (8 + st.capacity()));
+    assert_eq!(b[..4], u32::MAX.to_le_bytes());
+    assert!(b[4..].iter().all(|x| *x == 0));
+    assert!(
+        st.status_buffer()
+            .usage()
+            .contains(wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC)
+    );
+}

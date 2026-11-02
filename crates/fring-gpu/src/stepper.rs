@@ -20,7 +20,7 @@
 use crate::spike::{Consts, State, kick_scale, state_from_f64};
 use crate::wf32::model;
 use crate::wh::{self, Mode, ROW};
-use crate::wh_gpu::{NO_FAILURE, WhKernels, grid};
+use crate::wh_gpu::{WhKernels, grid, status_init_bytes, status_words};
 use fring_model::config::ChaosConfig;
 use fring_model::physics::KickTable;
 use fring_model::physics::chaos::shadow_offset_km;
@@ -166,8 +166,8 @@ impl GpuStepper {
             0,
             &le_bytes(&crate::wh_gpu::pack_states(&states, cap)),
         );
-        let status_buf = mk(4, rw);
-        q.write_buffer(&status_buf, 0, &NO_FAILURE.to_le_bytes());
+        let status_buf = mk((4 * status_words(cap)) as u64, rw);
+        q.write_buffer(&status_buf, 0, &status_init_bytes(cap));
         let block_steps = block_steps.clamp(1, MAX_BLOCK_STEPS);
         let shadow_buf = chaos.map(|cfg| {
             // The shadow starts d0 away in the radial direction (position only).
@@ -403,8 +403,19 @@ impl GpuStepper {
         &self.state_buf
     }
 
-    /// The status buffer: one `u32`, the smallest index of a failed particle,
-    /// or `u32::MAX` if none failed.
+    /// The status buffer (ICR-006), `8 + capacity` `u32` words, usage
+    /// `STORAGE | COPY_SRC | COPY_DST`:
+    /// - word 0: the smallest index of a dropped particle, or `u32::MAX` if
+    ///   none was dropped (what [`crate::backend::GpuBackend`] reads);
+    /// - word 1: the number of particles dropped for an unbound or invalid
+    ///   orbit;
+    /// - words 2 to 7: the number dropped inside moon 0 to 5 (the kernels take
+    ///   4 moons, so words 6 and 7 stay reserved);
+    /// - word `8 + i`: the drop reason of particle `i`: 0 live, 1 unbound or
+    ///   invalid orbit, `2 + k` inside moon `k`.
+    ///
+    /// The step kernels of modes D and Dp set the reason of a failed particle
+    /// and then skip it. Mode C only sets word 0.
     pub fn status_buffer(&self) -> &wgpu::Buffer {
         &self.status_buf
     }

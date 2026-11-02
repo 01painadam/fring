@@ -12,8 +12,11 @@
 //    for option D) at 30.
 // 2: run constants, see prm_* below.
 // 3: per-dispatch control: n_steps, n_particles, cap, n_moons.
-// 4: status: status[0] = smallest index of a particle whose orbit is not
-//    bound (0xFFFFFFFF if none).
+// 4: status (ICR-006), 8 + cap words: status[0] = smallest index of a dropped
+//    particle (0xFFFFFFFF if none), status[1] = number dropped for an unbound
+//    or invalid orbit, status[2 + k] = number dropped inside moon k (k < 4;
+//    words 6 and 7 are reserved), status[8 + i] = reason of particle i (0
+//    live, 1 unbound or invalid orbit, 2 + k inside moon k).
 
 @group(0) @binding(0) var<storage, read_write> st: array<vec2<f32>>;
 @group(0) @binding(1) var<storage, read> tab: array<f32>;
