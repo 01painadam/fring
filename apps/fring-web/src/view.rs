@@ -1,17 +1,59 @@
-//! The camera of the page: pan and zoom in the rotating frame.
+//! The camera of the page: the view plane, pan and zoom.
 //!
 //! Plain Rust with no web types, so the unit tests run on the host.
 //! Units: km for the world, pixels for the screen. Screen y points down, world y up.
+//!
+//! The "world" of the camera is the view plane. `ViewTransform` maps the
+//! rotating frame into it: in the ring view the two are the same; in a moon
+//! view the plane is centred on the moon and turns with it.
 
 /// Smallest half-height of the view, km.
 pub const MIN_HALF_HEIGHT_KM: f64 = 5.0;
 /// Largest half-height of the view, km.
 pub const MAX_HALF_HEIGHT_KM: f64 = 1.0e6;
 
+/// Map from the rotating frame to the view plane: `v = R(angle) (p - origin)`,
+/// where `R` turns anticlockwise. A turn without a mirror, so the view is
+/// always seen from the north (orbits go anticlockwise).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ViewTransform {
+    origin_km: [f64; 2],
+    cos: f64,
+    sin: f64,
+}
+
+impl ViewTransform {
+    /// The ring view: the view plane is the rotating frame.
+    pub const IDENTITY: Self = Self {
+        origin_km: [0.0, 0.0],
+        cos: 1.0,
+        sin: 0.0,
+    };
+
+    /// Moves `origin_km` (rotating frame, km) to the view origin, then turns
+    /// anticlockwise by `angle_rad`.
+    pub fn new(origin_km: [f64; 2], angle_rad: f64) -> Self {
+        let (sin, cos) = angle_rad.sin_cos();
+        Self {
+            origin_km,
+            cos,
+            sin,
+        }
+    }
+
+    /// The view-plane position (km) of the rotating-frame point `p_km`. All in
+    /// f64, so the result has the precision of the input.
+    pub fn apply(&self, p_km: [f64; 2]) -> [f64; 2] {
+        let x = p_km[0] - self.origin_km[0];
+        let y = p_km[1] - self.origin_km[1];
+        [self.cos * x - self.sin * y, self.sin * x + self.cos * y]
+    }
+}
+
 /// A 2D camera.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Camera {
-    /// World point (rotating frame, km) at the centre of the window.
+    /// View-plane point (km) at the centre of the window.
     pub centre_km: [f64; 2],
     /// Half of the height of the window, in km.
     pub half_height_km: f64,
@@ -23,6 +65,15 @@ impl Camera {
         Self {
             centre_km: [0.0, 0.0],
             half_height_km: 1.3 * a0_km,
+        }
+    }
+
+    /// A camera on a moon at the view origin, `gap_km` from the ring core. The
+    /// half-height is two gaps, so the core is half-way to the window edge.
+    pub fn moon_view(gap_km: f64) -> Self {
+        Self {
+            centre_km: [0.0, 0.0],
+            half_height_km: (2.0 * gap_km).clamp(MIN_HALF_HEIGHT_KM, MAX_HALF_HEIGHT_KM),
         }
     }
 
@@ -63,6 +114,29 @@ mod tests {
     use super::*;
 
     const SIZE: [f64; 2] = [1200.0, 800.0];
+
+    #[test]
+    fn identity_transform_changes_nothing() {
+        let p = [140_222.43, -3.5];
+        assert_eq!(ViewTransform::IDENTITY.apply(p), p);
+    }
+
+    /// A quarter turn anticlockwise about (10, 0): the point (11, 0) goes to (0, 1).
+    #[test]
+    fn transform_moves_then_turns_anticlockwise() {
+        let t = ViewTransform::new([10.0, 0.0], std::f64::consts::FRAC_PI_2);
+        let v = t.apply([11.0, 0.0]);
+        assert!(v[0].abs() < 1e-15 && (v[1] - 1.0).abs() < 1e-15, "{v:?}");
+        assert_eq!(t.apply([10.0, 0.0]), [0.0, 0.0]);
+    }
+
+    #[test]
+    fn moon_view_is_centred_and_clamped() {
+        let c = Camera::moon_view(1000.0);
+        assert_eq!(c.centre_km, [0.0, 0.0]);
+        assert_eq!(c.half_height_km, 2000.0);
+        assert_eq!(Camera::moon_view(0.0).half_height_km, MIN_HALF_HEIGHT_KM);
+    }
 
     #[test]
     fn window_centre_maps_to_camera_centre() {
