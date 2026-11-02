@@ -4,6 +4,7 @@
 //! never sees a half-written file. Do not use this module in the browser:
 //! it compiles for wasm32 but file access fails there.
 
+use crate::chaos::{ChaosRow, read_chaos_csv, write_chaos_csv};
 use crate::frame::{Frame, read_frame, write_frame};
 use crate::layout::{RunDir, parse_frame_file_name};
 use crate::meta::{RunMeta, read_meta, write_meta};
@@ -100,6 +101,14 @@ impl RunDir {
 
     pub fn read_stats_file(&self) -> Result<Vec<StepStats>> {
         read_stats_csv(&mut open(&self.stats_path())?)
+    }
+
+    pub fn write_chaos_file(&self, rows: &[ChaosRow]) -> Result<()> {
+        write_atomic(&self.chaos_path(), |w| write_chaos_csv(w, rows))
+    }
+
+    pub fn read_chaos_file(&self) -> Result<Vec<ChaosRow>> {
+        read_chaos_csv(&mut open(&self.chaos_path())?)
     }
 
     pub fn write_meta_file(&self, meta: &RunMeta) -> Result<()> {

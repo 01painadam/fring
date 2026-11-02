@@ -25,6 +25,25 @@ pub struct RunMeta {
     pub moons_format_version: u32,
     /// Version of `stats.csv`.
     pub stats_format_version: u32,
+    /// The chaos indicator, present only if the run had `[diagnostics.chaos]`
+    /// (ICR-003). Absent in files from before G3.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub chaos: Option<ChaosMeta>,
+}
+
+/// The `chaos` field of `meta.json` (ICR-003).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ChaosMeta {
+    /// Method name (`"shadow"`).
+    pub method: String,
+    /// Shadow separation d0 in km.
+    pub offset_km: f64,
+    /// Renormalisation interval K in steps.
+    pub renorm_steps: u32,
+    /// Renormalisations done.
+    pub n_renorm: u64,
+    /// Version of `chaos.csv`.
+    pub chaos_format_version: u32,
 }
 
 impl RunMeta {
@@ -39,6 +58,7 @@ impl RunMeta {
             frame_format_version: FRAME_VERSION,
             moons_format_version: MOONS_VERSION,
             stats_format_version: STATS_VERSION,
+            chaos: None,
         }
     }
 }

@@ -469,7 +469,7 @@ impl Backend for GpuBackend {
             let renorm_now = self
                 .chaos
                 .as_ref()
-                .is_some_and(|c| (first + block) % u64::from(c.cfg.renorm_steps) == 0);
+                .is_some_and(|c| (first + block).is_multiple_of(u64::from(c.cfg.renorm_steps)));
             let block = block as usize;
             // The host works while the GPU runs the previous blocks.
             self.table

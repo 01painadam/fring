@@ -202,15 +202,15 @@ impl Backend for CpuBackend {
                     self.ids[index]
                 )));
             }
-            if let Some(c) = &mut self.chaos {
-                if (first_step + block) % u64::from(c.cfg.renorm_steps) == 0 {
-                    let d0 = c.cfg.offset_km;
-                    self.state
-                        .par_iter()
-                        .zip(c.shadow.par_iter_mut())
-                        .zip(c.acc.par_iter_mut())
-                        .for_each(|((m, sh), a)| a.add(renormalise(m, sh, d0)));
-                }
+            if let Some(c) = &mut self.chaos
+                && (first_step + block).is_multiple_of(u64::from(c.cfg.renorm_steps))
+            {
+                let d0 = c.cfg.offset_km;
+                self.state
+                    .par_iter()
+                    .zip(c.shadow.par_iter_mut())
+                    .zip(c.acc.par_iter_mut())
+                    .for_each(|((m, sh), a)| a.add(renormalise(m, sh, d0)));
             }
             done += block;
         }

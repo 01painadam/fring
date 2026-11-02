@@ -1,0 +1,46 @@
+# Chaos map for task A1-ANALYSIS (ADR 0008): the chaos indicator of 10^4 circular
+# test particles between Prometheus and Pandora. From the repository root:
+#   cargo run -p fring-run --release -- --config apps/fring-run/configs/chaos-map.toml
+# Output: <run>/chaos.csv with a0_km, lambda_rel_prometheus_deg, megno_mean,
+# ftle_per_day, log_growth (see docs/snapshot-format.md section 9). Classes:
+# megno_mean <= 2.5 regular, >= 5 chaotic. Use backend = "gpu" for speed (D+).
+
+[run]
+name = "chaos-map"
+backend = "gpu"
+seed = 20261102
+params_dir = "params"
+
+[time]
+step_s = 356.2537               # 150 steps per orbit; not exact in f32, like the G2 tests
+duration_years = 5.0            # about 3,000 orbits at the core
+
+[frame]
+reference_semi_major_axis_km = 140220.0
+
+[domain]
+kind = "full_ring"
+
+[moons]
+include = ["prometheus", "pandora"]
+
+[particles]
+count = 10000
+
+[particles.distribution]
+kind = "band"                   # circular, uniform in a and in longitude
+min_semi_major_axis_km = 139500.0
+max_semi_major_axis_km = 141500.0
+
+[collisions]
+model = "none"
+
+[output]
+frame_every_steps = 1000000     # frames are not needed for the map
+stats_every_steps = 1000000
+velocities = false
+
+[diagnostics.chaos]
+method = "shadow"
+offset_km = 1.0                 # ADR 0008: a larger offset keeps rounding noise small
+renorm_steps = 100              # 0.67 orbit
