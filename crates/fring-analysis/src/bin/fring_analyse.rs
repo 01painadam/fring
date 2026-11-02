@@ -15,7 +15,7 @@ use fring_analysis::apse::{self, DAY_S};
 use fring_analysis::laplace::{radius_from_mean_motion, secular_apse_rate_rad_s};
 use fring_analysis::lyapunov::{self, LyapunovConfig};
 use fring_analysis::map::{self, Class};
-use fring_analysis::stats::{mean, ols, quantile, std};
+use fring_analysis::stats::{self, mean, ols, quantile, std};
 use fring_analysis::{closest, setup};
 use fring_io::RunDir;
 use fring_model::physics::{SaturnField, frequencies};
@@ -35,6 +35,8 @@ fn main() {
         Some("moons") => cmd_moons(&args[1..]),
         Some("laplace") => cmd_laplace(&args[1..]),
         Some("lyapunov") => cmd_lyapunov(&args[1..]),
+        Some("ecc-compare") => cmd_ecc_compare(&args[1..]),
+        Some("edge-compare") => cmd_edge_compare(&args[1..]),
         Some("ecc-configs") => cmd_ecc_configs(&args[1..]),
         Some("closest-bins") => cmd_closest_bins(&args[1..]),
         _ => Err("usage: fring-analyse map|compare|closest|apse|moons|laplace|lyapunov ...".into()),
@@ -333,6 +335,124 @@ fn cmd_ecc_configs(a: &[String]) -> Res<()> {
         list.join("\n") + "\n",
     )?;
     println!("{} configs in {dir}", list.len());
+    Ok(())
+}
+
+fn window(p: &[map::Point], lo: f64, hi: f64) -> Vec<map::Point> {
+    p.iter()
+        .filter(|q| q.a_km >= lo && q.a_km < hi)
+        .copied()
+        .collect()
+}
+
+/// `ecc-compare <runs_dir> <tag> <years> <out_dir>`: per bin the eccentric run
+/// `<tag>-ecc-bNN` against its e = 0 control `<tag>-circ-bNN` (same particles
+/// by id), with Holm-adjusted p over the bins that completed; pooled windows;
+/// and the seed repeat and apse + 120 deg runs against the base run. A bin
+/// whose run directory has no `chaos.csv` is written with status `missing`.
+fn cmd_ecc_compare(a: &[String]) -> Res<()> {
+    use fring_analysis::compare::{MIN_COUNT, header};
+    let (runs, tag, years, out) = (&a[0], &a[1], num(a, 2, 10.0), &a[3]);
+    let read = |name: &str| map::read_points(&Path::new(runs).join(name)).ok();
+    let mut w = create(out, &format!("ecc_bins_{tag}.csv"))?;
+    writeln!(w, "{},holm_p,status", header("a_lo_km,a_hi_km,"))?;
+    let mut rows = Vec::new();
+    let (mut all_e, mut all_c) = (Vec::new(), Vec::new());
+    for bin in 0..22usize {
+        let (lo, hi) = (140_150.0 + 25.0 * bin as f64, 140_175.0 + 25.0 * bin as f64);
+        let e = read(&format!("{tag}-ecc-b{bin:02}"));
+        let c = read(&format!("{tag}-circ-b{bin:02}"));
+        let row = match (&e, &c) {
+            (Some(e), Some(c)) => map_compare(e, c, years, 100 + bin as u64),
+            _ => None,
+        };
+        if let (Some(e), Some(c)) = (e, c) {
+            all_e.extend(e);
+            all_c.extend(c);
+        }
+        rows.push((lo, hi, row));
+    }
+    let ps: Vec<f64> = rows
+        .iter()
+        .filter_map(|r| r.2.as_ref().map(|x| x.dfrac.3))
+        .collect();
+    let adj = stats::holm(&ps);
+    let mut k = 0;
+    for (lo, hi, row) in &rows {
+        match row {
+            Some(r) => {
+                writeln!(w, "{lo:.0},{hi:.0},{},{:.3e},ok", r.csv(), adj[k])?;
+                k += 1;
+            }
+            None => writeln!(w, "{lo:.0},{hi:.0},{},,missing", ",".repeat(17))?,
+        }
+    }
+    w.flush()?;
+    let mut ww = create(out, &format!("ecc_windows_{tag}.csv"))?;
+    writeln!(ww, "{}", header("window,a_lo_km,a_hi_km,"))?;
+    for (name, lo, hi) in [
+        ("core", 140_197.0, 140_247.0),
+        ("inner", 140_150.0, 140_425.0),
+        ("outer", 140_425.0, 140_700.0),
+        ("quiet_zone", 140_150.0, 140_700.0),
+    ] {
+        match map_compare(&window(&all_e, lo, hi), &window(&all_c, lo, hi), years, 7) {
+            Some(r) => writeln!(ww, "{name},{lo:.0},{hi:.0},{}", r.csv())?,
+            None => writeln!(ww, "{name},{lo:.0},{hi:.0},{},", ",".repeat(17))?,
+        }
+    }
+    ww.flush()?;
+    let mut rw = create(out, &format!("ecc_repeats_{tag}.csv"))?;
+    writeln!(rw, "{}", header("kind,bin,"))?;
+    for bin in [0usize, 2, 21] {
+        let base = read(&format!("{tag}-ecc-b{bin:02}"));
+        for kind in ["repeat", "phase120"] {
+            let other = read(&format!("{tag}-ecc-{kind}-b{bin:02}"));
+            let row = match (&other, &base) {
+                (Some(o), Some(b)) => fring_analysis::compare::compare(o, b, years, MIN_COUNT, 9),
+                _ => None,
+            };
+            match row {
+                Some(r) => writeln!(rw, "{kind},{bin},{}", r.csv())?,
+                None => writeln!(rw, "{kind},{bin},{},", ",".repeat(17))?,
+            }
+        }
+    }
+    rw.flush()?;
+    println!("wrote ecc_bins/windows/repeats_{tag}.csv in {out}");
+    Ok(())
+}
+
+/// Compares two sets of the same ids in order: ecc against its control.
+fn map_compare(
+    e: &[map::Point],
+    c: &[map::Point],
+    years: f64,
+    seed: u64,
+) -> Option<fring_analysis::compare::Row> {
+    fring_analysis::compare::compare(e, c, years, fring_analysis::compare::MIN_COUNT, seed)
+}
+
+/// `edge-compare <run_h> <run_h4> <years> <out.csv>`: the outer-edge window at
+/// the step h against the step h/4 (same particles). A = h4, B = h.
+fn cmd_edge_compare(a: &[String]) -> Res<()> {
+    use fring_analysis::compare::header;
+    let h = map::read_points(Path::new(&a[0]))?;
+    let h4 = map::read_points(Path::new(&a[1]))?;
+    let years = num(a, 2, 10.0);
+    let mut w = BufWriter::new(File::create(&a[3])?);
+    writeln!(w, "{}", header("window,a_lo_km,a_hi_km,"))?;
+    for (name, lo, hi) in [
+        ("whole", 140_850.0, 141_100.0),
+        ("w1", 140_850.0, 140_900.0),
+        ("w2", 140_900.0, 141_000.0),
+        ("w3", 141_000.0, 141_100.0),
+    ] {
+        let r = map_compare(&window(&h4, lo, hi), &window(&h, lo, hi), years, 11)
+            .ok_or("too few particles in a window")?;
+        writeln!(w, "{name},{lo:.0},{hi:.0},{}", r.csv())?;
+    }
+    w.flush()?;
     Ok(())
 }
 
