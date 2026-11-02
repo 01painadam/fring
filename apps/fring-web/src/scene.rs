@@ -15,7 +15,11 @@
 //! Moons are schematic in W1: each moon is on a circular orbit with the radius
 //! of its `params/moons.toml` position and the mean motion of the field at that
 //! radius. W2 uses the real ephemeris.
+//!
+//! Two kinds of view (`ViewFrame`): the ring view (the rotating frame itself)
+//! and a moon view (centred on one moon and turning with it).
 
+use crate::view::ViewTransform;
 use fring_model::config::Distribution;
 use fring_model::params::{moons_from_toml_str, saturn_from_toml_str};
 use fring_model::physics::{
@@ -137,6 +141,16 @@ impl Preset {
             }
         }
     }
+}
+
+/// What the view follows.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ViewFrame {
+    /// The frame that turns at n0, centred on Saturn. The ring core stays still.
+    Ring,
+    /// Centred on moon `k` (index into `Scene::moons`) and turning with it:
+    /// Saturn is straight down and the orbital motion goes to the left.
+    Moon(usize),
 }
 
 /// One moon on a schematic circular orbit.
@@ -307,21 +321,55 @@ impl Scene {
         Vec3::new(m.radius_km * lon.cos(), m.radius_km * lon.sin(), 0.0)
     }
 
+    /// Distance from the orbit of moon `k` to the ring core a0, km.
+    pub fn moon_gap_km(&self, k: usize) -> f64 {
+        (self.moons[k].radius_km - self.a0_km).abs()
+    }
+
+    /// The map from the rotating frame to the view plane at time `t_s`.
+    ///
+    /// For `Moon(k)` the moon goes to the origin, and the plane turns by
+    /// `pi/2 - phi`, where `phi` is the moon's longitude in the rotating frame.
+    /// So the moon's radius vector points up (Saturn is straight down), and the
+    /// prograde direction `(-sin phi, cos phi)` points to the left (-x).
+    ///
+    /// # Panics
+    /// If `k` is not a moon index.
+    pub fn view_transform(&self, frame: ViewFrame, t_s: f64) -> ViewTransform {
+        match frame {
+            ViewFrame::Ring => ViewTransform::IDENTITY,
+            ViewFrame::Moon(k) => {
+                let p = self.moon_rotating_km(k, t_s);
+                let phi = p.y.atan2(p.x);
+                ViewTransform::new([p.x, p.y], std::f64::consts::FRAC_PI_2 - phi)
+            }
+        }
+    }
+
     /// Fills `out` with the instances to draw: Saturn, the moons, then the
     /// particles; `FLOATS_PER_INSTANCE` floats each (x, y, size in pixels, colour id).
     ///
-    /// The positions are in km, rotating frame, **relative to the eye** (the
-    /// camera centre). The subtraction is done here in f64 and only then
-    /// rounded to f32. So the f32 error is at most 6e-8 times the distance to the
-    /// eye. On the screen that is at most about 1e-4 pixel at any zoom, because the
-    /// distance in pixels is limited by the size of the window.
-    pub fn write_instances(&self, t_s: f64, eye_km: [f64; 2], px_per_km: f64, out: &mut Vec<f32>) {
+    /// The positions are in km, in the view plane of `view`, **relative to the
+    /// eye** (the camera centre). The transform and the subtraction are done
+    /// here in f64 and only then rounded to f32. So the f32 error is at most 6e-8
+    /// times the distance to the eye. On the screen that is at most about 1e-4
+    /// pixel at any zoom, because the distance in pixels is limited by the size
+    /// of the window.
+    pub fn write_instances(
+        &self,
+        t_s: f64,
+        view: &ViewTransform,
+        eye_km: [f64; 2],
+        px_per_km: f64,
+        out: &mut Vec<f32>,
+    ) {
         out.clear();
         out.reserve((1 + self.moons.len() + self.elements.len()) * FLOATS_PER_INSTANCE);
         let mut push = |p: Vec3<f64>, size_px: f32, colour: f32| {
+            let v = view.apply([p.x, p.y]);
             out.extend_from_slice(&[
-                (p.x - eye_km[0]) as f32,
-                (p.y - eye_km[1]) as f32,
+                (v[0] - eye_km[0]) as f32,
+                (v[1] - eye_km[1]) as f32,
                 size_px,
                 colour,
             ]);
@@ -483,11 +531,92 @@ mod tests {
         }
     }
 
+    /// Longitude of moon `k` in the rotating frame, rad.
+    fn moon_longitude(s: &Scene, k: usize, t_s: f64) -> f64 {
+        let p = s.moon_rotating_km(k, t_s);
+        p.y.atan2(p.x)
+    }
+
+    /// In the ring view a moon inside a0 moves ahead (anticlockwise) and a moon
+    /// outside a0 falls behind (clockwise), like the particles. The schematic
+    /// radii are the radii at the epoch: Prometheus 139,160 km (a0 - 1,062 km),
+    /// Pandora 142,228 km (a0 + 2,006 km). Kepler to first order gives
+    /// n - n0 = -1.5 n0 (r - a0) / a0: +6.6 deg/day and -12.5 deg/day. The
+    /// second-order term changes this by 1.25 |r - a0| / a0 (0.9 % for
+    /// Prometheus, 1.8 % for Pandora) and J2 by about 0.3 %, so the tolerance is 3 %.
+    #[test]
+    fn prometheus_moves_ahead_and_pandora_falls_behind_in_the_ring_view() {
+        let s = scene(Preset::Core, 1);
+        assert_eq!(s.moons()[0].name, "prometheus");
+        assert_eq!(s.moons()[1].name, "pandora");
+        let day = 86_400.0;
+        for (k, sign) in [(0, 1.0), (1, -1.0)] {
+            let r = s.moons()[k].radius_km;
+            let drift = moon_longitude(&s, k, day) - moon_longitude(&s, k, 0.0);
+            let kepler = -1.5 * s.n0_rad_s() * (r - s.a0_km()) / s.a0_km() * day;
+            assert_eq!(drift.signum(), sign, "moon {k}: drift {drift} rad/day");
+            assert!(
+                ((drift - kepler) / kepler).abs() < 0.03,
+                "moon {k}: drift {drift}, Kepler {kepler} rad/day"
+            );
+        }
+    }
+
+    /// In a moon view the moon is at the origin and Saturn is straight down, at
+    /// the moon's orbit radius, at every time. Tolerances: the inputs are about
+    /// 1.4e5 km, so f64 rounding is about 3e-11 km; 1e-6 km leaves a wide margin.
+    #[test]
+    fn moon_view_puts_the_moon_at_the_centre_and_saturn_below() {
+        let s = scene(Preset::Core, 1);
+        for k in 0..s.moons().len() {
+            let r = s.moons()[k].radius_km;
+            for t in [0.0, 1.0e5, 3.0e6] {
+                let view = s.view_transform(ViewFrame::Moon(k), t);
+                let m = s.moon_rotating_km(k, t);
+                let mv = view.apply([m.x, m.y]);
+                assert!(mv[0].abs() < 1e-6 && mv[1].abs() < 1e-6, "moon {k}: {mv:?}");
+                let sat = view.apply([0.0, 0.0]);
+                assert!(sat[0].abs() < 1e-6, "moon {k}: Saturn at {sat:?}");
+                assert!((sat[1] + r).abs() < 1e-6, "moon {k}: Saturn at {sat:?}");
+            }
+        }
+    }
+
+    /// In a moon view a point 1 mrad ahead of the moon on its orbit is to the
+    /// left of the moon: x = -r sin(1e-3), y = -r (1 - cos(1e-3)).
+    #[test]
+    fn moon_view_shows_orbital_motion_to_the_left() {
+        let s = scene(Preset::Core, 1);
+        let t = 2.0e6;
+        for k in 0..s.moons().len() {
+            let r = s.moons()[k].radius_km;
+            let lon = moon_longitude(&s, k, t) + 1e-3;
+            let ahead = [r * lon.cos(), r * lon.sin()];
+            let v = s.view_transform(ViewFrame::Moon(k), t).apply(ahead);
+            assert!((v[0] + r * 1e-3_f64.sin()).abs() < 1e-6, "moon {k}: {v:?}");
+            assert!(
+                (v[1] + r * (1.0 - 1e-3_f64.cos())).abs() < 1e-6,
+                "moon {k}: {v:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn moon_gap_is_the_distance_to_the_core() {
+        let s = scene(Preset::Core, 1);
+        for k in 0..s.moons().len() {
+            assert_eq!(s.moon_gap_km(k), (s.moons()[k].radius_km - s.a0_km()).abs());
+        }
+        // Prometheus is inside the core, Pandora outside; both within 3,000 km.
+        assert!(s.moons()[0].radius_km < s.a0_km() && s.moons()[1].radius_km > s.a0_km());
+        assert!(s.moon_gap_km(0) < 3000.0 && s.moon_gap_km(1) < 3000.0);
+    }
+
     #[test]
     fn instance_layout() {
         let s = scene(Preset::Core, 10);
         let mut out = Vec::new();
-        s.write_instances(0.0, [0.0, 0.0], 1e-3, &mut out);
+        s.write_instances(0.0, &ViewTransform::IDENTITY, [0.0, 0.0], 1e-3, &mut out);
         assert_eq!(out.len(), (1 + 2 + 10) * FLOATS_PER_INSTANCE);
         assert_eq!(out[3], COLOUR_SATURN);
         assert_eq!(out[7], COLOUR_MOON_FIRST);
@@ -503,37 +632,47 @@ mod tests {
     /// The camera-relative f32 positions are exact to a small part of a pixel at
     /// any zoom. The bound: f32 has a relative error of 6e-8, and every
     /// instance in the window is at most about 2000 px from the eye, so the
-    /// error is at most 2000 * 6e-8 = 1.2e-4 px. The tolerance is 1e-3 px.
+    /// error is at most 2000 * 6e-8 = 1.2e-4 px. The tolerance is 1e-3 px. The
+    /// same holds in a moon view, because the turn is done in f64 too.
     #[test]
     fn camera_relative_f32_error_is_below_a_pixel_fraction() {
         let s = scene(Preset::Core, 2000);
         let t = 3.0e6;
         let height_px = 1000.0;
-        let tracked = s.particle_rotating_km(7, t);
-        for half_height_km in [1.8e5, 1.0e4, 300.0, 5.0] {
-            let px_per_km = 0.5 * height_px / half_height_km;
-            let eye = [tracked.x, tracked.y];
-            let mut out = Vec::new();
-            s.write_instances(t, eye, px_per_km, &mut out);
-            let mut checked = 0;
-            for i in 0..s.len() {
-                let p = s.particle_rotating_km(i, t);
-                let (rx, ry) = (p.x - eye[0], p.y - eye[1]);
-                if rx.abs() * px_per_km > 2000.0 || ry.abs() * px_per_km > 2000.0 {
-                    continue;
+        let mut out = Vec::new();
+        for frame in [ViewFrame::Ring, ViewFrame::Moon(0)] {
+            let view = s.view_transform(frame, t);
+            // Exact (f64) view-plane positions, to compare with the f32 output.
+            let exact: Vec<[f64; 2]> = (0..s.len())
+                .map(|i| {
+                    let p = s.particle_rotating_km(i, t);
+                    view.apply([p.x, p.y])
+                })
+                .collect();
+            let eye = exact[7];
+            for half_height_km in [1.8e5, 1.0e4, 300.0, 5.0] {
+                let px_per_km = 0.5 * height_px / half_height_km;
+                s.write_instances(t, &view, eye, px_per_km, &mut out);
+                let mut checked = 0;
+                for (i, p) in exact.iter().enumerate() {
+                    let (rx, ry) = (p[0] - eye[0], p[1] - eye[1]);
+                    if rx.abs() * px_per_km > 2000.0 || ry.abs() * px_per_km > 2000.0 {
+                        continue;
+                    }
+                    let base = (3 + i) * FLOATS_PER_INSTANCE;
+                    let err_px =
+                        ((out[base] as f64 - rx).hypot(out[base + 1] as f64 - ry)) * px_per_km;
+                    assert!(
+                        err_px < 1e-3,
+                        "{frame:?}, half height {half_height_km} km: error {err_px} px"
+                    );
+                    checked += 1;
                 }
-                let base = (3 + i) * FLOATS_PER_INSTANCE;
-                let err_px = ((out[base] as f64 - rx).hypot(out[base + 1] as f64 - ry)) * px_per_km;
                 assert!(
-                    err_px < 1e-3,
-                    "half height {half_height_km} km: error {err_px} px"
+                    checked >= 1,
+                    "{frame:?}: no particle in the window at {half_height_km} km"
                 );
-                checked += 1;
             }
-            assert!(
-                checked >= 1,
-                "no particle in the window at {half_height_km} km"
-            );
         }
     }
 

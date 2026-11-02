@@ -35,11 +35,19 @@
   <h1>Saturn's F ring, rotating frame</h1>
   <div class="row">
     <button id="pause" type="button">Pause</button>
-    <button id="reset" type="button">Whole ring</button>
+    <button id="reset" type="button">Reset view</button>
     <label for="preset">Particles</label>
-    <select id="preset">
+    <select id="preset" autocomplete="off">
       <option value="0">Core (narrow)</option>
       <option value="1">Band (circular)</option>
+    </select>
+  </div>
+  <div class="row">
+    <label for="frame">View</label>
+    <select id="frame" autocomplete="off">
+      <option value="0">Ring (turns at n0)</option>
+      <option value="1">On Prometheus</option>
+      <option value="2">On Pandora</option>
     </select>
   </div>
   <div class="row">
@@ -52,7 +60,7 @@
     <span><span class="dot" style="background:#ff9e33"></span>Prometheus (schematic)</span>
     <span><span class="dot" style="background:#73f28c"></span>Pandora (schematic)</span>
   </div>
-  <p class="note">Frame: turns at the mean motion n0 of the ring core, so the core stays still and the moons drift. Moons are on circular orbits here, not the real ephemeris. Drag to move, scroll to zoom.</p>
+  <p class="note">Seen from the north: orbits go anticlockwise. Ring view: the frame turns at the mean motion n0 of the ring core. So material outside the core (Pandora, the outer half of the band, the apocentre side of the core) falls behind and moves clockwise; material inside (Prometheus, the inner half) moves ahead, anticlockwise. Moon views: the moon stays at the centre, Saturn is straight down and the orbital motion goes to the left. Moons are on circular orbits here, not the real ephemeris. Drag to move, scroll to zoom.</p>
   <p class="note" id="adapter"></p>
 </div>
 
@@ -111,6 +119,7 @@
     });
     $("reset").addEventListener("click", () => app.reset_view());
     $("preset").addEventListener("change", (e) => app.set_preset(parseInt(e.target.value, 10)));
+    $("frame").addEventListener("change", (e) => app.set_view(parseInt(e.target.value, 10)));
 
     // Pointer: drag to pan, wheel to zoom. Positions in canvas pixels.
     let drag = null;

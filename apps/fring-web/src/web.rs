@@ -4,7 +4,7 @@
 //!
 //! The scene and the camera are in `scene.rs` and `view.rs`, which the host tests cover.
 
-use crate::scene::{FLOATS_PER_INSTANCE, Preset, Scene, floats_to_le_bytes};
+use crate::scene::{FLOATS_PER_INSTANCE, Preset, Scene, ViewFrame, floats_to_le_bytes};
 use crate::view::Camera;
 use wasm_bindgen::prelude::*;
 
@@ -28,6 +28,7 @@ pub struct App {
     bind_group: wgpu::BindGroup,
     instances: wgpu::Buffer,
     scene: Scene,
+    view: ViewFrame,
     camera: Camera,
     t_s: f64,
     hours_per_s: f64,
@@ -44,6 +45,14 @@ fn err(e: impl std::fmt::Display) -> JsValue {
 
 fn preset_from_index(i: u32) -> Preset {
     if i == 1 { Preset::Band } else { Preset::Core }
+}
+
+/// The camera that a view starts with (and goes back to on "Reset view").
+fn initial_camera(scene: &Scene, view: ViewFrame) -> Camera {
+    match view {
+        ViewFrame::Ring => Camera::whole_ring(scene.a0_km()),
+        ViewFrame::Moon(k) => Camera::moon_view(scene.moon_gap_km(k)),
+    }
 }
 
 #[wasm_bindgen]
@@ -153,7 +162,7 @@ impl App {
             usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
-        let camera = Camera::whole_ring(scene.a0_km());
+        let camera = initial_camera(&scene, ViewFrame::Ring);
         Ok(App {
             surface,
             device,
@@ -164,6 +173,7 @@ impl App {
             bind_group,
             instances,
             scene,
+            view: ViewFrame::Ring,
             camera,
             t_s: 0.0,
             hours_per_s: 6.0,
@@ -207,9 +217,23 @@ impl App {
         Ok(())
     }
 
-    /// Shows the whole ring again.
+    /// 0 = ring view (the frame that turns at n0); `k + 1` = centred on moon `k`
+    /// (1 Prometheus, 2 Pandora, the order of `params/moons.toml`). The camera
+    /// goes to the start position of that view.
+    pub fn set_view(&mut self, index: u32) -> Result<(), JsValue> {
+        let view = match index as usize {
+            0 => ViewFrame::Ring,
+            i if i <= self.scene.moons().len() => ViewFrame::Moon(i - 1),
+            _ => return Err(err(format!("no view {index}"))),
+        };
+        self.view = view;
+        self.camera = initial_camera(&self.scene, view);
+        Ok(())
+    }
+
+    /// Puts the camera back to the start position of the current view.
     pub fn reset_view(&mut self) {
-        self.camera = Camera::whole_ring(self.scene.a0_km());
+        self.camera = initial_camera(&self.scene, self.view);
     }
 
     /// A mouse drag of `(dx, dy)` canvas pixels.
@@ -246,8 +270,10 @@ impl App {
         }
         let size = self.size();
         let px_per_km = self.camera.px_per_km(size[1]);
+        let view = self.scene.view_transform(self.view, self.t_s);
         self.scene.write_instances(
             self.t_s,
+            &view,
             self.camera.centre_km,
             px_per_km,
             &mut self.scratch,
