@@ -13,6 +13,8 @@ Read this file at the start of a session. When a mistake costs time, add an entr
 
 - **What:** the G2 subagent stopped and asked how to continue. A0 wrote the decision in the conversation but did not call SendMessage. The subagent waited until AJ asked for the status.
 - **Rule:** when a subagent waits for a decision, send the decision in the same turn in which you write it, and confirm that the agent has resumed.
+- **It happened again (G3, 2026-11-02):** A0 wrote "I am sending the decision now" and ended the turn without the call. AJ had to say "continue".
+- **Stricter rule:** make the SendMessage call first. Write "sent" only after the tool result says that the agent has resumed. If the send tool is deferred, load it before you write the message.
 
 ### M16. WGSL on Metal is not IEEE: fast math removes double-single error terms
 
