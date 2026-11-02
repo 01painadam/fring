@@ -166,4 +166,12 @@ cd crates/fring-analysis/python && uv sync                    # install altair, 
 cd crates/fring-analysis/python && uv run python plots.py     # all figures from docs/results/data/ to docs/results/figures/ (PNG and Vega-Lite JSON)
 ```
 
-Web commands: A7 adds them here when task W1 is done.
+Web commands (A7; a static page built from `apps/fring-web`; the output goes to the git-ignored `apps/fring-web/dist/`):
+
+```sh
+cargo install wasm-bindgen-cli --version 0.2.130 --locked    # once; the version must equal the wasm-bindgen crate
+apps/fring-web/scripts/build.sh                              # wasm32 build (profile wasm-release) + wasm-bindgen; prints the wasm size
+python3 -m http.server 8080 -d apps/fring-web/dist           # then open http://localhost:8080 in Chrome or Safari 26
+cargo test -p fring-web                                      # host tests: scene, frames, camera
+cargo check -p fring-web --target wasm32-unknown-unknown
+```
