@@ -51,6 +51,18 @@ pub const MAX_HOURS_PER_S: f64 = 500.0;
 pub const MAX_STEPS_PER_FRAME: u64 = 200;
 /// Frames of GPU work that may be queued before the page stops stepping.
 pub const MAX_IN_FLIGHT: u32 = 2;
+/// Compute budget of the integrator, particle-steps per second. Source: the
+/// W2-GPU benchmark (mode Dp, about 9.5e8 particle-steps/s on the Mac mini),
+/// with 30 % of the frame kept for rendering, so about 6.6e8. The speed limit
+/// for a particle count follows from it ([`max_hours_for`]).
+pub const COMPUTE_BUDGET_PARTICLE_STEPS_PER_S: f64 = 6.6e8;
+/// The particle counts that the page offers.
+pub const PARTICLE_COUNTS: [u32; 4] = [10_000, 100_000, 300_000, 1_000_000];
+/// Added to the colour id of an instance that belongs to the faint reference
+/// (overlay mode); the render shader draws it with a low alpha.
+pub const COLOUR_FAINT_OFFSET: f32 = 10.0;
+/// Instances before the particles of one picture: Saturn and up to three moons.
+pub const HEAD_SLOTS: usize = 4;
 
 /// Size of the disc of a particle, pixels.
 pub const PARTICLE_SIZE_PX: f32 = 2.0;
@@ -288,6 +300,26 @@ pub fn head_instances(
     pandora_on: bool,
     out: &mut Vec<f32>,
 ) -> usize {
+    head_instances_styled(
+        setup, view, eye_km, px_per_km, moons, pandora_on, true, 0.0, out,
+    )
+}
+
+/// As [`head_instances`], with a choice: `with_saturn` false leaves Saturn out
+/// (the faint overlay draws the moons only), and `colour_offset` is added to
+/// every colour id (`COLOUR_FAINT_OFFSET` for the faint reference).
+#[allow(clippy::too_many_arguments)] // plain data in, plain data out
+pub fn head_instances_styled(
+    setup: &Setup,
+    view: &ViewTransform,
+    eye_km: [f64; 2],
+    px_per_km: f64,
+    moons: &[[f64; 2]],
+    pandora_on: bool,
+    with_saturn: bool,
+    colour_offset: f32,
+    out: &mut Vec<f32>,
+) -> usize {
     out.clear();
     let mut push = |p: [f64; 2], size_px: f32, colour: f32| {
         let v = view.apply(p);
@@ -295,14 +327,16 @@ pub fn head_instances(
             (v[0] - eye_km[0]) as f32,
             (v[1] - eye_km[1]) as f32,
             size_px,
-            colour,
+            colour + colour_offset,
         ]);
     };
-    push(
-        [0.0, 0.0],
-        (2.0 * setup.saturn.reference_radius_km * px_per_km) as f32,
-        COLOUR_SATURN,
-    );
+    if with_saturn {
+        push(
+            [0.0, 0.0],
+            (2.0 * setup.saturn.reference_radius_km * px_per_km) as f32,
+            COLOUR_SATURN,
+        );
+    }
     for (k, m) in moons.iter().enumerate() {
         if !pandora_on && setup.moons[k].name == PANDORA {
             continue;
@@ -423,6 +457,107 @@ impl StepPlanner {
         self.acc_steps -= whole;
         (n, limited)
     }
+}
+
+/// What the compare control shows.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CompareMode {
+    /// Only the live ring.
+    Off,
+    /// The canvas is split: reference on the left, live on the right.
+    Side,
+    /// The reference is drawn faint under the live dots.
+    Overlay,
+}
+
+impl CompareMode {
+    /// 0 = off, 1 = side by side, 2 = overlay.
+    pub fn from_index(index: u32) -> Option<Self> {
+        match index {
+            0 => Some(Self::Off),
+            1 => Some(Self::Side),
+            2 => Some(Self::Overlay),
+            _ => None,
+        }
+    }
+}
+
+/// The fastest speed (simulated hours per real second) that the compute budget
+/// allows for `count` particles: `min(500, budget * 360 s / 3600 s / count)`.
+/// This is 500 h/s at 10^5, 220 h/s at 3x10^5 and 66 h/s at 10^6.
+pub fn max_hours_for(count: u32) -> f64 {
+    let h = COMPUTE_BUDGET_PARTICLE_STEPS_PER_S * STEP_S / 3600.0 / f64::from(count.max(1));
+    h.clamp(MIN_HOURS_PER_S, MAX_HOURS_PER_S)
+}
+
+/// Particle capacity of the stepper: `count` rounded up to a multiple of the
+/// workgroup size (as `GpuStepper` does).
+pub fn capacity_for(count: u32, workgroup: u32) -> u64 {
+    u64::from(count)
+        .next_multiple_of(u64::from(workgroup))
+        .max(u64::from(workgroup))
+}
+
+/// Bytes of the state buffer of the stepper: 6 planes of `cap` double-single
+/// values, 8 bytes each.
+pub fn state_bytes(cap: u64) -> u64 {
+    6 * cap * 8
+}
+
+/// Bytes of the reference copy: the planes x and y only (planes 0 and 1), 8
+/// bytes per value. A view mode that reads z would need plane 2 in the copy as
+/// well, and a larger `ref_bytes`.
+pub fn ref_bytes(cap: u64) -> u64 {
+    2 * cap * 8
+}
+
+/// Instances in the instance buffer for `count` particles: the live picture
+/// (`HEAD_SLOTS` + `count`) and the reference picture, one after the other.
+pub fn instance_slots(count: u32) -> u64 {
+    2 * (HEAD_SLOTS as u64 + u64::from(count))
+}
+
+/// Index of the first instance of the reference picture (its head).
+pub fn ref_base_slot(count: u32) -> u32 {
+    HEAD_SLOTS as u32 + count
+}
+
+/// Bytes of the instance buffer for `count` particles.
+pub fn instance_bytes(count: u32) -> u64 {
+    instance_slots(count) * (FLOATS_PER_INSTANCE * 4) as u64
+}
+
+/// Checks that `count` particles fit the limits of the device, before any
+/// buffer is made. Returns a message for the page if they do not.
+pub fn count_fits(
+    count: u32,
+    workgroup: u32,
+    max_binding_bytes: u64,
+    max_buffer_bytes: u64,
+    max_workgroups_per_dim: u32,
+) -> std::result::Result<(), String> {
+    let cap = capacity_for(count, workgroup);
+    let needs = [
+        ("state", state_bytes(cap)),
+        ("reference", ref_bytes(cap)),
+        ("instances", instance_bytes(count)),
+    ];
+    let mb = |b: u64| b as f64 / 1e6;
+    for (what, bytes) in needs {
+        if bytes > max_binding_bytes.min(max_buffer_bytes) {
+            return Err(format!(
+                "{count} particles need {:.0} MB for the {what} buffer; this GPU allows {:.0} MB. Choose fewer particles.",
+                mb(bytes),
+                mb(max_binding_bytes.min(max_buffer_bytes))
+            ));
+        }
+    }
+    if cap.div_ceil(64) > u64::from(max_workgroups_per_dim) {
+        return Err(format!(
+            "{count} particles need more workgroups than this GPU allows in one dispatch. Choose fewer particles."
+        ));
+    }
+    Ok(())
 }
 
 /// Lowers the cap on steps per frame when frames are slow and raises it again
@@ -749,5 +884,70 @@ mod tests {
         assert_eq!(out.len(), 2 * FLOATS_PER_INSTANCE);
         // Saturn's diameter in pixels: 2 R * scale.
         assert!((f64::from(out[2]) - 2.0 * s.saturn.reference_radius_km * 1e-3).abs() < 1e-3);
+    }
+
+    #[test]
+    fn speed_limit_follows_the_compute_budget() {
+        assert_eq!(max_hours_for(10_000), MAX_HOURS_PER_S);
+        assert_eq!(max_hours_for(100_000), MAX_HOURS_PER_S);
+        assert!((max_hours_for(300_000) - 220.0).abs() < 1e-9);
+        assert!((max_hours_for(1_000_000) - 66.0).abs() < 1e-9);
+        // 1 h/s is 10 steps/s, so the limit in particle-steps/s is the budget.
+        let steps_per_s = max_hours_for(1_000_000) * 3600.0 / STEP_S;
+        assert!((steps_per_s * 1e6 - COMPUTE_BUDGET_PARTICLE_STEPS_PER_S).abs() < 1.0);
+    }
+
+    #[test]
+    fn buffer_sizes_at_one_million_particles() {
+        let cap = capacity_for(1_000_000, 128);
+        assert_eq!(cap, 1_000_064);
+        assert_eq!(state_bytes(cap), 48_003_072);
+        assert_eq!(ref_bytes(cap), 16_001_024);
+        assert_eq!(ref_bytes(cap) % 4, 0, "copy_buffer_to_buffer alignment");
+        assert_eq!(instance_bytes(1_000_000), 32_000_128);
+        assert_eq!(ref_base_slot(1_000_000), 1_000_004);
+        let (bind, buf) = (128 << 20, 256 << 20);
+        assert!(count_fits(1_000_000, 128, bind, buf, 65_535).is_ok());
+    }
+
+    #[test]
+    fn count_that_does_not_fit_gives_a_message() {
+        let msg = count_fits(1_000_000, 128, 32_000_000, 256 << 20, 65_535).unwrap_err();
+        assert!(
+            msg.contains("1000000 particles") && msg.contains("state"),
+            "{msg}"
+        );
+        assert!(count_fits(10_000, 128, 32_000_000, 256 << 20, 65_535).is_ok());
+        // Too many workgroups for one dispatch.
+        assert!(count_fits(1_000_000, 128, u64::MAX, u64::MAX, 1000).is_err());
+    }
+
+    #[test]
+    fn compare_modes_from_index() {
+        assert_eq!(CompareMode::from_index(0), Some(CompareMode::Off));
+        assert_eq!(CompareMode::from_index(1), Some(CompareMode::Side));
+        assert_eq!(CompareMode::from_index(2), Some(CompareMode::Overlay));
+        assert_eq!(CompareMode::from_index(3), None);
+    }
+
+    #[test]
+    fn faint_head_has_offset_ids_and_no_saturn() {
+        let (s, e) = setup_and_eph();
+        let moons = s.moon_positions(&e, 0.0).unwrap();
+        let mut out = Vec::new();
+        let n = head_instances_styled(
+            &s,
+            &ViewTransform::IDENTITY,
+            [0.0, 0.0],
+            1e-3,
+            &moons,
+            true,
+            false,
+            COLOUR_FAINT_OFFSET,
+            &mut out,
+        );
+        assert_eq!(n, 2);
+        assert_eq!(out[3], COLOUR_MOON_FIRST + COLOUR_FAINT_OFFSET);
+        assert_eq!(out[7], COLOUR_MOON_FIRST + 1.0 + COLOUR_FAINT_OFFSET);
     }
 }
