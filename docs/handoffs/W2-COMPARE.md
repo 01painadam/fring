@@ -1,6 +1,6 @@
 # W2-COMPARE: compare the live ring with a stored reference
-Role: A7  Branch: ws/a7-w2-compare  Status: doing
-Updated: 2026-11-02
+Role: A7  Branch: ws/a7-w2-compare  Status: done (A0 review passed; AJ: commit, open the PR, merge when CI passes)
+Updated: 2026-11-02 (A0)
 
 ## Goal and acceptance criteria
 (PLAN.md section 9, W2-COMPARE; AJ decisions of 2026-11-02.) A "Compare" control: Off, Side by side (reference left, live right), Overlay (reference faint under the live dots). The reference is t = 0; "Set to now" stores the live state as the new reference (GPU copy). Same view mode, linked camera; the reference uses its own time for the frame angle and the moon dots. A "Particles" control (10^4, 10^5, 3x10^5, 10^6) rebuilds the stepper at t = 0; a count that does not fit gives a message; the speed is limited at large counts.
@@ -18,11 +18,38 @@ Done when: the three modes and "Set to now" work in Chrome on the Mac mini; the 
 - Commit 9: `?bench` runs every count x compare mode (`counts=`, `modes=`), 3 s warm-up and 10 s per cell at 500 h/s requested; table in the page, one CSV row per cell and the user agent in the console.
 
 ## Next step (one concrete action)
-AJ or A0 runs browser steps B1 to B5 (below) in Chrome; then commit 10: paste the `?bench` table here, propose the default count (A0), AJ confirms.
+None for this task. Gate G3 evidence (A0 and AJ): the Safari 26 check (`?bench` and the M24 zoom check) and AJ's choice of a public host.
 
 ## How to verify the current state
 Definition of done on the head of commit 9 (exit codes read directly): fmt 0, clippy 0, `cargo test --workspace` 0 (219 passed, 0 failed), wasm32 checks of fring-model, fring-gpu, fring-web all 0, `cargo test -p fring-web --release -- --ignored` 0 (6 native GPU tests). wasm size 869,527 bytes.
 `cargo test -p fring-web` (host tests pass); `cargo check -p fring-web --target wasm32-unknown-unknown`.
+A0 review (2026-11-02): the same checks again on the pushed head 3a896ca, each exit code read directly: all 0; 219 passed, 0 failed, 27 ignored; 6 native GPU tests pass; wasm 869,527 bytes. `--nocapture` of `reference_projection_matches_the_twin_in_the_second_half_of_the_buffer` prints "26 particles within 500 km of the eye; worst error 0.151 of the tolerance". Log: `runs/logs/a0-review-w2-compare.log` (main checkout).
+
+## Evidence: `?bench` (AJ, Chrome on the Mac mini, 2026-11-02)
+Full matrix (`?bench`), 500 h/s requested, 3 s warm-up and 10 s per cell:
+
+| particles | compare | mean fps | 5th pct fps | worst ms | steps/frame | effective h/s | rebuild ms |
+|---|---|---|---|---|---|---|---|
+| 10000 | off | 58.9 | 57.1 | 182.3 | 59.6 | 351 | 5 |
+| 10000 | side | 60.0 | 56.5 | 17.8 | 83.3 | 500 | 12 |
+| 10000 | overlay | 60.0 | 56.8 | 17.8 | 83.3 | 500 | 0 |
+| 100000 | off | 60.0 | 56.8 | 17.8 | 83.3 | 500 | 45 |
+| 100000 | side | 60.0 | 57.5 | 17.7 | 83.3 | 500 | 0 |
+| 100000 | overlay | 60.0 | 57.8 | 17.7 | 83.3 | 500 | 0 |
+| 300000 | off | 60.0 | 57.1 | 17.7 | 36.7 | 220 | 86 |
+| 300000 | side | 24.3 | 57.5 | 6417.5 | 36.7 | 89 | 0 |
+| 300000 | overlay | 60.0 | 57.8 | 17.7 | 34.8 | 209 | 0 |
+| 1000000 | off | 60.0 | 57.5 | 17.7 | 8.3 | 50 | 219 |
+| 1000000 | side | 60.0 | 58.5 | 17.7 | 3.2 | 19 | 0 |
+| 1000000 | overlay | 60.0 | 58.5 | 17.6 | 3.2 | 19 | 0 |
+
+- **Pass:** at 10^5, mean 60.0 fps in each compare mode at the full 500 h/s (criterion: 30 fps or more).
+- **300000, side: one stall of 6.4 s.** The 5th percentile is 57.5 fps, so the other frames are normal. With one frame of 6.42 s and the others at 16.7 ms, a mean of 41.2 ms (24.3 fps) gives n = 6.40 / (41.2 - 16.7) ms, about 261 frames in about 10.8 s; 261 x 36.7 steps x 0.1 h = 958 h, so 89 h/s, as in the table. The overlay cell at the same count draws the same number of points and has no stall. Cause not known (Chrome stops requestAnimationFrame in a hidden tab; this would explain it). Not run again.
+- **10000, off (the first cell): 351 h/s, worst frame 182 ms.** The next two cells at 10^4 give 500 h/s. A start-up effect of the first cell, not run again.
+- **10^6: point drawing, not the physics, sets the speed.** The limit is 66 h/s, but the real speed is 50 h/s (off) and 19 h/s (side, overlay) at 60 fps: the app skips steps while 2 frames are in flight. With the W2-GPU step rate of about 9.4e8 particle-steps/s (6.6e8 / 0.7): off, 500 steps/s x 10^6 = 5e8 (53 % of the GPU), so projection and drawing take about 7.8 ms per frame for 10^6 points; side or overlay, 190 steps/s x 10^6 = 1.9e8 (20 %), so about 13.3 ms per frame for 2 x 10^6 points. About 7 ms per 10^6 points: a cache of the reference projection would not help much.
+- **Rebuild time:** 5, 45, 86 and 219 ms for 10^4, 10^5, 3x10^5 and 10^6 particles.
+- The console CSV rows were not copied; the table is the only record. B1 to B4 and the zoom check: AJ ran the page and wrote "ok looks good"; no separate notes.
+- **Default count: 10^5** (A0 proposal, AJ confirmed 2026-11-02). It is the only count with the full 500 h/s in each mode: 1 year (8766 h) takes 17.5 s, against 40 s at 3x10^5 (220 h/s) and 7.7 min at 10^6 with compare on (19 h/s). The code already uses it (`PARTICLE_COUNT` in `live.rs`, the selected option in `index.html`).
 
 ## Browser steps for AJ or A0 (Chrome on the Mac mini, not headless)
 Build: `apps/fring-web/scripts/build.sh`, serve: `python3 -m http.server 8080 -d apps/fring-web/dist`, open http://localhost:8080.
@@ -41,7 +68,7 @@ Build: `apps/fring-web/scripts/build.sh`, serve: `python3 -m http.server 8080 -d
 - The reference projection is redone every frame (no cache); decide from the bench table.
 
 ## Open questions / blockers
-- Browser checks B1 to B5 need AJ or A0 in Chrome (headless Chrome shows a black canvas).
+- None for this task. For G3: Safari 26 check, public host (AJ).
 
 ## Decisions made (A0, 2026-11-02)
 - Every rebuild (band, Pandora, Restart, ephemeris wrap, count) resets the reference to the new t = 0; a message only if a "Set to now" reference was lost.
