@@ -35,6 +35,7 @@ fn main() {
         Some("moons") => cmd_moons(&args[1..]),
         Some("laplace") => cmd_laplace(&args[1..]),
         Some("lyapunov") => cmd_lyapunov(&args[1..]),
+        Some("closest-join") => cmd_closest_join(&args[1..]),
         Some("ecc-compare") => cmd_ecc_compare(&args[1..]),
         Some("edge-compare") => cmd_edge_compare(&args[1..]),
         Some("ecc-configs") => cmd_ecc_configs(&args[1..]),
@@ -453,6 +454,86 @@ fn cmd_edge_compare(a: &[String]) -> Res<()> {
         writeln!(w, "{name},{lo:.0},{hi:.0},{}", r.csv())?;
     }
     w.flush()?;
+    Ok(())
+}
+
+/// `closest-join <closest.csv> <chaos_run> <moon> <hill_km> <body_km> <out_dir>`:
+/// joins the classes of a chaos run to an existing `closest` CSV by particle id
+/// (the CPU and GPU trajectories differ after a Lyapunov time, so this is a
+/// statistical relation, not a trajectory match). Fails if fewer than all rows
+/// match or if `|r0|` disagrees. Writes `<out_dir>/closest_<moon>_classes.csv`:
+/// for each limit, the particles below it by class.
+fn cmd_closest_join(a: &[String]) -> Res<()> {
+    let text = std::fs::read_to_string(&a[0])?;
+    let mut lines = text.lines();
+    let head: Vec<&str> = lines.next().ok_or("empty csv")?.split(',').collect();
+    let col = head
+        .iter()
+        .position(|h| *h == format!("min_{}_km", a[2]))
+        .ok_or("no such moon column")?;
+    let (hill, body): (f64, f64) = (a[3].parse()?, a[4].parse()?);
+    let by_id: std::collections::HashMap<u32, map::Point> = map::read_points(Path::new(&a[1]))?
+        .into_iter()
+        .map(|p| (p.id, p))
+        .collect();
+    let rows: Vec<(u32, f64, f64)> = lines
+        .map(|l| {
+            let f: Vec<&str> = l.split(',').collect();
+            Ok((f[0].parse()?, f[1].parse()?, f[col].parse()?))
+        })
+        .collect::<Res<_>>()?;
+    let mut matched = 0usize;
+    let limits = [
+        ("hit".to_string(), body),
+        ("1_hill".to_string(), hill),
+        ("4.1_hill".to_string(), 4.1 * hill),
+        ("6.3_hill".to_string(), 6.3 * hill),
+        ("all".to_string(), f64::INFINITY),
+    ];
+    let mut counts = vec![[0usize; 5]; limits.len()];
+    for (id, r0, d) in &rows {
+        let p = by_id
+            .get(id)
+            .ok_or(format!("id {id} is not in the chaos run"))?;
+        if (p.r_km - r0).abs() > 1e-3 {
+            return Err(format!("id {id}: r0 {r0} differs from the chaos run {}", p.r_km).into());
+        }
+        matched += 1;
+        for (k, (_, lim)) in limits.iter().enumerate() {
+            if d < lim {
+                counts[k][p.class.index()] += 1;
+            }
+        }
+    }
+    assert_eq!(
+        matched,
+        rows.len(),
+        "classes matched {matched} of {}",
+        rows.len()
+    );
+    if matched == 0 {
+        return Err("no particle matched".into());
+    }
+    let mut w = create(&a[5], &format!("closest_{}_classes.csv", a[2]))?;
+    writeln!(
+        w,
+        "limit,km,n_bounded,n_regular,n_uncertain,n_chaotic,n_invalid,n_below"
+    )?;
+    for (k, (name, lim)) in limits.iter().enumerate() {
+        let c = counts[k];
+        writeln!(
+            w,
+            "{name},{lim:.2},{},{},{},{},{},{}",
+            c[0],
+            c[1],
+            c[2],
+            c[3],
+            c[4],
+            c.iter().sum::<usize>()
+        )?;
+    }
+    w.flush()?;
+    println!("classes matched {matched} of {}", rows.len());
     Ok(())
 }
 
