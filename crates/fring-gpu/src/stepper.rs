@@ -254,7 +254,9 @@ impl GpuStepper {
             | wgpu::BufferUsages::COPY_SRC
             | wgpu::BufferUsages::COPY_DST;
         let uni = wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST;
-        let table = mk((self.block_steps * ROW * 4) as u64, rw);
+        // Two more rows after the kick rows: the moon positions at the sync
+        // times of the block (the radius rule of ICR-006).
+        let table = mk(((self.block_steps + 2) * ROW * 4) as u64, rw);
         let ctl = mk(16, uni);
         let k = &self.kernels;
         let bind = k.bind_group(

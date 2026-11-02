@@ -95,6 +95,46 @@ pub fn pack_table(table: &KickTable<f64>, scale: f64) -> Vec<f32> {
     out
 }
 
+/// The two extra rows after the kick rows of a block, for the moon-radius rule
+/// (ICR-006): row 0 holds the moon positions at the sync time at the start of
+/// the block, `run_start_s + first_step h`, and row 1 those at the end,
+/// `run_start_s + (first_step + n_steps) h`. The state of the particles is at
+/// those times, so the half drifts before the first kick and after the last
+/// kick can be checked too. Same layout as a kick row (moon j as DS at `6 j`).
+///
+/// A time outside the ephemeris gives a row with [`SYNC_NONE_KM`] in x of moon
+/// 0 (the shader then skips that half drift). Moons beyond [`MAX_MOONS`] are
+/// ignored.
+pub fn sync_rows(
+    eph: &fring_model::MoonEphemeris,
+    run_start_s: f64,
+    h_s: f64,
+    first_step: u64,
+    n_steps: usize,
+) -> [f32; 2 * ROW] {
+    let mut out = [0f32; 2 * ROW];
+    let mut states = vec![fring_model::BodyState::default(); eph.tracks.len()];
+    for (r, step) in [first_step, first_step + n_steps as u64]
+        .into_iter()
+        .enumerate()
+    {
+        let t = run_start_s + step as f64 * h_s;
+        let row = &mut out[r * ROW..(r + 1) * ROW];
+        if fring_model::physics::interpolate_moons_into(eph, t, &mut states).is_err() {
+            row[0] = SYNC_NONE_KM;
+            continue;
+        }
+        for (j, st) in states.iter().enumerate().take(MAX_MOONS) {
+            for (c, x) in st.position_km.to_array().iter().enumerate() {
+                let d = Ds::<0>::split(*x);
+                row[6 * j + 2 * c] = d.hi;
+                row[6 * j + 2 * c + 1] = d.lo;
+            }
+        }
+    }
+    out
+}
+
 /// The run constants for the uniform buffer (`prm` in `wh.wgsl`), with the
 /// moon-radius rule off.
 pub fn params<const M: u8>(c: &Consts<M>, gm_moons_km3_s2: &[f64]) -> Vec<f32> {
@@ -502,6 +542,34 @@ mod radius_tests {
         let above = segment_min_d2::<M4>([-60.0, r + 1.0, 0.0], [60.0, r + 1.0, 0.0]);
         let below = segment_min_d2::<M4>([-60.0, r - 1.0, 0.0], [60.0, r - 1.0, 0.0]);
         assert!(above > r * r && below < r * r);
+    }
+
+    #[test]
+    fn sync_rows_match_the_ephemeris_and_use_the_sentinel() {
+        let sp =
+            fring_model::params::saturn_from_toml_str(include_str!("../../../params/saturn.toml"))
+                .unwrap();
+        let moons =
+            fring_model::params::moons_from_toml_str(include_str!("../../../params/moons.toml"))
+                .unwrap();
+        let h = 356.2537;
+        let eph =
+            fring_model::physics::build_ephemeris(&sp, &moons, 10.0 * h + 7200.0, 1800.0).unwrap();
+        let rows = sync_rows(&eph, 0.0, h, 3, 4);
+        for (r, t) in [(0, 3.0 * h), (1, 7.0 * h)] {
+            let st = fring_model::physics::interpolate_moons(&eph, t).unwrap();
+            for (j, m) in st.moons.iter().enumerate() {
+                let p = m.position_km.to_array();
+                for c in 0..3 {
+                    let v = f64::from(rows[r * ROW + 6 * j + 2 * c])
+                        + f64::from(rows[r * ROW + 6 * j + 2 * c + 1]);
+                    assert!((v - p[c]).abs() < 1e-9 * p[c].abs().max(1.0), "{r} {j} {c}");
+                }
+            }
+        }
+        // The end is outside the ephemeris: sentinel in the second row only.
+        let rows = sync_rows(&eph, 0.0, h, 0, 1_000_000);
+        assert!(moon_row_valid(rows[0]) && !moon_row_valid(rows[ROW]));
     }
 
     #[test]
