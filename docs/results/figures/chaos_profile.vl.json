@@ -39040,7 +39040,8 @@
               "field": "cls",
               "legend": {
                 "columns": 4,
-                "orient": "bottom"
+                "orient": "bottom",
+                "titleLimit": 0
               },
               "scale": {
                 "domain": [
@@ -39151,7 +39152,8 @@
               "field": "cls",
               "legend": {
                 "columns": 4,
-                "orient": "bottom"
+                "orient": "bottom",
+                "titleLimit": 0
               },
               "scale": {
                 "domain": [
@@ -39262,7 +39264,8 @@
               "field": "cls",
               "legend": {
                 "columns": 4,
-                "orient": "bottom"
+                "orient": "bottom",
+                "titleLimit": 0
               },
               "scale": {
                 "domain": [

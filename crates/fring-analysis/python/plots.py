@@ -169,7 +169,7 @@ def profile_chart(tags, r_lo, r_hi, title):
                     "cls:N",
                     scale=alt.Scale(domain=CLASSES, range=CLASS_COLOURS),
                     title="Class of the mean MEGNO: bounded < 1.5 <= regular <= 2.5 < uncertain < 5 <= chaotic",
-                    legend=alt.Legend(orient="bottom", columns=4),
+                    legend=alt.Legend(orient="bottom", columns=4, titleLimit=0),
                 ),
                 tooltip=["r_lo_km", "cls", "fraction"],
             )
@@ -332,7 +332,7 @@ def fig_apse():
         .mark_point(filled=True, size=70, color="#0072B2")
         .encode(
             y=alt.Y("label:N", sort=order, title=None),
-            x=alt.X("rate_deg_per_day:Q", title="Apse precession rate at the core (deg/day)", scale=xs),
+            x=alt.X("rate_deg_per_day:Q", title="Apse precession rate at the core (deg/day)", scale=xs, axis=alt.Axis(format=".4f", tickCount=6, labelOverlap=True)),
             tooltip=["label", "rate_deg_per_day", "se_jackknife"],
         )
     )

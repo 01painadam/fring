@@ -263,6 +263,11 @@
           }
         ],
         "x": {
+          "axis": {
+            "format": ".4f",
+            "labelOverlap": true,
+            "tickCount": 6
+          },
           "field": "rate_deg_per_day",
           "scale": {
             "domain": [
