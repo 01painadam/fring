@@ -66,6 +66,53 @@ impl ViewTransform {
     }
 }
 
+/// A rectangle of the canvas, pixels.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Rect {
+    /// Left edge.
+    pub x: u32,
+    /// Top edge.
+    pub y: u32,
+    /// Width.
+    pub w: u32,
+    /// Height.
+    pub h: u32,
+}
+
+/// The two halves of a canvas of `width` x `height` pixels for "Side by side":
+/// `(left, right)`. Each is `floor(width / 2)` wide; for an odd width one pixel
+/// between them is not drawn.
+pub fn split_halves(width: u32, height: u32) -> (Rect, Rect) {
+    let half = width / 2;
+    (
+        Rect {
+            x: 0,
+            y: 0,
+            w: half,
+            h: height,
+        },
+        Rect {
+            x: width - half,
+            y: 0,
+            w: half,
+            h: height,
+        },
+    )
+}
+
+/// The x position inside its own half (pixels from the left edge of that half)
+/// of a pointer at canvas x `x_px`. A pointer in the gap counts as the left
+/// edge of the right half. Both halves show the same camera, so a pointer in
+/// either half works the same way.
+pub fn half_local_x(x_px: f64, width: u32) -> f64 {
+    let (left, right) = split_halves(width, 1);
+    if x_px < f64::from(left.w) {
+        x_px
+    } else {
+        (x_px - f64::from(right.x)).max(0.0)
+    }
+}
+
 /// A 2D camera.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Camera {
@@ -199,5 +246,34 @@ mod tests {
         // The world point that was under (300, 300) is now under (350, 280).
         let moved = c.screen_to_world(350.0, 280.0, SIZE);
         assert!((moved[0] - w[0]).abs() < 1e-9 && (moved[1] - w[1]).abs() < 1e-9);
+    }
+
+    #[test]
+    fn halves_of_even_and_odd_widths() {
+        let (l, r) = split_halves(1000, 600);
+        assert_eq!((l.x, l.w, r.x, r.w, l.h, r.h), (0, 500, 500, 500, 600, 600));
+        let (l, r) = split_halves(1001, 600);
+        assert_eq!((l.x, l.w, r.x, r.w), (0, 500, 501, 500));
+        // The right half ends at the canvas edge: a viewport must not go beyond it.
+        assert_eq!(r.x + r.w, 1001);
+        let (l, r) = split_halves(1, 1);
+        assert_eq!((l.w, r.w), (0, 0));
+    }
+
+    #[test]
+    fn pointer_maps_to_the_same_place_in_each_half() {
+        for width in [1000u32, 1001] {
+            let (l, r) = split_halves(width, 10);
+            assert_eq!(half_local_x(0.0, width), 0.0);
+            assert_eq!(half_local_x(123.0, width), 123.0);
+            assert_eq!(half_local_x(f64::from(r.x), width), 0.0);
+            assert_eq!(half_local_x(f64::from(r.x) + 123.0, width), 123.0);
+            assert_eq!(half_local_x(f64::from(r.x + r.w), width), f64::from(r.w));
+            // The gap pixel of an odd width.
+            assert_eq!(
+                half_local_x(f64::from(l.w) + 0.5, width),
+                if width % 2 == 1 { 0.0 } else { 0.5 }
+            );
+        }
     }
 }

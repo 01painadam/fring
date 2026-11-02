@@ -16,7 +16,7 @@ use crate::live::{
     StepPlanner, ViewFrame, count_fits, head_instances_styled, instance_bytes, max_hours_for,
     ref_base_slot, ref_bytes, view_transform,
 };
-use crate::view::Camera;
+use crate::view::{Camera, half_local_x, split_halves};
 use fring_gpu::gpu::Gpu;
 use fring_gpu::probe::SelfTest;
 use fring_gpu::stepper::GpuStepper;
@@ -463,13 +463,19 @@ impl App {
 
     /// A mouse drag of `(dx, dy)` canvas pixels.
     pub fn pan(&mut self, dx_px: f64, dy_px: f64) {
-        let size = self.size();
+        let size = self.picture_size();
         self.camera.pan_pixels(dx_px, dy_px, size);
     }
 
     /// Zoom by `factor` (below 1 zooms in) about the canvas pixel `(x_px, y_px)`.
     pub fn zoom(&mut self, x_px: f64, y_px: f64, factor: f64) {
-        let size = self.size();
+        let size = self.picture_size();
+        // In "Side by side" the pointer is mapped into its own half.
+        let x_px = if self.compare == CompareMode::Side {
+            half_local_x(x_px, self.config.width)
+        } else {
+            x_px
+        };
         self.camera.zoom_about(x_px, y_px, factor, size);
     }
 
@@ -554,7 +560,7 @@ impl App {
 
     /// Width of the view in km.
     pub fn view_width_km(&self) -> f64 {
-        let size = self.size();
+        let size = self.picture_size();
         2.0 * self.camera.half_height_km * size[0] / size[1]
     }
 
@@ -586,6 +592,17 @@ impl App {
 
     fn size(&self) -> [f64; 2] {
         [self.config.width as f64, self.config.height as f64]
+    }
+
+    /// Size of one picture in pixels: the whole canvas, or one half of it in
+    /// "Side by side".
+    fn picture_size(&self) -> [f64; 2] {
+        let [w, h] = self.size();
+        if self.compare == CompareMode::Side {
+            [f64::from(self.config.width / 2), h]
+        } else {
+            [w, h]
+        }
     }
 
     /// Compiles the kernels, builds the ephemeris and makes the stepper. This
@@ -917,7 +934,7 @@ impl App {
 
     /// Renders `count` instances (0 clears the canvas only).
     fn draw(&mut self, count: u32) -> Result<(), JsValue> {
-        let size = self.size();
+        let size = self.picture_size();
         let px_per_km = self.camera.px_per_km(size[1]);
         let instance_size = (FLOATS_PER_INSTANCE * 4) as u64;
         let ref_count = if self.ref_head_n == 0 {
@@ -980,7 +997,25 @@ impl App {
             if count > 0 {
                 pass.set_pipeline(&self.pipeline);
                 pass.set_bind_group(0, &self.bind_group, &[]);
-                if self.compare == CompareMode::Overlay && ref_count > 0 {
+                if self.compare == CompareMode::Side && ref_count > 0 {
+                    // Reference on the left, live on the right: the same
+                    // frame uniform (both halves have the same size).
+                    let (left, right) = split_halves(self.config.width, self.config.height);
+                    let from = u64::from(ref_base_slot(self.count)) * instance_size;
+                    pass.set_viewport(left.x as f32, 0.0, left.w as f32, left.h as f32, 0.0, 1.0);
+                    pass.set_scissor_rect(left.x, 0, left.w, left.h);
+                    pass.set_vertex_buffer(0, self.instances.slice(from..));
+                    pass.draw(0..6, 0..ref_count);
+                    pass.set_viewport(
+                        right.x as f32,
+                        0.0,
+                        right.w as f32,
+                        right.h as f32,
+                        0.0,
+                        1.0,
+                    );
+                    pass.set_scissor_rect(right.x, 0, right.w, right.h);
+                } else if self.compare == CompareMode::Overlay && ref_count > 0 {
                     // The faint reference first, so that the live dots lie on top.
                     let from = u64::from(ref_base_slot(self.count)) * instance_size;
                     pass.set_vertex_buffer(0, self.instances.slice(from..));
