@@ -208,6 +208,7 @@ version = "0.1.0"
 dependencies = [
  "fring-cpu",
  "fring-gpu",
+ "fring-io",
  "fring-model",
 ]
 
