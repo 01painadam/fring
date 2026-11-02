@@ -1,0 +1,5 @@
+    Finished `release` profile [optimized] target(s) in 0.03s
+     Running `target/release/examples/g3_bench`
+N = 100000, 3000 steps
+D+  chaos off 9.348e8 particle-steps/s, on 4.643e8 (ratio 0.50)
+C   chaos off 4.683e8 particle-steps/s, on 2.315e8 (ratio 0.49)

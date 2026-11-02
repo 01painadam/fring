@@ -1,6 +1,6 @@
 //! `chaos.csv`: the chaos indicator of every particle, written at the end of
 //! a run that has `[diagnostics.chaos]` (ICR-003, `docs/snapshot-format.md`
-//! section 9).
+//! section 8a).
 
 use fring_model::{Error, Result};
 use std::io::{Read, Write};

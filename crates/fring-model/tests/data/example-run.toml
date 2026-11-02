@@ -39,3 +39,9 @@ model = "none"                  # "none", "stochastic" or "hard_sphere"
 frame_every_steps = 1460        # 1460 x 360 s = about 6.1 days
 stats_every_steps = 146
 velocities = false
+
+# Optional chaos indicator (ICR-003, ADR 0008). Remove the leading "# " to use it.
+# [diagnostics.chaos]
+# method = "shadow"
+# offset_km = 1.0               # separation d0 of the shadow particle
+# renorm_steps = 100            # renormalise at global steps that are multiples of this

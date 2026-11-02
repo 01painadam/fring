@@ -1,0 +1,33 @@
+
+running 1 test
+N = 1000, d0 = 1 km, K = 100, steps = 150000, h = 356.2537 s
+CPU run 6.5 s, n_renorm 1500
+cpu          regular  557 uncertain  161 chaotic  282   <Y> quantiles 10/50/90 %: 0.376 2.095 8.179   FTLE per day 50/90 %: 1.647e-2 3.570e-2
+cpu baseline regular  556 uncertain  159 chaotic  285   <Y> quantiles 10/50/90 %: 0.376 2.102 8.305   FTLE per day 50/90 %: 1.648e-2 3.598e-2
+baseline     regular-both |d<Y>| median 1.98e-4 p95 4.24e-3 max 5.81e-2
+baseline     compared  836  same class 100.00 %  regular-both  556: |dL| median 7.64e-4 p95 1.69e-2 max 7.78e-1  chaotic-both  280: FTLE quantile diff 10/50/90 % = 0.014 0.009 0.026
+baseline     <Y> in (0, 2.05]:  464 particles, |dL| median 5.34e-4 p95 1.23e-2 max 7.78e-1
+baseline     <Y> in (2.05, 2.2]:   28 particles, |dL| median 4.41e-3 p95 3.38e-2 max 1.66e-1
+baseline     <Y> in (2.2, 2.5]:   38 particles, |dL| median 5.67e-3 p95 7.43e-2 max 2.30e-1
+gpu D+: 0.8 s
+gpu D+       regular-both |d<Y>| median 1.72e-4 p95 1.26e-3 max 2.78e-2
+gpu D+       compared  839  same class 100.00 %  regular-both  557: |dL| median 4.30e-4 p95 4.23e-3 max 7.36e-2  chaotic-both  282: FTLE quantile diff 10/50/90 % = 0.004 0.005 0.013
+gpu D+       <Y> in (0, 2.05]:  465 particles, |dL| median 4.05e-4 p95 4.36e-3 max 7.36e-2
+gpu D+       <Y> in (2.05, 2.2]:   28 particles, |dL| median 4.90e-4 p95 1.57e-3 max 2.83e-3
+gpu D+       <Y> in (2.2, 2.5]:   38 particles, |dL| median 3.54e-4 p95 2.54e-3 max 2.89e-3
+gpu D+       regular  557 uncertain  161 chaotic  282   <Y> quantiles 10/50/90 %: 0.375 2.096 8.190   FTLE per day 50/90 %: 1.647e-2 3.564e-2
+gpu C: 2.4 s
+gpu C        regular-both |d<Y>| median 1.67e-4 p95 1.34e-3 max 5.99e-2
+gpu C        compared  839  same class 100.00 %  regular-both  557: |dL| median 4.44e-4 p95 5.41e-3 max 1.31e-1  chaotic-both  282: FTLE quantile diff 10/50/90 % = 0.000 0.006 0.019
+gpu C        <Y> in (0, 2.05]:  465 particles, |dL| median 4.38e-4 p95 5.16e-3 max 1.31e-1
+gpu C        <Y> in (2.05, 2.2]:   28 particles, |dL| median 3.95e-4 p95 2.47e-3 max 1.51e-2
+gpu C        <Y> in (2.2, 2.5]:   38 particles, |dL| median 4.11e-4 p95 1.83e-3 max 1.97e-3
+gpu C        regular  557 uncertain  161 chaotic  282   <Y> quantiles 10/50/90 %: 0.375 2.095 8.218   FTLE per day 50/90 %: 1.647e-2 3.593e-2
+gpu D: 0.7 s
+gpu D        regular-both |d<Y>| median 4.73e-3 p95 3.50e-2 max 8.00e-1
+gpu D        compared  836  same class 100.00 %  regular-both  556: |dL| median 1.29e-2 p95 1.46e-1 max 1.99e0  chaotic-both  280: FTLE quantile diff 10/50/90 % = 0.015 0.003 0.002
+gpu D        regular  557 uncertain  161 chaotic  282   <Y> quantiles 10/50/90 %: 0.378 2.108 8.279   FTLE per day 50/90 %: 1.655e-2 3.634e-2
+test gpu_chaos_indicator_matches_cpu_for_1000_particles ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 16.92s
+

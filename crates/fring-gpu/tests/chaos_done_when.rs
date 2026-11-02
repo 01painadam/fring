@@ -5,7 +5,7 @@
 //!
 //! Particles: circular, uniform in a over 139,600 to 140,600 km and in
 //! longitude, both moons, h = 356.2537 s, 150,000 steps (about 1000 orbits),
-//! shadow offset d0 = 1e-3 km, renormalisation every K = 100 steps. Classes
+//! shadow offset d0 = 1 km, renormalisation every K = 100 steps. Classes
 //! from the mean MEGNO: regular <= 2.5, chaotic >= 5, else uncertain.
 //!
 //! Environment (for the sweep of ADR 0008): FRING_G3_D0 (km), FRING_G3_K,
@@ -266,7 +266,7 @@ fn check(name: &str, cpu: &ChaosReport, base: &Stats, gpu: &ChaosReport) -> Vec<
 #[ignore = "needs a GPU, about 1 minute"]
 fn gpu_chaos_indicator_matches_cpu_for_1000_particles() {
     let n = env_f64("FRING_G3_N", 1000.0) as u32;
-    let d0 = env_f64("FRING_G3_D0", 1e-3);
+    let d0 = env_f64("FRING_G3_D0", 1.0);
     let k = env_f64("FRING_G3_K", 100.0) as u32;
     let system = system(H_S, STEPS + k as u64, true);
     let mut config = config(H_S, STEPS + k as u64, true);

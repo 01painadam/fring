@@ -2,7 +2,7 @@
 # test particles between Prometheus and Pandora. From the repository root:
 #   cargo run -p fring-run --release -- --config apps/fring-run/configs/chaos-map.toml
 # Output: <run>/chaos.csv with a0_km, lambda_rel_prometheus_deg, megno_mean,
-# ftle_per_day, log_growth (see docs/snapshot-format.md section 9). Classes:
+# ftle_per_day, log_growth (see docs/snapshot-format.md section 8a). Classes:
 # megno_mean <= 2.5 regular, >= 5 chaotic. Use backend = "gpu" for speed (D+).
 
 [run]
