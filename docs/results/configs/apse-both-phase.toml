@@ -1,0 +1,37 @@
+# A1-ANALYSIS part 2: apse precession of core particles, moons: ["prometheus", "pandora"]. CPU f64 reference.
+[run]
+name = "apse-both-phase"
+backend = "cpu"
+seed = 20261110
+params_dir = "params"
+
+[time]
+step_s = 356.2537
+duration_years = 50.0
+
+[frame]
+reference_semi_major_axis_km = 140222.43
+
+[domain]
+kind = "full_ring"
+
+[moons]
+include = ["prometheus", "pandora"]
+
+[particles]
+count = 2000
+
+[particles.distribution]
+kind = "core"
+semi_major_axis_km = 140222.43
+sigma_semi_major_axis_km = 0.5
+eccentricity = 0.00235
+apse_longitude_deg = 120.0
+
+[collisions]
+model = "none"
+
+[output]
+frame_every_steps = 1500
+stats_every_steps = 1000000
+velocities = false

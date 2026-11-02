@@ -1,4 +1,4 @@
-# A1-ANALYSIS chaos map (main30). ADR 0008 settings. Band limits: see docs/results/a1-analysis.md.
+# A1-ANALYSIS chaos map (main30). Narrower band than main10: the 30-year run with 139,700 to 141,100 km stopped at 'unbound or invalid orbit' (a particle scattered by Prometheus; no sub-stepping yet). ADR 0008 settings. Band limits: see docs/results/a1-analysis.md.
 [run]
 name = "chaos-map-main30"
 backend = "gpu"
@@ -19,12 +19,12 @@ kind = "full_ring"
 include = ["prometheus", "pandora"]
 
 [particles]
-count = 200000
+count = 110000
 
 [particles.distribution]
 kind = "band"
-min_semi_major_axis_km = 139700.0
-max_semi_major_axis_km = 141100.0
+min_semi_major_axis_km = 139950.0
+max_semi_major_axis_km = 141050.0
 
 [collisions]
 model = "none"

@@ -6,7 +6,8 @@
 //! and n; the combination shows the ring pattern turning at `varpi_dot`). A
 //! linear least-squares fit of `rho` against `cos phi` and `sin phi` over all
 //! particles gives `varpi` and `e = A / c0` at each frame. Frame files hold
-//! the rotating frame (`rho = a0 + x`, `phi = y / a0`), so the inertial apse
+//! Cartesian positions in the rotating frame (f32, so `rho` is good to about
+//! 0.01 km), so `rho = hypot(x, y)`, `phi = atan2(y, x)` and the inertial apse
 //! longitude is `varpi_rot + n0 t`.
 
 use fring_io::RunDir;
@@ -77,8 +78,9 @@ pub fn series(run: &RunDir, parity: Option<u32>) -> Result<Series> {
             if parity.is_some_and(|p| f.id[i] % 2 != p) {
                 continue;
             }
-            rho.push(f.a0_km + f64::from(f.x_km[i]));
-            phi.push(f64::from(f.y_km[i]) / f.a0_km);
+            let (x, y) = (f64::from(f.x_km[i]), f64::from(f.y_km[i]));
+            rho.push(x.hypot(y));
+            phi.push(y.atan2(x));
         }
         if rho.len() < 10 {
             return Err(Error::Input("apse: fewer than 10 particles".into()));

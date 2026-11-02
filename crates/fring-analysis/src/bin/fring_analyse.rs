@@ -8,7 +8,7 @@
 //! fring-analyse apse <out_dir> <run>...
 //! fring-analyse moons <run>
 //! fring-analyse laplace <run_with_both_moons>
-//! fring-analyse lyapunov <out_dir> <n_pairs> <years> [threads d0_km renorm_years kick_km seed tag]
+//! fring-analyse lyapunov <out_dir> <n_pairs> <years> [threads d0_km renorm_years kick_km seed tag method(tangent|shadow)]
 //! ```
 
 use fring_analysis::apse::{self, DAY_S};
@@ -178,6 +178,55 @@ fn cmd_closest(a: &[String]) -> Res<()> {
             100.0 * c as f64 / n
         );
     }
+    // Cumulative table by class.
+    let tpath = Path::new(&a[1]).with_extension("cum.csv");
+    let mut tw = BufWriter::new(File::create(&tpath)?);
+    writeln!(
+        tw,
+        "hill_radii,km,n_below,frac_below,n_bounded,n_regular,n_uncertain,n_chaotic,n_unmatched"
+    )?;
+    for k in [0.5, 1.0, 2.0, 3.0, 5.0, 7.3, 10.0, 20.0, 50.0, 100.0] {
+        let mut by = [0usize; 5];
+        let mut tot = 0usize;
+        for i in 0..res.id.len() {
+            if res.min_km[i] < k * hill {
+                tot += 1;
+                let cl = classes
+                    .as_ref()
+                    .and_then(|c| c.get(i))
+                    .filter(|p| (p.r_km - res.r0_km[i]).abs() < 1e-6)
+                    .map_or(4, |p| p.class.index());
+                by[cl] += 1;
+            }
+        }
+        writeln!(
+            tw,
+            "{k},{:.1},{tot},{:.5},{},{},{},{},{}",
+            k * hill,
+            tot as f64 / n,
+            by[0],
+            by[1],
+            by[2],
+            by[3],
+            by[4]
+        )?;
+    }
+    tw.flush()?;
+    // Histogram of the minimum distance in Hill radii (log bins), for the figure.
+    let mut hw = BufWriter::new(File::create(Path::new(&a[1]).with_extension("hist.csv"))?);
+    writeln!(hw, "hill_lo,hill_hi,count")?;
+    let edges: Vec<f64> = (0..=40)
+        .map(|k| 0.5 * 10f64.powf(k as f64 * 0.075))
+        .collect();
+    for w2 in edges.windows(2) {
+        let c = res
+            .min_km
+            .iter()
+            .filter(|d| **d / hill >= w2[0] && **d / hill < w2[1])
+            .count();
+        writeln!(hw, "{:.4},{:.4},{c}", w2[0], w2[1])?;
+    }
+    hw.flush()?;
     let c = res.min_km.iter().filter(|d| **d < track_radius(&s)).count();
     println!("closer than the moon radius: {c}");
     println!(
@@ -274,15 +323,16 @@ struct MoonGeom {
 }
 
 fn moon_geometry(run: &RunDir) -> Res<Vec<MoonGeom>> {
-    let f = run.read_moons_file()?;
+    // The ephemeris (every 1,800 s, about 30 samples per orbit) is rebuilt from the
+    // config of the run; `moons.bin` is sampled once per 6 days, which aliases the orbit.
+    let s = setup::load(&run.config_path())?;
     let mut out = Vec::new();
-    for (k, name) in f.names.iter().enumerate() {
+    for t in &s.system.moons.tracks {
         let mut r = Vec::new();
-        let (mut ang, mut prev, mut t_first) = (0.0f64, None::<f64>, 0.0);
-        let mut t_last = 0.0;
-        let mut first = None;
-        for rec in &f.records {
-            let p = rec.bodies[k].position_km;
+        let mut ang = 0.0f64;
+        let mut prev: Option<f64> = None;
+        for b in &t.samples {
+            let p = b.position_km;
             r.push(p.norm());
             let th = p.y.atan2(p.x);
             if let Some(pv) = prev {
@@ -290,25 +340,17 @@ fn moon_geometry(run: &RunDir) -> Res<Vec<MoonGeom>> {
                 while d < 0.0 {
                     d += 2.0 * std::f64::consts::PI;
                 }
-                while d > 2.0 * std::f64::consts::PI {
-                    d -= 2.0 * std::f64::consts::PI;
-                }
                 ang += d;
-            } else {
-                first = Some(th);
-                t_first = rec.time_s;
             }
             prev = Some(th);
-            t_last = rec.time_s;
         }
-        let _ = first;
-        // The sampling interval is far below one orbit, so each difference is the true advance.
+        let span = (t.samples.len() - 1) as f64 * s.system.moons.interval_s;
         out.push(MoonGeom {
-            name: name.clone(),
+            name: t.name.clone(),
             r_mean: mean(&r),
             r_min: r.iter().copied().fold(f64::INFINITY, f64::min),
             r_max: r.iter().copied().fold(0.0, f64::max),
-            n_rad_s: ang / (t_last - t_first),
+            n_rad_s: ang / span,
         });
     }
     Ok(out)
@@ -322,6 +364,17 @@ fn cmd_moons(a: &[String]) -> Res<()> {
     println!(
         "name, mean r, rmin, rmax, e_eff=(rmax-rmin)/(rmax+rmin), n [deg/d], guiding radius from n, Hill radius"
     );
+    let mut csv = match a.get(1) {
+        Some(out) => {
+            let mut w = create(out, "moon_geometry.csv")?;
+            writeln!(
+                w,
+                "name,r_mean_km,r_min_km,r_max_km,e_eff,n_deg_per_day,a_guiding_km,hill_km"
+            )?;
+            Some(w)
+        }
+        None => None,
+    };
     for g in moon_geometry(&run)? {
         let gm = all
             .iter()
@@ -329,6 +382,20 @@ fn cmd_moons(a: &[String]) -> Res<()> {
             .ok_or("moon")?
             .gm_km3_s2;
         let a_gc = radius_from_mean_motion(&field, g.n_rad_s);
+        if let Some(w) = csv.as_mut() {
+            writeln!(
+                w,
+                "{},{:.2},{:.2},{:.2},{:.6},{:.5},{:.2},{:.3}",
+                g.name,
+                g.r_mean,
+                g.r_min,
+                g.r_max,
+                (g.r_max - g.r_min) / (g.r_max + g.r_min),
+                g.n_rad_s.to_degrees() * DAY_S,
+                a_gc,
+                a_gc * (gm / (3.0 * saturn.gm_km3_s2)).cbrt()
+            )?;
+        }
         println!(
             "{} {:.1} {:.1} {:.1} e={:.5} n={:.4} a_gc={:.1} hill={:.2}",
             g.name,
@@ -400,7 +467,12 @@ fn cmd_lyapunov(a: &[String]) -> Res<()> {
     };
     let tag = a.get(8).map_or(String::new(), |t| format!("_{t}"));
     let t0 = std::time::Instant::now();
-    let pairs = lyapunov::run_all(&saturn, &moons, &cfg, n_pairs, threads)?;
+    let method = if a.get(9).map(String::as_str) == Some("shadow") {
+        lyapunov::Method::Shadow
+    } else {
+        lyapunov::Method::Tangent
+    };
+    let pairs = lyapunov::run_all(&saturn, &moons, &cfg, n_pairs, threads, method)?;
     println!(
         "{n_pairs} pairs x {years} yr on {threads} threads: {:.1} s; base steps per pair {}",
         t0.elapsed().as_secs_f64(),

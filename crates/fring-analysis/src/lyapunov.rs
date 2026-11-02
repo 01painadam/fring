@@ -158,6 +158,146 @@ pub fn run_pair(
     Ok(out)
 }
 
+/// Step in km of the central differences for the Jacobian.
+const JV_STEP_KM: f64 = 1.0;
+
+/// As [`run_pair`], but with the tangent vector instead of a shadow orbit.
+///
+/// The state is the base trajectory `x` (6 positions) and the tangent
+/// vector `u` (6 position offsets). The force depends on positions only, so
+/// `u'' = J(x) u`, with the Jacobian `J` from central differences along the
+/// six axes (`h = JV_STEP_KM`; relative error about 1e-10). (A difference
+/// along `u` itself was tried first: it is not smooth where `u` passes through
+/// zero, and IAS15 collapsed to steps of 1e-7 s.) The two integrations are one IAS15 system of
+/// dimension 12. Nothing here differences two nearby orbits, so there is no
+/// rounding noise to be amplified by the Kepler shear. The tangent vector is
+/// renormalised to `d0_km` every `renorm_years` and IAS15 restarts (a restart
+/// changes the base orbit by about 1e-12 relative, which does not matter for
+/// the exponent). The scaled velocity part (`v / n`) is part of the norm as in
+/// [`run_pair`].
+pub fn run_pair_tangent(
+    saturn: &SaturnParams,
+    moons: &[MoonInit],
+    cfg: &LyapunovConfig,
+    index: u32,
+) -> Result<Pair> {
+    let nm = moons.len();
+    let dim = 3 * nm;
+    let sys = MoonSystem::new(saturn, moons.iter().map(|m| m.gm_km3_s2).collect());
+    let rng = Philox::from_seed(cfg.seed);
+    let g = gaussians(&rng, index, 3 * dim);
+
+    let mut x0 = Vec::with_capacity(dim);
+    let mut v0 = Vec::with_capacity(dim);
+    for m in moons {
+        let (p, v) = (m.state.position_km, m.state.velocity_km_s);
+        x0.extend([p.x, p.y, p.z]);
+        v0.extend([v.x, v.y, v.z]);
+    }
+    for (k, x) in x0.iter_mut().enumerate() {
+        *x += cfg.kick_km * g[k];
+    }
+    let r0 = (x0[0] * x0[0] + x0[1] * x0[1] + x0[2] * x0[2]).sqrt();
+    let n_scale = (saturn.gm_km3_s2 / (r0 * r0 * r0)).sqrt();
+    let dir = &g[dim..];
+    let norm = dir.iter().map(|v| v * v).sum::<f64>().sqrt();
+
+    // State of the 2*dim system: [x, u] and [v, w].
+    let mut xs: Vec<f64> = x0.clone();
+    xs.extend((0..dim).map(|k| cfg.d0_km * dir[k] / norm));
+    let mut vs: Vec<f64> = v0.clone();
+    vs.extend((0..dim).map(|k| n_scale * cfg.d0_km * dir[dim + k] / norm));
+
+    let (mut xp, mut ap, mut am) = (vec![0.0; dim], vec![0.0; dim], vec![0.0; dim]);
+    let mut jac = vec![0.0; dim * dim];
+    let mut force = |y: &[f64], a: &mut [f64]| {
+        let (x, u) = y.split_at(dim);
+        sys.accelerations(x, &mut a[..dim]);
+        // Jacobian column by column (central differences along the axes), so that
+        // the force on u is exactly linear in u and smooth in time.
+        for k in 0..dim {
+            xp.copy_from_slice(x);
+            xp[k] = x[k] + JV_STEP_KM;
+            sys.accelerations(&xp, &mut ap);
+            xp[k] = x[k] - JV_STEP_KM;
+            sys.accelerations(&xp, &mut am);
+            for i in 0..dim {
+                jac[i * dim + k] = (ap[i] - am[i]) / (2.0 * JV_STEP_KM);
+            }
+        }
+        for i in 0..dim {
+            a[dim + i] = (0..dim).map(|k| jac[i * dim + k] * u[k]).sum();
+        }
+    };
+
+    let dt0 = 0.01 * (r0 * r0 * r0 / saturn.gm_km3_s2).sqrt();
+    let n_int = (cfg.years / cfg.renorm_years).round() as usize;
+    let dt_int = cfg.renorm_years * YEAR_S;
+    let mut t_prev = 0.0;
+    let mut ias = Ias15::new(cfg.epsilon, 0.0, &xs, &vs, dt0)?;
+    let (mut y, mut w) = (vec![0.0; 2 * dim], vec![0.0; 2 * dim]);
+    let (mut l_sum, mut s_sum, mut y_sum) = (0.0, 0.0, 0.0);
+    let mut out = Pair::default();
+    for j in 1..=n_int {
+        let t_end = j as f64 * dt_int;
+        while ias.time_s() < t_end {
+            ias.step(&mut force)?;
+            if std::env::var_os("FRING_DEBUG").is_some() && ias.steps() % 20000 == 0 {
+                eprintln!(
+                    "pair {index}: t {:.4} yr, dt {:.3e} s, steps {}, rejected {}",
+                    ias.time_s() / YEAR_S,
+                    ias.next_dt_s(),
+                    ias.steps(),
+                    ias.rejected_steps()
+                );
+            }
+        }
+        out.steps += ias.steps();
+        if std::env::var_os("FRING_DEBUG").is_some() {
+            eprintln!(
+                "pair {index} j {j}: {} steps so far, dt {:.1} s",
+                out.steps,
+                ias.next_dt_s()
+            );
+        }
+        ias.dense_output(t_end, &mut y, &mut w);
+        let mut d2 = 0.0;
+        for k in 0..dim {
+            d2 += y[dim + k].powi(2) + (w[dim + k] / n_scale).powi(2);
+        }
+        let d = d2.sqrt();
+        if !(d.is_finite() && d > 0.0) {
+            return Err(Error::Backend(format!("pair {index}: tangent norm {d}")));
+        }
+        let l = (d / cfg.d0_km).ln();
+        let jf = j as f64;
+        l_sum += l;
+        s_sum += (jf - 0.5) * l;
+        y_sum += 2.0 * s_sum / jf;
+        out.t_years.push(t_end / YEAR_S);
+        out.log_growth.push(l_sum);
+        out.megno_mean.push(y_sum / jf);
+        let f = cfg.d0_km / d;
+        for k in 0..dim {
+            y[dim + k] *= f;
+            w[dim + k] *= f;
+        }
+        ias = Ias15::new(cfg.epsilon, t_end, &y, &w, dt0)?;
+        t_prev = t_end;
+    }
+    let _ = t_prev;
+    Ok(out)
+}
+
+/// The two methods of this module.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Method {
+    /// Shadow orbit ([`run_pair`]).
+    Shadow,
+    /// Tangent vector ([`run_pair_tangent`]).
+    Tangent,
+}
+
 /// Runs pairs `0..n_pairs` on `threads` threads; the result is in pair order.
 pub fn run_all(
     saturn: &SaturnParams,
@@ -165,6 +305,7 @@ pub fn run_all(
     cfg: &LyapunovConfig,
     n_pairs: u32,
     threads: usize,
+    method: Method,
 ) -> Result<Vec<Pair>> {
     use std::sync::Mutex;
     use std::sync::atomic::{AtomicU32, Ordering};
@@ -176,11 +317,33 @@ pub fn run_all(
             s.spawn(|| {
                 loop {
                     let i = next.fetch_add(1, Ordering::Relaxed);
-                    if i >= n_pairs {
+                    let i = i + std::env::var("FRING_PAIR_OFFSET")
+                        .ok()
+                        .and_then(|v| v.parse().ok())
+                        .unwrap_or(0);
+                    if i >= n_pairs
+                        + std::env::var("FRING_PAIR_OFFSET")
+                            .ok()
+                            .and_then(|v| v.parse().ok())
+                            .unwrap_or(0)
+                    {
                         break;
                     }
-                    let r = run_pair(saturn, moons, cfg, i);
-                    results.lock().expect("lock")[i as usize] = Some(r);
+                    let t0 = std::time::Instant::now();
+                    let r = match method {
+                        Method::Shadow => run_pair(saturn, moons, cfg, i),
+                        Method::Tangent => run_pair_tangent(saturn, moons, cfg, i),
+                    };
+                    if let Ok(p) = &r {
+                        eprintln!(
+                            "pair {i}: {:.1} s, {} steps, L({} yr) = {:.2}",
+                            t0.elapsed().as_secs_f64(),
+                            p.steps,
+                            p.t_years.last().copied().unwrap_or(0.0),
+                            p.log_growth.last().copied().unwrap_or(0.0)
+                        );
+                    }
+                    results.lock().expect("lock")[(i as usize) % (n_pairs as usize)] = Some(r);
                 }
             });
         }
@@ -239,6 +402,23 @@ mod tests {
         };
         let p = run_pair(&saturn, &moons, &cfg, 0).unwrap();
         assert_eq!(p.t_years.len(), 100);
+        let y = *p.megno_mean.last().unwrap();
+        assert!(y > 1.5 && y < 3.0, "mean MEGNO {y}");
+    }
+
+    /// The tangent method on the Kepler problem: MEGNO tends to 2 as well.
+    #[test]
+    fn tangent_kepler_is_regular() {
+        let (saturn, moons) = two_moons();
+        let cfg = LyapunovConfig {
+            years: 25.0,
+            renorm_years: 0.25,
+            d0_km: 1.0,
+            kick_km: 1.0,
+            epsilon: 1e-9,
+            seed: 7,
+        };
+        let p = run_pair_tangent(&saturn, &moons, &cfg, 0).unwrap();
         let y = *p.megno_mean.last().unwrap();
         assert!(y > 1.5 && y < 3.0, "mean MEGNO {y}");
     }
