@@ -35,6 +35,7 @@ fn main() {
         Some("moons") => cmd_moons(&args[1..]),
         Some("laplace") => cmd_laplace(&args[1..]),
         Some("lyapunov") => cmd_lyapunov(&args[1..]),
+        Some("ecc-configs") => cmd_ecc_configs(&args[1..]),
         Some("closest-bins") => cmd_closest_bins(&args[1..]),
         _ => Err("usage: fring-analyse map|compare|closest|apse|moons|laplace|lyapunov ...".into()),
     };
@@ -272,6 +273,69 @@ fn cmd_closest(a: &[String]) -> Res<()> {
 }
 
 /// `closest-bins <closest.csv> <out.csv> [bin_km hill_km min_column body_km]`: closest approach against the initial radius.
+/// `ecc-configs <out_dir> <years> <tag> [count=5000]`: writes the configs of the
+/// eccentric map (22 bins of 25 km from 140,150 to 140,700 km), each as an
+/// `ecc` file (e and apse from `params/ring.toml`) and a `circ` control (e = 0)
+/// with the same seed. For 10 years it also writes the apse + 120 deg variants
+/// (ecc only; the control has no apse) and the seed repeats of three bins (inner 0, core 2, outer 21).
+/// `<out_dir>/list_<tag>.txt` names them all, one per line.
+fn cmd_ecc_configs(a: &[String]) -> Res<()> {
+    let (dir, years, tag) = (&a[0], num(a, 1, 10.0), &a[2]);
+    let count = num(a, 3, 5000.0) as u32;
+    let ring = std::fs::read_to_string("params/ring.toml")?;
+    let e = setup::toml_number(&ring, "eccentricity").ok_or("no eccentricity")?;
+    let w = setup::toml_number(&ring, "apse_longitude_deg").ok_or("no apse")?;
+    std::fs::create_dir_all(dir)?;
+    let mut list = Vec::new();
+    let mut put = |name: String, seed: u64, bin: usize, ecc: f64, apse: f64| -> Res<()> {
+        let lo = 140_150.0 + 25.0 * bin as f64;
+        let text = setup::ecc_config(
+            &name,
+            seed,
+            356.2537,
+            100,
+            years,
+            (lo, lo + 25.0),
+            count,
+            ecc,
+            apse,
+        );
+        std::fs::write(Path::new(dir).join(format!("{name}.toml")), text)?;
+        list.push(name);
+        Ok(())
+    };
+    for bin in 0..22usize {
+        let seed = 20_261_200 + bin as u64;
+        put(format!("{tag}-ecc-b{bin:02}"), seed, bin, e, w)?;
+        put(format!("{tag}-circ-b{bin:02}"), seed, bin, 0.0, w)?;
+    }
+    if years <= 10.0 {
+        for bin in [0usize, 2, 21] {
+            let seed = 20_261_200 + bin as u64;
+            put(
+                format!("{tag}-ecc-phase120-b{bin:02}"),
+                seed,
+                bin,
+                e,
+                (w + 120.0) % 360.0,
+            )?;
+            put(
+                format!("{tag}-ecc-repeat-b{bin:02}"),
+                seed + 1000,
+                bin,
+                e,
+                w,
+            )?;
+        }
+    }
+    std::fs::write(
+        Path::new(dir).join(format!("list_{tag}.txt")),
+        list.join("\n") + "\n",
+    )?;
+    println!("{} configs in {dir}", list.len());
+    Ok(())
+}
+
 fn cmd_closest_bins(a: &[String]) -> Res<()> {
     let text = std::fs::read_to_string(&a[0])?;
     let bin = num(a, 2, 50.0);
