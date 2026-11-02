@@ -33,6 +33,10 @@ impl RunDir {
         self.root.join("stats.csv")
     }
 
+    pub fn chaos_path(&self) -> PathBuf {
+        self.root.join("chaos.csv")
+    }
+
     pub fn frames_dir(&self) -> PathBuf {
         self.root.join("frames")
     }

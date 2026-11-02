@@ -16,7 +16,10 @@ mod sysinfo;
 use cli::Args;
 use fring_cpu::CpuBackend;
 use fring_gpu::backend::GpuBackend;
-use fring_io::{Frame, MoonRecord, MoonsFile, RotatingVelocities, RunDir, RunMeta};
+use fring_io::{
+    CHAOS_VERSION, ChaosMeta, ChaosRow, Frame, MoonRecord, MoonsFile, RotatingVelocities, RunDir,
+    RunMeta,
+};
 use fring_model::config::{BackendKind, Collisions, Domain};
 use fring_model::params::{moons_from_toml_str, saturn_from_toml_str};
 use fring_model::physics::{
@@ -82,6 +85,8 @@ pub struct Summary {
     pub wall_time_s: f64,
     /// Particle-steps per second while stepping (output time excluded).
     pub particle_steps_per_s: f64,
+    /// The chaos indicator settings and result, if the config asked for it.
+    pub chaos: Option<ChaosMeta>,
 }
 
 /// Refuses what is not implemented yet, with a clear message.
@@ -336,12 +341,13 @@ pub fn run(args: &Args) -> Result<Summary, RunError> {
     // 4. meta.json, last.
     summary.wall_time_s = start.elapsed().as_secs_f64();
     let git = sysinfo::git_hash(&std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
-    let meta = RunMeta::new(
+    let mut meta = RunMeta::new(
         env!("CARGO_PKG_VERSION"),
         &git,
         &machine,
         summary.wall_time_s,
     );
+    meta.chaos = summary.chaos.clone();
     during(ctx.out.write_meta_file(&meta))?;
     progress.line(&format!(
         "done in {:.1} s: {} frames, {} stats rows, {:.2} M particle-steps/s (stepping only) -> {}",
@@ -398,6 +404,40 @@ fn append_stats(file: &mut std::fs::File, stats: &fring_model::StepStats) -> Res
         .map_err(|e| RunError::Run(format!("writing stats.csv: {e}")))
 }
 
+/// Per particle: id, Keplerian a (point mass) and longitude relative to
+/// Prometheus (degrees, [-180, 180), NaN without Prometheus) at the start.
+fn chaos_initial<B: Backend>(
+    ctx: &Context<'_>,
+    backend: &mut B,
+) -> Result<Vec<(u32, f64, f64)>, RunError> {
+    let gm = ctx.system.saturn.gm_km3_s2;
+    let prometheus = ctx
+        .system
+        .moons
+        .tracks
+        .iter()
+        .position(|t| t.name == "prometheus");
+    let moon_lon = prometheus.and_then(|k| {
+        let m = backend.moons();
+        m.moons
+            .get(k)
+            .map(|b| b.position_km.y.atan2(b.position_km.x))
+    });
+    let view = during(backend.particles())?;
+    let p = view.particles;
+    Ok((0..p.len())
+        .map(|i| {
+            let (r, v) = (p.position_km(i), p.velocity_km_s(i));
+            let a = 1.0 / (2.0 / r.norm() - v.norm_squared() / gm);
+            let lambda = moon_lon.map_or(f64::NAN, |ml| {
+                let d = (r.y.atan2(r.x) - ml).to_degrees();
+                (d + 180.0).rem_euclid(360.0) - 180.0
+            });
+            (p.id[i], a, lambda)
+        })
+        .collect())
+}
+
 fn execute<B: Backend>(
     mut backend: B,
     ctx: &Context<'_>,
@@ -430,6 +470,11 @@ fn execute<B: Backend>(
         Ok(())
     };
 
+    let chaos_initial = if cfg.diagnostics.as_ref().is_some_and(|d| d.chaos.is_some()) {
+        Some(chaos_initial(ctx, &mut backend)?)
+    } else {
+        None
+    };
     let mut step = 0u64;
     write_frame(&mut backend, 0, &mut frames)?;
     append_stats(&mut stats_file, &during(backend.stats())?)?;
@@ -449,8 +494,41 @@ fn execute<B: Backend>(
         }
         progress.update(step, n, backend.time_s(), frames, step == n);
     }
+    let chaos = match (
+        chaos_initial,
+        cfg.diagnostics.as_ref().and_then(|d| d.chaos),
+    ) {
+        (Some(initial), Some(c)) => {
+            let report = during(backend.chaos())?
+                .ok_or_else(|| RunError::Run("the backend returned no chaos indicator".into()))?;
+            let day_s = 86_400.0;
+            let rows: Vec<ChaosRow> = initial
+                .iter()
+                .enumerate()
+                .map(|(i, &(id, a0_km, lambda))| ChaosRow {
+                    id,
+                    a0_km,
+                    lambda_rel_prometheus_deg: lambda,
+                    ftle_per_day: report.ftle_per_s[i] * day_s,
+                    log_growth: report.log_growth[i],
+                    megno_mean: report.megno_mean[i],
+                    flags: report.flags[i],
+                })
+                .collect();
+            during(out.write_chaos_file(&rows))?;
+            Some(ChaosMeta {
+                method: "shadow".to_string(),
+                offset_km: c.offset_km,
+                renorm_steps: c.renorm_steps,
+                n_renorm: report.n_renorm,
+                chaos_format_version: CHAOS_VERSION,
+            })
+        }
+        _ => None,
+    };
     let particle_steps = cfg.particles.count as f64 * n as f64;
     Ok(Summary {
+        chaos,
         out_dir: out.root().to_path_buf(),
         steps: n,
         frames,

@@ -26,6 +26,7 @@ A run writes one directory. Native tools (`fring-run`, `fring-analysis`) and the
   meta.json            code version, git hash, machine, wall time, format versions
   moons.bin            inertial moon states at each output time
   stats.csv            one row per statistics output
+  chaos.csv            only with [diagnostics.chaos]: chaos indicator per particle (section 8a)
   frames/000000.bin    one file per frame output
   frames/000001.bin
   ...
@@ -110,9 +111,25 @@ Plain CSV: a header row with column names, then one row per output. No comment l
 - **Crash rule (R1).** A row is complete only when its newline has been written. A reader drops a last line that has no final newline, even if it parses, because a truncated number (`0.0001` cut from `0.000123`) can still parse and be wrong. `read_stats_csv_report` says whether it dropped a line. Any other bad row, including a finished ragged row, is an error. A header without a newline counts as an empty file.
 - New `StepStats` fields add columns at the end. The format version is in `meta.json`.
 
+## 8a. `chaos.csv` (added by ICR-003; additive to version 1)
+
+Written by `fring-run` at the end of a run that has a `[diagnostics.chaos]` table. Without the table the file does not exist. Plain CSV with the same rules as `stats.csv` (header row, shortest round-trip floats, `NaN`), one row per particle in particle order. Columns, all required:
+
+`id, a0_km, lambda_rel_prometheus_deg, ftle_per_day, log_growth, megno_mean, flags`
+
+- `id`: particle id.
+- `a0_km`: Keplerian semi-major axis of the initial state (point mass GM, vis-viva), km.
+- `lambda_rel_prometheus_deg`: initial inertial longitude of the particle minus that of Prometheus, degrees in [-180, 180). `NaN` if the run has no Prometheus.
+- `ftle_per_day`: finite-time Lyapunov exponent L / t, day^-1, with t the time of the last renormalisation.
+- `log_growth`: L, the sum of ln(d / d0) over the renormalisations (dimensionless).
+- `megno_mean`: the mean MEGNO. About 2 for a regular orbit, about lambda t / 2 for a chaotic one. Classes used in G3: regular <= 2.5, chaotic >= 5 (ADR 0008).
+- `flags`: bit 0 means that an interval had a zero or non-finite separation and was skipped.
+
+The definition of the indicator (shadow offset, renormalisation, MEGNO formula) is in `docs/adr/0008-chaos-indicator.md`. `meta.json` gets an optional `chaos` object (section 9).
+
 ## 9. `meta.json`
 
-A JSON object (Rust struct `RunMeta`): `code_version`, `git_hash`, `machine`, `wall_time_s`, `frame_format_version`, `moons_format_version`, `stats_format_version`. `fring-run` fills the values. `fring-io` does not call git and does not read a clock. Readers of frames do not need `meta.json`: a0 and n0 are in every frame header.
+A JSON object (Rust struct `RunMeta`): `code_version`, `git_hash`, `machine`, `wall_time_s`, `frame_format_version`, `moons_format_version`, `stats_format_version`, and an optional `chaos` object (only with `[diagnostics.chaos]`; ICR-003): `method`, `offset_km`, `renorm_steps`, `n_renorm`, `chaos_format_version`. `fring-run` fills the values. `fring-io` does not call git and does not read a clock. Readers of frames do not need `meta.json`: a0 and n0 are in every frame header.
 
 ## 10. Versions and compatibility
 

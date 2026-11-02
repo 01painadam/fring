@@ -17,6 +17,7 @@
 //! - [`leapfrog`]: plain drift-kick-drift step, kept as a reference.
 //! - [`frames`]: inertial, rotating and local coordinates.
 
+pub mod chaos;
 pub mod circular;
 pub mod ephemeris;
 pub mod frames;
@@ -30,6 +31,7 @@ pub mod moon_dynamics;
 pub mod moon_kick;
 pub mod wisdom_holman;
 
+pub use chaos::{ChaosAccum, shadow_offset_km};
 pub use circular::{CircularFrequencies, circular_speed, frequencies};
 pub use ephemeris::{
     DEFAULT_EPSILON, DEFAULT_INTERVAL_S, MoonInit, build_ephemeris, build_ephemeris_with,

@@ -416,3 +416,39 @@ fn gpu_backend_is_selected_not_refused() {
         Err(e) => panic!("{e}"),
     }
 }
+
+#[test]
+fn chaos_table_writes_chaos_csv_and_the_meta_field() {
+    let tmp = Tmp::new();
+    // Steps of one block of the indicator: 0.02 years is about 4,800 steps.
+    let base = small_config();
+    let text = format!(
+        "{base}\n[diagnostics.chaos]\nmethod = \"shadow\"\noffset_km = 1.0\nrenorm_steps = 100\n"
+    );
+    let n = RunConfig::from_toml_str(&text).unwrap().time.n_steps();
+    let (dir, summary) = run_config(&tmp, &text, "chaos", true).unwrap();
+    let rows = dir.read_chaos_file().unwrap();
+    assert_eq!(rows.len(), 200);
+    assert!(rows.iter().enumerate().all(|(i, r)| r.id == i as u32));
+    assert!(
+        rows.iter()
+            .all(|r| r.a0_km > 139_000.0 && r.a0_km < 141_500.0)
+    );
+    assert!(rows.iter().all(|r| r.lambda_rel_prometheus_deg >= -180.0));
+    assert!(
+        rows.iter()
+            .all(|r| r.megno_mean.is_finite() && r.flags == 0)
+    );
+    let meta = dir.read_meta_file().unwrap();
+    let chaos = meta.chaos.expect("meta.json has the chaos field");
+    assert_eq!((chaos.method.as_str(), chaos.renorm_steps), ("shadow", 100));
+    assert_eq!(chaos.offset_km, 1.0);
+    assert_eq!(chaos.n_renorm, n / 100);
+    assert_eq!(summary.chaos, Some(chaos));
+
+    // Without the table: no file, no field.
+    let (dir, summary) = run_config(&tmp, &base, "plain", true).unwrap();
+    assert!(!dir.chaos_path().exists());
+    assert!(dir.read_meta_file().unwrap().chaos.is_none());
+    assert!(summary.chaos.is_none());
+}

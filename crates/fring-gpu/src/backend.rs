@@ -31,12 +31,14 @@ use crate::spike::{Consts, State, kick_scale, state_from_f64, state_to_f64};
 use crate::wf32::model;
 use crate::wh::{self, HostTable, Mode, ROW};
 use crate::wh_gpu::{DEFAULT_WORKGROUP, NO_FAILURE, WhKernels, grid, unbound};
+use fring_model::config::ChaosConfig;
+use fring_model::physics::chaos::shadow_offset_km;
 use fring_model::physics::{
     EpicycleElements, KickTable, SaturnField, epicycle_state, interpolate_moons,
 };
 use fring_model::{
-    Backend, Error, InitialState, MoonEphemeris, MoonState, ParticleView, Particles, Result,
-    RunConfig, StepStats, System, Vec3,
+    Backend, ChaosReport, Error, InitialState, MoonEphemeris, MoonState, ParticleView, Particles,
+    Result, RunConfig, StepStats, System, Vec3,
 };
 use rayon::prelude::*;
 
@@ -89,10 +91,22 @@ impl Options {
     }
 }
 
+/// Buffers and pipeline of the chaos indicator (ICR-003, ADR 0008); only
+/// made with `[diagnostics.chaos]`.
+struct GpuChaos {
+    cfg: ChaosConfig,
+    acc_buf: wgpu::Buffer,
+    acc_stage: wgpu::Buffer,
+    renorm_pipeline: wgpu::ComputePipeline,
+    renorm_bind: wgpu::BindGroup,
+}
+
 struct Slot {
     table: wgpu::Buffer,
     ctl: wgpu::Buffer,
     bind: wgpu::BindGroup,
+    /// As `bind`, with the shadow state (chaos only).
+    bind_shadow: Option<wgpu::BindGroup>,
     last: Option<wgpu::SubmissionIndex>,
 }
 
@@ -123,6 +137,7 @@ pub struct GpuBackend {
     snapshot_stale: bool,
     energy0: Vec<f64>,
     max_rel_energy_error: f64,
+    chaos: Option<GpuChaos>,
 }
 
 fn le_bytes(w: &[f32]) -> Vec<u8> {
@@ -221,19 +236,68 @@ impl GpuBackend {
             .block_steps
             .unwrap_or_else(|| (TARGET_PARTICLE_STEPS / n.max(1)).clamp(8, MAX_BLOCK_STEPS))
             .clamp(1, MAX_BLOCK_STEPS);
+        let chaos_cfg = config.diagnostics.as_ref().and_then(|d| d.chaos);
+        let shadow_buf = chaos_cfg.map(|cfg| {
+            // The shadow starts d0 away in the radial direction (position only).
+            let shadows: Vec<State<{ model::M4 }>> = (0..n)
+                .map(|i| {
+                    let dir = shadow_offset_km(p.position_km(i), cfg.offset_km);
+                    state_from_f64(p.position_km(i) + dir, p.velocity_km_s(i))
+                })
+                .collect();
+            let buf = mk(state_bytes, rw);
+            q.write_buffer(
+                &buf,
+                0,
+                &le_bytes(&crate::wh_gpu::pack_states(&shadows, cap)),
+            );
+            buf
+        });
         let slots = (0..RING)
             .map(|_| {
                 let table = mk((block_steps * ROW * 4) as u64, rw);
                 let ctl = mk(16, uni);
                 let bind = kernels.bind_group(&state_buf, &table, &prm_buf, &ctl, &status_buf);
+                let bind_shadow = shadow_buf
+                    .as_ref()
+                    .map(|sb| kernels.bind_group(sb, &table, &prm_buf, &ctl, &status_buf));
                 Slot {
                     table,
                     ctl,
                     bind,
+                    bind_shadow,
                     last: None,
                 }
             })
             .collect();
+        let chaos = match (chaos_cfg, shadow_buf) {
+            (Some(cfg), Some(shadow_buf)) => {
+                let acc_bytes = (crate::chaos::ACC_PLANES * cap * 8) as u64;
+                let acc_buf = mk(acc_bytes, rw); // zero: j = 0, sums 0
+                let cprm = mk(16, uni);
+                q.write_buffer(&cprm, 0, &le_bytes(&[cfg.offset_km as f32, 0.0, 0.0, 0.0]));
+                let ctl = mk(16, uni);
+                let ctl_words = wh::control(1, n, cap, eph.tracks.len());
+                let ctl_bytes: Vec<u8> = ctl_words.iter().flat_map(|x| x.to_le_bytes()).collect();
+                q.write_buffer(&ctl, 0, &ctl_bytes);
+                let renorm_bind = kernels.chaos_bind_group(
+                    &state_buf,
+                    &prm_buf,
+                    &ctl,
+                    &shadow_buf,
+                    &acc_buf,
+                    &cprm,
+                );
+                Some(GpuChaos {
+                    cfg,
+                    acc_buf,
+                    acc_stage: mk(acc_bytes, read),
+                    renorm_pipeline: kernels.chaos_pipeline(),
+                    renorm_bind,
+                })
+            }
+            _ => None,
+        };
 
         let field = SaturnField::<f64>::from_params(&system.saturn);
         let energy0 = if eph.tracks.is_empty() {
@@ -268,6 +332,7 @@ impl GpuBackend {
             snapshot_stale: false,
             energy0,
             max_rel_energy_error: 0.0,
+            chaos,
             kernels,
         })
     }
@@ -392,8 +457,20 @@ impl Backend for GpuBackend {
         let (gx, gy) = grid(self.cap, self.kernels.workgroup);
         let mut done = 0u64;
         while done < n_steps {
-            let block = (n_steps - done).min(self.block_steps as u64) as usize;
             let first = self.steps_total + done;
+            let mut block = (n_steps - done).min(self.block_steps as u64);
+            if let Some(c) = &self.chaos {
+                // Blocks end at multiples of K (as in CpuBackend), so the
+                // renormalisation steps do not depend on how the caller
+                // splits the run.
+                let k = u64::from(c.cfg.renorm_steps);
+                block = block.min(k - first % k);
+            }
+            let renorm_now = self
+                .chaos
+                .as_ref()
+                .is_some_and(|c| (first + block).is_multiple_of(u64::from(c.cfg.renorm_steps)));
+            let block = block as usize;
             // The host works while the GPU runs the previous blocks.
             self.table
                 .fill(&self.eph, self.start_s, self.step_s, first, block)?;
@@ -416,6 +493,15 @@ impl Backend for GpuBackend {
                 pass.set_pipeline(&self.pipeline);
                 pass.set_bind_group(0, &slot.bind, &[]);
                 pass.dispatch_workgroups(gx, gy, 1);
+                if let (Some(c), Some(bs)) = (&self.chaos, &slot.bind_shadow) {
+                    pass.set_bind_group(0, bs, &[]);
+                    pass.dispatch_workgroups(gx, gy, 1);
+                    if renorm_now {
+                        pass.set_pipeline(&c.renorm_pipeline);
+                        pass.set_bind_group(0, &c.renorm_bind, &[]);
+                        pass.dispatch_workgroups(gx, gy, 1);
+                    }
+                }
             }
             slot.last = Some(q.submit([enc.finish()]));
             self.next_slot = (self.next_slot + 1) % RING;
@@ -450,6 +536,39 @@ impl Backend for GpuBackend {
             time_s: self.time_s(),
             particles: &self.snapshot,
         })
+    }
+
+    fn chaos(&mut self) -> Result<Option<ChaosReport>> {
+        let Some(c) = &self.chaos else {
+            return Ok(None);
+        };
+        let gpu = self.kernels.gpu();
+        let d = gpu.device();
+        let size = (crate::chaos::ACC_PLANES * self.cap * 8) as u64;
+        let mut enc = d.create_command_encoder(&Default::default());
+        enc.copy_buffer_to_buffer(&c.acc_buf, 0, &c.acc_stage, 0, size);
+        gpu.queue().submit([enc.finish()]);
+        c.acc_stage
+            .map_async(wgpu::MapMode::Read, .., |r| r.expect("map failed"));
+        d.poll(wgpu::PollType::wait_indefinitely())
+            .expect("GPU poll failed");
+        let words: Vec<f32> = {
+            let view = c.acc_stage.get_mapped_range(..).expect("range");
+            view.as_chunks::<4>()
+                .0
+                .iter()
+                .map(|b| f32::from_le_bytes(*b))
+                .collect()
+        };
+        c.acc_stage.unmap();
+        let interval_s = f64::from(c.cfg.renorm_steps) * self.step_s;
+        Ok(Some(crate::chaos::report(
+            &words,
+            self.cap,
+            self.n,
+            interval_s,
+            self.time_s(),
+        )))
     }
 
     fn stats(&mut self) -> Result<StepStats> {

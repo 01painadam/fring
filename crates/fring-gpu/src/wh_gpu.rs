@@ -14,7 +14,8 @@ use fring_model::{Error, Result};
 pub const WH_WGSL: &str = concat!(
     include_str!("../shaders/ds.wgsl"),
     include_str!("../shaders/trig.wgsl"),
-    include_str!("../shaders/wh.wgsl")
+    include_str!("../shaders/wh.wgsl"),
+    include_str!("../shaders/chaos.wgsl")
 );
 
 /// Default workgroup size (see the sweep in the G2 handoff).
@@ -29,6 +30,8 @@ pub struct WhKernels {
     module: wgpu::ShaderModule,
     layout: wgpu::BindGroupLayout,
     pipeline_layout: wgpu::PipelineLayout,
+    chaos_layout: wgpu::BindGroupLayout,
+    chaos_pipeline_layout: wgpu::PipelineLayout,
     /// Workgroup size of the kernels.
     pub workgroup: u32,
 }
@@ -75,11 +78,31 @@ impl WhKernels {
             bind_group_layouts: &[Some(&layout)],
             immediate_size: 0,
         });
+        // The chaos kernel (shaders/chaos.wgsl): state, run constants, control,
+        // shadow state, accumulators and chaos constants.
+        let chaos_layout = d.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("chaos"),
+            entries: &[
+                entry(0, st(false)),
+                entry(2, wgpu::BufferBindingType::Uniform),
+                entry(3, wgpu::BufferBindingType::Uniform),
+                entry(5, st(false)),
+                entry(6, st(false)),
+                entry(7, wgpu::BufferBindingType::Uniform),
+            ],
+        });
+        let chaos_pipeline_layout = d.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("chaos"),
+            bind_group_layouts: &[Some(&chaos_layout)],
+            immediate_size: 0,
+        });
         Ok(Self {
             gpu: gpu.clone(),
             module,
             layout,
             pipeline_layout,
+            chaos_layout,
+            chaos_pipeline_layout,
             workgroup,
         })
     }
@@ -100,6 +123,53 @@ impl WhKernels {
                 entry_point: Some(name),
                 compilation_options: Default::default(),
                 cache: None,
+            })
+    }
+
+    /// The pipeline of the chaos kernel `chaos_renorm`.
+    pub fn chaos_pipeline(&self) -> wgpu::ComputePipeline {
+        self.gpu
+            .device()
+            .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+                label: Some("chaos_renorm"),
+                layout: Some(&self.chaos_pipeline_layout),
+                module: &self.module,
+                entry_point: Some("chaos_renorm"),
+                compilation_options: Default::default(),
+                cache: None,
+            })
+    }
+
+    /// A bind group for `chaos_renorm`: particle state, run constants,
+    /// control, shadow state, accumulators and chaos constants.
+    pub fn chaos_bind_group(
+        &self,
+        state: &wgpu::Buffer,
+        prm: &wgpu::Buffer,
+        ctl: &wgpu::Buffer,
+        shadow: &wgpu::Buffer,
+        acc: &wgpu::Buffer,
+        cprm: &wgpu::Buffer,
+    ) -> wgpu::BindGroup {
+        fn e(binding: u32, b: &wgpu::Buffer) -> wgpu::BindGroupEntry<'_> {
+            wgpu::BindGroupEntry {
+                binding,
+                resource: b.as_entire_binding(),
+            }
+        }
+        self.gpu
+            .device()
+            .create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("chaos"),
+                layout: &self.chaos_layout,
+                entries: &[
+                    e(0, state),
+                    e(2, prm),
+                    e(3, ctl),
+                    e(5, shadow),
+                    e(6, acc),
+                    e(7, cprm),
+                ],
             })
     }
 

@@ -123,3 +123,41 @@ fn stats_drops_unfinished_last_line() {
     let e = read_stats_csv(&mut "time_s,steps".as_bytes()).unwrap_err();
     assert!(e.to_string().contains("empty"), "{e}");
 }
+
+#[test]
+fn chaos_csv_round_trips_and_meta_without_chaos_still_parses() {
+    use fring_io::{ChaosRow, read_chaos_csv, read_meta, write_chaos_csv};
+    let rows = vec![
+        ChaosRow {
+            id: 0,
+            a0_km: 140_222.43,
+            lambda_rel_prometheus_deg: -179.5,
+            ftle_per_day: 1.5e-2,
+            log_growth: 9.25,
+            megno_mean: 2.0000001,
+            flags: 0,
+        },
+        ChaosRow {
+            id: 7,
+            a0_km: 1.0,
+            lambda_rel_prometheus_deg: f64::NAN,
+            ftle_per_day: 0.0,
+            log_growth: -1.0,
+            megno_mean: 0.0,
+            flags: 1,
+        },
+    ];
+    let mut buf = Vec::new();
+    write_chaos_csv(&mut buf, &rows).unwrap();
+    let back = read_chaos_csv(&mut buf.as_slice()).unwrap();
+    assert_eq!(back.len(), 2);
+    assert_eq!(back[0], rows[0]);
+    assert!(back[1].lambda_rel_prometheus_deg.is_nan());
+    assert_eq!(back[1].flags, 1);
+    assert!(read_chaos_csv(&mut b"id,a0_km\n1,2\n".as_slice()).is_err());
+
+    // A meta.json from before G3 has no chaos field.
+    let old = r#"{"code_version":"0.1.0","git_hash":"x","machine":"m","wall_time_s":1.0,
+        "frame_format_version":1,"moons_format_version":1,"stats_format_version":1}"#;
+    assert!(read_meta(&mut old.as_bytes()).unwrap().chaos.is_none());
+}
