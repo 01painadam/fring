@@ -1,0 +1,302 @@
+{
+  "$schema": "https://vega.github.io/schema/vega-lite/v5.20.1.json",
+  "config": {
+    "view": {
+      "continuousHeight": 300,
+      "continuousWidth": 300,
+      "strokeWidth": 0
+    }
+  },
+  "data": {
+    "name": "data-f23d07b9583ce72ff58999413f329061"
+  },
+  "datasets": {
+    "data-a62a6e4b55cd38223f07d3bc2cfaa36e": [
+      {
+        "e_dev_rms": 5.2e-06,
+        "e_free": 0.0023496,
+        "e_mean": 0.0023496,
+        "hi": 2.6984118,
+        "label": "Saturn only (J2 to J6)",
+        "lo": 2.6984114,
+        "rate_deg_per_day": 2.6984116,
+        "rate_even": 2.698412,
+        "rate_odd": 2.6984111,
+        "rms_resid_deg": 0.08789,
+        "run": "apse-none",
+        "se_jackknife": 2e-07,
+        "se_ols": 3e-07,
+        "w1": 2.6984125,
+        "w2": 2.6984117,
+        "w3": 2.6984125,
+        "w4": 2.6984108,
+        "w5": 2.6984102
+      },
+      {
+        "e_dev_rms": 0.0001416,
+        "e_free": 0.002197,
+        "e_mean": 0.0021973,
+        "hi": 2.6981746,
+        "label": "+ Prometheus",
+        "lo": 2.6980538,
+        "rate_deg_per_day": 2.6981142,
+        "rate_even": 2.6980108,
+        "rate_odd": 2.6982183,
+        "rms_resid_deg": 0.86868,
+        "run": "apse-prom",
+        "se_jackknife": 6.04e-05,
+        "se_ols": 3e-06,
+        "w1": 2.6984127,
+        "w2": 2.6984092,
+        "w3": 2.6977389,
+        "w4": 2.6985522,
+        "w5": 2.6975144
+      },
+      {
+        "e_dev_rms": 4.74e-05,
+        "e_free": 0.0023568,
+        "e_mean": 0.002357,
+        "hi": 2.6988767,
+        "label": "+ Pandora",
+        "lo": 2.6988605,
+        "rate_deg_per_day": 2.6988686,
+        "rate_even": 2.6988537,
+        "rate_odd": 2.6988838,
+        "rms_resid_deg": 0.81663,
+        "run": "apse-pand",
+        "se_jackknife": 8.1e-06,
+        "se_ols": 2.8e-06,
+        "w1": 2.6988452,
+        "w2": 2.6987335,
+        "w3": 2.6988218,
+        "w4": 2.6987916,
+        "w5": 2.6987655
+      },
+      {
+        "e_dev_rms": 0.0001508,
+        "e_free": 0.0021838,
+        "e_mean": 0.0021843,
+        "hi": 2.6998133,
+        "label": "+ both moons",
+        "lo": 2.6996219,
+        "rate_deg_per_day": 2.6997176,
+        "rate_even": 2.6998082,
+        "rate_odd": 2.6996286,
+        "rms_resid_deg": 1.26921,
+        "run": "apse-both",
+        "se_jackknife": 9.57e-05,
+        "se_ols": 4.4e-06,
+        "w1": 2.7004844,
+        "w2": 2.6998464,
+        "w3": 2.6991036,
+        "w4": 2.7005017,
+        "w5": 2.6982616
+      },
+      {
+        "e_dev_rms": 0.0001548,
+        "e_free": 0.002257,
+        "e_mean": 0.0022576,
+        "hi": 2.6999871,
+        "label": "+ both, other apse phase and seed",
+        "lo": 2.6998165000000003,
+        "rate_deg_per_day": 2.6999018,
+        "rate_even": 2.6998398,
+        "rate_odd": 2.6999628,
+        "rms_resid_deg": 1.28666,
+        "run": "apse-both-phase",
+        "se_jackknife": 8.53e-05,
+        "se_ols": 4.5e-06,
+        "w1": 2.7006844,
+        "w2": 2.6990551,
+        "w3": 2.7008365,
+        "w4": 2.6987656,
+        "w5": 2.7001607
+      },
+      {
+        "e_dev_rms": 0.0001491,
+        "e_free": 0.0021851,
+        "e_mean": 0.0021857,
+        "hi": 2.6999071,
+        "label": "+ both, half time step",
+        "lo": 2.6997209,
+        "rate_deg_per_day": 2.699814,
+        "rate_even": 2.699785,
+        "rate_odd": 2.6998437,
+        "rms_resid_deg": 1.27971,
+        "run": "apse-both-half",
+        "se_jackknife": 9.31e-05,
+        "se_ols": 4.5e-06,
+        "w1": 2.7004594,
+        "w2": 2.6999969,
+        "w3": 2.699223,
+        "w4": 2.7005321,
+        "w5": 2.6983906
+      },
+      {
+        "e_dev_rms": null,
+        "e_free": null,
+        "e_mean": null,
+        "hi": 2.699327,
+        "label": "Saturn + secular formula (Laplace)",
+        "lo": 2.699327,
+        "rate_deg_per_day": 2.699327,
+        "rate_even": null,
+        "rate_odd": null,
+        "rms_resid_deg": null,
+        "run": "analytic",
+        "se_jackknife": 0.0,
+        "se_ols": null,
+        "w1": null,
+        "w2": null,
+        "w3": null,
+        "w4": null,
+        "w5": null
+      }
+    ],
+    "data-f23d07b9583ce72ff58999413f329061": [
+      {
+        "hi": 2.70054,
+        "lo": 2.69996,
+        "v": 2.70025
+      }
+    ]
+  },
+  "height": 230,
+  "layer": [
+    {
+      "encoding": {
+        "x": {
+          "field": "lo",
+          "scale": {
+            "domain": [
+              2.6975,
+              2.7035
+            ],
+            "nice": false
+          },
+          "type": "quantitative"
+        },
+        "x2": {
+          "field": "hi"
+        }
+      },
+      "mark": {
+        "color": "#D55E00",
+        "opacity": 0.25,
+        "type": "rect"
+      }
+    },
+    {
+      "encoding": {
+        "x": {
+          "field": "v",
+          "scale": {
+            "domain": [
+              2.6975,
+              2.7035
+            ],
+            "nice": false
+          },
+          "type": "quantitative"
+        }
+      },
+      "mark": {
+        "color": "#D55E00",
+        "type": "rule"
+      }
+    },
+    {
+      "data": {
+        "name": "data-a62a6e4b55cd38223f07d3bc2cfaa36e"
+      },
+      "encoding": {
+        "x": {
+          "field": "lo",
+          "scale": {
+            "domain": [
+              2.6975,
+              2.7035
+            ],
+            "nice": false
+          },
+          "type": "quantitative"
+        },
+        "x2": {
+          "field": "hi"
+        },
+        "y": {
+          "field": "label",
+          "sort": [
+            "Saturn only (J2 to J6)",
+            "+ Prometheus",
+            "+ Pandora",
+            "+ both moons",
+            "+ both, other apse phase and seed",
+            "+ both, half time step",
+            "Saturn + secular formula (Laplace)"
+          ],
+          "type": "nominal"
+        }
+      },
+      "mark": {
+        "color": "#0072B2",
+        "type": "rule"
+      }
+    },
+    {
+      "data": {
+        "name": "data-a62a6e4b55cd38223f07d3bc2cfaa36e"
+      },
+      "encoding": {
+        "tooltip": [
+          {
+            "field": "label",
+            "type": "nominal"
+          },
+          {
+            "field": "rate_deg_per_day",
+            "type": "quantitative"
+          },
+          {
+            "field": "se_jackknife",
+            "type": "quantitative"
+          }
+        ],
+        "x": {
+          "field": "rate_deg_per_day",
+          "scale": {
+            "domain": [
+              2.6975,
+              2.7035
+            ],
+            "nice": false
+          },
+          "title": "Apse precession rate at the core (deg/day)",
+          "type": "quantitative"
+        },
+        "y": {
+          "field": "label",
+          "sort": [
+            "Saturn only (J2 to J6)",
+            "+ Prometheus",
+            "+ Pandora",
+            "+ both moons",
+            "+ both, other apse phase and seed",
+            "+ both, half time step",
+            "Saturn + secular formula (Laplace)"
+          ],
+          "title": null,
+          "type": "nominal"
+        }
+      },
+      "mark": {
+        "color": "#0072B2",
+        "filled": true,
+        "size": 70,
+        "type": "point"
+      }
+    }
+  ],
+  "title": "Apse precession of core particles, 50-year runs (orange band: observed 2.70025 +- 0.00029)",
+  "width": 560
+}
