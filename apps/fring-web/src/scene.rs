@@ -50,6 +50,13 @@ pub const PARTICLE_SIZE_PX: f32 = 2.0;
 /// Size on the screen of a moon dot, in pixels.
 pub const MOON_SIZE_PX: f32 = 10.0;
 
+/// Writes the floats as little-endian bytes into `out` (the layout of a GPU
+/// buffer on every WebGPU device). Replaces the old contents of `out`.
+pub fn floats_to_le_bytes(data: &[f32], out: &mut Vec<u8>) {
+    out.clear();
+    out.extend(data.iter().flat_map(|x| x.to_le_bytes()));
+}
+
 /// The values of `params/ring.toml` that W1 uses.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct RingParams {
@@ -380,6 +387,13 @@ mod tests {
                 assert!((v - v0).norm() < 1e-12, "{preset:?} id {id}");
             }
         }
+    }
+
+    #[test]
+    fn float_bytes_are_little_endian() {
+        let mut out = vec![9u8];
+        floats_to_le_bytes(&[1.0, -2.5], &mut out);
+        assert_eq!(out, [0, 0, 0x80, 0x3f, 0, 0, 0x20, 0xc0]);
     }
 
     #[test]
