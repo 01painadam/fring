@@ -339,7 +339,9 @@ pub fn run(args: &Args) -> Result<Summary, RunError> {
 
     // 4. meta.json, last.
     summary.wall_time_s = start.elapsed().as_secs_f64();
-    let git = fring_io::sysinfo::git_hash(&std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
+    let git = fring_io::sysinfo::git_hash(
+        &std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
+    );
     let mut meta = RunMeta::new(
         env!("CARGO_PKG_VERSION"),
         &git,
