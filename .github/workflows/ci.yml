@@ -41,6 +41,10 @@ jobs:
       - name: fring-model, fring-io, fring-gpu and fring-web build for wasm32
         run: cargo check -p fring-model -p fring-io -p fring-gpu -p fring-web --target wasm32-unknown-unknown
 
+      # web.rs is compiled only for wasm32, so the host clippy step does not see it.
+      - name: fring-web clippy for wasm32
+        run: cargo clippy -p fring-web --target wasm32-unknown-unknown -- -D warnings
+
       # wasm-bindgen-cli must equal the wasm-bindgen crate version (Cargo.toml).
       # rust-cache keeps ~/.cargo/bin, so the install runs only on a cold cache.
       - name: fring-web web build and wasm size limit (2 MiB)
