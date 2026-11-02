@@ -17,6 +17,7 @@
   button, select { font: inherit; color: var(--fg); background: #1a2236; border: 1px solid var(--line); border-radius: 6px; padding: 5px 10px; min-height: 32px; }
   button:hover, select:hover { border-color: var(--accent); }
   input[type=range] { flex: 1; min-width: 120px; accent-color: var(--accent); }
+  #bench { white-space: pre-wrap; font-size: 12px; }
   .readout { font-variant-numeric: tabular-nums; color: var(--fg); }
   input[type=number] { width: 7.5em; font: inherit; color: var(--fg); background: #1a2236; border: 1px solid var(--line); border-radius: 6px; padding: 4px 6px; min-height: 32px; }
   .status { color: var(--accent); }
@@ -237,11 +238,81 @@
       app.zoom((e.clientX - r.left) * dpr(), (e.clientY - r.top) * dpr(), Math.exp(e.deltaY * 0.0015));
     }, { passive: false });
 
-    // Frame rate: mean of the last second (rAF time stamps). The bench mode
-    // records every frame for 10 s after a 3 s warm-up.
+    // Frame rate: mean of the last second (rAF time stamps).
+    //
+    // Bench mode (?bench, optional counts=1e5,1e6 and modes=off,side,overlay):
+    // for each particle count and each compare mode, 3 s warm-up and 10 s of
+    // recorded frames at 500 h/s requested. The result is a table in the page,
+    // plus one raw CSV row per cell and the user agent in the console.
+    const MODE_INDEX = { off: 0, side: 1, overlay: 2 };
+    const MODE_NAMES = ["off", "side", "overlay"];
+    const benchCounts = params.has("counts") ? params.get("counts").split(",").map(Number) : [10000, 100000, 300000, 1000000];
+    const benchModes = params.has("modes") ? params.get("modes").split(",") : ["off", "side", "overlay"];
+    const benchCells = [];
+    for (const c of benchCounts) for (const m of benchModes) if (m in MODE_INDEX && c > 0) benchCells.push([c, m]);
+    const WARMUP_MS = 3000, MEASURE_MS = 10000;
+    const bench_ = { idx: 0, cell: null, t0: 0, dts: [], steps: 0, rebuild: 0, rows: [], csv: [] };
+    const log = (t) => { console.log(t); };
+    if (bench) {
+      log("bench user agent: " + navigator.userAgent);
+      log("bench csv: count,mode,frames,mean_fps,p5_fps,worst_ms,mean_steps_per_frame,effective_h_per_s,rebuild_ms");
+    }
+    const benchStart = (now) => {
+      const [count, mode] = benchCells[bench_.idx];
+      bench_.cell = [count, mode];
+      bench_.dts = [];
+      bench_.steps = 0;
+      bench_.rebuild = 0;
+      bench_.error = "";
+      bench_.t0 = now;
+      if (app.particle_count() !== count) {
+        const t0 = performance.now();
+        try { app.set_particle_count(count); } catch (e) { bench_.error = String(e); }
+        $("count").value = String(app.particle_count());
+        bench_.rebuild = performance.now() - t0;
+      }
+      compareMode = MODE_INDEX[mode];
+      $("compare").value = String(compareMode);
+      try { app.set_compare(compareMode); } catch (e) { bench_.error = String(e); }
+      setSpeed();
+    };
+    const benchFinish = () => {
+      const [count, mode] = bench_.cell;
+      const d = bench_.dts;
+      let row, csv;
+      if (bench_.error || d.length === 0) {
+        row = "| " + count + " | " + mode + " | not run: " + (bench_.error || "no frames") + " | | | | |";
+        csv = [count, mode, 0, "", "", "", "", "", bench_.rebuild.toFixed(0)].join(",");
+      } else {
+        const sorted = d.slice().sort((a, b) => a - b);
+        const sum = d.reduce((a, b) => a + b, 0);
+        const mean = sum / d.length;
+        const p95 = sorted[Math.min(sorted.length - 1, Math.floor(0.95 * sorted.length))];
+        const stepsPerFrame = bench_.steps / d.length;
+        const effective = (bench_.steps * 0.1) / (sum / 1000); // 360 s = 0.1 h per step
+        row = "| " + count + " | " + mode + " | " + (1000 / mean).toFixed(1) + " | " + (1000 / p95).toFixed(1) + " | " + sorted[sorted.length - 1].toFixed(1) + " | " + stepsPerFrame.toFixed(1) + " | " + effective.toFixed(0) + " | " + bench_.rebuild.toFixed(0) + " |";
+        csv = [count, mode, d.length, (1000 / mean).toFixed(2), (1000 / p95).toFixed(2), sorted[sorted.length - 1].toFixed(2), stepsPerFrame.toFixed(2), effective.toFixed(1), bench_.rebuild.toFixed(0)].join(",");
+      }
+      bench_.rows.push(row);
+      log("bench csv: " + csv);
+      bench_.cell = null;
+      bench_.idx += 1;
+      $("bench").textContent = "bench (500 h/s requested), " + bench_.idx + " of " + benchCells.length + " cells\n| particles | compare | mean fps | 5th pct fps | worst ms | steps/frame | effective h/s | rebuild ms |\n|---|---|---|---|---|---|---|---|\n" + bench_.rows.join("\n");
+      if (bench_.idx >= benchCells.length) log("bench table:\n" + $("bench").textContent);
+    };
+    const benchFrame = (now, dt) => {
+      if (bench_.idx >= benchCells.length) return;
+      if (!bench_.cell) benchStart(now);
+      if (bench_.error) { benchFinish(); return; }
+      const age = now - bench_.t0;
+      if (age > WARMUP_MS) {
+        bench_.dts.push(dt);
+        bench_.steps += app.steps_per_frame();
+      }
+      if (age > WARMUP_MS + MEASURE_MS) benchFinish();
+    };
     const dts = [];
-    let prev = null, shown = "", n = 0, benchStart = null, benchDone = false;
-    const benchDts = [];
+    let prev = null, shown = "", n = 0;
     const loop = (now) => {
       const dt = prev === null ? 0 : now - prev;
       prev = now;
@@ -263,19 +334,7 @@
       if (phase === "running" && dt > 0) {
         dts.push([now, dt]);
         while (dts.length > 0 && now - dts[0][0] > 1000) dts.shift();
-        if (bench && !benchDone) {
-          if (benchStart === null) benchStart = now;
-          if (now - benchStart > 3000) benchDts.push(dt);
-          if (now - benchStart > 13000) {
-            benchDone = true;
-            const s = benchDts.slice().sort((a, b) => a - b);
-            const mean = benchDts.reduce((a, b) => a + b, 0) / benchDts.length;
-            const p95 = s[Math.min(s.length - 1, Math.floor(0.95 * s.length))];
-            const txt = "bench (500 h/s, " + app.particle_count() + " particles, 10 s): mean " + (1000 / mean).toFixed(1) + " fps, 5th percentile " + (1000 / p95).toFixed(1) + " fps, worst frame " + s[s.length - 1].toFixed(1) + " ms, " + benchDts.length + " frames";
-            $("bench").textContent = txt;
-            console.log(txt);
-          }
-        }
+        if (bench) benchFrame(now, dt);
       }
       if (n++ % 10 === 0 && phase === "running") {
         const w = app.view_width_km();

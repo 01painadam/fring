@@ -15,9 +15,10 @@ Done when: the three modes and "Set to now" work in Chrome on the Mac mini; the 
 - Commit 6: Overlay. `points.wgsl` draws colour ids >= 10 as a warm faint reference; `draw` draws the reference range first, then the live range; Compare select (Off, Overlay) on the page; native test `render_shader_makes_a_pipeline`.
 - Commit 7: Side by side. `view::split_halves` (floor(w/2) per half, odd widths) and `half_local_x` with host tests (`halves_of_even_and_odd_widths`, `pointer_maps_to_the_same_place_in_each_half`); one render pass, two viewports and scissor rects, one shared frame uniform (both halves have the same size); pan, zoom and the view width use the size of one picture.
 - Commit 8: "Set to now" button, labels over the two halves in Side by side (reference time and live time), reference time in the readout in Overlay; `App::reference_is_custom`.
+- Commit 9: `?bench` runs every count x compare mode (`counts=`, `modes=`), 3 s warm-up and 10 s per cell at 500 h/s requested; table in the page, one CSV row per cell and the user agent in the console.
 
 ## Next step (one concrete action)
-Commit 9: extend `?bench` in `index.html` to run counts x modes (`counts=`, `modes=`), table plus CSV rows in the console.
+AJ or A0 runs browser steps B1 to B5 (below) in Chrome; then commit 10: paste the `?bench` table here, propose the default count (A0), AJ confirms.
 
 ## How to verify the current state
 `cargo test -p fring-web` (host tests pass); `cargo check -p fring-web --target wasm32-unknown-unknown`.
