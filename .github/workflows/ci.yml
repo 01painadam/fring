@@ -38,5 +38,15 @@ jobs:
       - name: Test
         run: cargo test --workspace
 
-      - name: fring-model and fring-io build for wasm32
-        run: cargo check -p fring-model -p fring-io --target wasm32-unknown-unknown
+      - name: fring-model, fring-io and fring-web build for wasm32
+        run: cargo check -p fring-model -p fring-io -p fring-web --target wasm32-unknown-unknown
+
+      # wasm-bindgen-cli must equal the wasm-bindgen crate version (Cargo.toml).
+      # rust-cache keeps ~/.cargo/bin, so the install runs only on a cold cache.
+      - name: fring-web web build and wasm size limit (2 MiB)
+        run: |
+          cargo install wasm-bindgen-cli --version 0.2.130 --locked
+          apps/fring-web/scripts/build.sh
+          size=$(wc -c < apps/fring-web/dist/fring_web_bg.wasm)
+          echo "fring_web_bg.wasm: $size bytes (limit 2097152)"
+          test "$size" -gt 0 && test "$size" -lt 2097152
