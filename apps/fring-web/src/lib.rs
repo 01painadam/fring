@@ -2,12 +2,13 @@
 //!
 //! Owner: A7 (see `AGENTS.md`).
 //!
-//! Task W1: a page that draws particles in the frame that rotates at n0.
-//! - [`scene`]: particle set-up and analytic epicycle motion (host-testable).
+//! Task W2: the live test-particle mode. About 10^5 particles run on the GPU with
+//! the Wisdom-Holman kernels of `fring-gpu`, and the page draws them.
+//! - [`live`]: set-up, step planning, views and the projection maths (host-testable).
 //! - [`view`]: camera pan and zoom (host-testable).
-//! - `web` (wasm32 only): canvas, wgpu render pipeline, page controls.
+//! - `web` (wasm32 only): canvas, render and projection pipelines, `GpuStepper`.
 
-pub mod scene;
+pub mod live;
 pub mod view;
 
 #[cfg(target_arch = "wasm32")]

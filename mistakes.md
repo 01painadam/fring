@@ -2,6 +2,13 @@
 
 Read this file at the start of a session. When a mistake costs time, add an entry so that no agent makes it twice. Newest first. Each entry: what happened, why, and the rule now.
 
+## 2026-11-02 (phase 3, W2)
+
+### M24. The multiply-by-one guard of `ds.wgsl` did not protect a new double-single shader
+
+- **What:** W2's projection shader (`apps/fring-web/shaders/project.wgsl`) computes `(p.hi - q.hi) + (p.lo - q.lo)`. A first version guarded both differences by a multiplication with the run-time uniform `one`, as `ds.wgsl` does. On the M4 (native Metal), the native GPU test showed an error of 2.3e-3 km at 3.6 km from the eye: the compiler took out the common factor and re-associated the sum, so the low words were lost. Passing each high difference through `select(x, 0.0, one < 0.5)` fixed it (worst error 0.2 of the tolerance 1e-6 km + 6e-7 d).
+- **Rule:** a guard that works in one shader is not proof for another. Every new WGSL function with double-single arithmetic gets its own native GPU test against its Rust twin, with low words that are not zero. The browser self-test (`SelfTest`) covers only the `fring-gpu` probe kernels, so a web-only shader is checked natively and then by eye at maximum zoom in each browser.
+
 ## 2026-11-02 (phase 3, W2-GPU)
 
 ### M23. A subagent reported "fmt clean", but the last commit failed `cargo fmt --check`

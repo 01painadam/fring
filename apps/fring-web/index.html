@@ -18,6 +18,9 @@
   button:hover, select:hover { border-color: var(--accent); }
   input[type=range] { flex: 1; min-width: 120px; accent-color: var(--accent); }
   .readout { font-variant-numeric: tabular-nums; color: var(--fg); }
+  input[type=number] { width: 7.5em; font: inherit; color: var(--fg); background: #1a2236; border: 1px solid var(--line); border-radius: 6px; padding: 4px 6px; min-height: 32px; }
+  .status { color: var(--accent); }
+  .warn { color: #ffb86b; }
   .legend { display: flex; gap: 12px; flex-wrap: wrap; color: var(--muted); font-size: 13px; }
   .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 5px; vertical-align: -1px; }
   .note { margin: 6px 0 0; color: var(--muted); font-size: 12px; }
@@ -35,12 +38,27 @@
   <h1>Saturn's F ring</h1>
   <div class="row">
     <button id="pause" type="button">Pause</button>
+    <button id="restart" type="button">Restart</button>
     <button id="reset" type="button">Reset view</button>
+  </div>
+  <div class="row">
     <label for="preset">Particles</label>
     <select id="preset" autocomplete="off">
       <option value="0">Core (narrow)</option>
-      <option value="1">Band (circular)</option>
+      <option value="1">Band (circular, a0 +- a0 e)</option>
+      <option value="2">Between the moons (circular)</option>
+      <option value="3">Custom band (circular)</option>
     </select>
+  </div>
+  <div class="row">
+    <label for="amin">a from</label>
+    <input id="amin" type="number" step="1" autocomplete="off">
+    <label for="amax">to</label>
+    <input id="amax" type="number" step="1" autocomplete="off">
+    <span class="readout">km</span>
+  </div>
+  <div class="row">
+    <label><input id="pandora" type="checkbox" checked autocomplete="off"> Pandora pulls on the particles</label>
   </div>
   <div class="row">
     <label for="frame">View</label>
@@ -53,15 +71,18 @@
   </div>
   <div class="row">
     <label for="speed">Speed</label>
-    <input id="speed" type="range" min="-1" max="2.4" step="0.01" value="0.78">
+    <input id="speed" type="range" min="0" max="2.7" step="0.01" value="0.78">
     <span class="readout" id="speed-out"></span>
   </div>
+  <div class="readout status" id="status"></div>
   <div class="readout" id="readout" aria-live="off"></div>
+  <div class="readout warn" id="message" aria-live="polite"></div>
+  <div class="readout" id="bench"></div>
   <div class="legend">
-    <span><span class="dot" style="background:#ff9e33"></span>Prometheus (schematic)</span>
-    <span><span class="dot" style="background:#73f28c"></span>Pandora (schematic)</span>
+    <span><span class="dot" style="background:#ff9e33"></span>Prometheus</span>
+    <span><span class="dot" style="background:#73f28c"></span>Pandora</span>
   </div>
-  <p class="note">Seen from the north: orbits go anticlockwise. Inertial: fixed camera; the core goes round once in 14.85 h. Rotating: the camera turns with the core (mean motion n0), so the core stays still, and material outside it (Pandora, the outer half of the band, the apocentre side of the core) falls behind and moves clockwise; material inside (Prometheus, the inner half) moves ahead, anticlockwise. Moon views: the moon stays at the centre, Saturn is straight down and the orbital motion goes to the left. Moons are on circular orbits here, not the real ephemeris. Drag to move, scroll to zoom.</p>
+  <p class="note">100 000 test particles run live on your GPU (Wisdom-Holman, double-single arithmetic), pulled by Saturn (J2 to J6) and by the moons from a 10-year integration of the real moon orbits. Time starts at 1 January 2008. Seen from the north: orbits go anticlockwise. Inertial: fixed camera; the core goes round once in 14.85 h. Rotating: the camera turns with the core (mean motion n0), so the core stays still and the outer material falls behind. Moon views: the moon stays at the centre, Saturn is straight down. "Pandora pulls" switches off only Pandora's pull on the particles; Prometheus keeps its real path and Pandora's dot is hidden. Changing the particles or Pandora starts again from t = 0. Below about 6 h/s the motion is stepwise (one 360 s step every few frames). Drag to move, scroll to zoom.</p>
   <p class="note" id="adapter"></p>
 </div>
 
@@ -75,6 +96,8 @@
 <script type="module">
   const $ = (id) => document.getElementById(id);
   const canvas = $("view");
+  const params = new URLSearchParams(location.search);
+  const bench = params.has("bench");
 
   function fail(title, text) {
     $("error-title").textContent = title;
@@ -82,6 +105,11 @@
     $("error").classList.add("show");
     $("panel").style.display = "none";
   }
+
+  const fmtTime = (t, span) => {
+    const f = (d) => (d > 730 ? (d / 365.25).toFixed(2) + " y" : d.toFixed(1) + " d");
+    return "t = " + f(t) + " of " + f(span);
+  };
 
   async function main() {
     if (!navigator.gpu) {
@@ -103,15 +131,17 @@
     const onResize = () => { fit(); app.resize(canvas.width, canvas.height); };
     new ResizeObserver(onResize).observe(canvas);
 
-    // Speed: slider is log10 of simulated hours per real second.
+    // Speed: slider is log10 of simulated hours per real second (1 to 500 h/s).
     const setSpeed = () => {
       const h = Math.pow(10, parseFloat($("speed").value));
       app.set_speed_hours_per_s(h);
-      $("speed-out").textContent = h < 10 ? h.toFixed(1) + " h/s" : (h / 24).toFixed(1) + " d/s";
+      $("speed-out").textContent = h < 24 ? h.toFixed(1) + " h/s" : (h / 24).toFixed(1) + " d/s";
     };
     $("speed").addEventListener("input", setSpeed);
+    if (bench) $("speed").value = "2.7";
     setSpeed();
 
+    const tell = (f) => { try { f(); $("message").textContent = ""; } catch (e) { $("message").textContent = String(e); } };
     let paused = false;
     $("pause").addEventListener("click", () => {
       paused = !paused;
@@ -119,7 +149,25 @@
       $("pause").textContent = paused ? "Play" : "Pause";
     });
     $("reset").addEventListener("click", () => app.reset_view());
-    $("preset").addEventListener("change", (e) => app.set_preset(parseInt(e.target.value, 10)));
+    $("restart").addEventListener("click", () => tell(() => app.restart()));
+    $("pandora").addEventListener("change", (e) => tell(() => app.set_pandora(e.target.checked)));
+    const showRange = (i) => {
+      const r = app.preset_range_km(i);
+      $("amin").value = r[0].toFixed(0);
+      $("amax").value = r[1].toFixed(0);
+    };
+    showRange(0);
+    $("preset").addEventListener("change", (e) => {
+      const i = parseInt(e.target.value, 10);
+      if (i < 3) { showRange(i); tell(() => app.set_preset(i)); }
+      else tell(() => app.set_band_km(parseFloat($("amin").value), parseFloat($("amax").value)));
+    });
+    const onBand = () => {
+      $("preset").value = "3";
+      tell(() => app.set_band_km(parseFloat($("amin").value), parseFloat($("amax").value)));
+    };
+    $("amin").addEventListener("change", onBand);
+    $("amax").addEventListener("change", onBand);
     $("frame").addEventListener("change", (e) => app.set_view(parseInt(e.target.value, 10)));
 
     // Pointer: drag to pan, wheel to zoom. Positions in canvas pixels.
@@ -143,17 +191,54 @@
       app.zoom((e.clientX - r.left) * dpr(), (e.clientY - r.top) * dpr(), Math.exp(e.deltaY * 0.0015));
     }, { passive: false });
 
-    let n = 0;
+    // Frame rate: mean of the last second (rAF time stamps). The bench mode
+    // records every frame for 10 s after a 3 s warm-up.
+    const dts = [];
+    let prev = null, shown = "", n = 0, benchStart = null, benchDone = false;
+    const benchDts = [];
     const loop = (now) => {
+      const dt = prev === null ? 0 : now - prev;
+      prev = now;
       try {
         app.frame(now);
       } catch (e) {
         fail("The drawing stopped", String(e));
         return;
       }
-      if (n++ % 10 === 0) {
+      const phase = app.phase();
+      if (phase !== shown) {
+        shown = phase;
+        $("status").textContent = { checking: "Checking GPU arithmetic...", preparing: "Preparing the moons (a few seconds)...", running: "", failed: "" }[phase];
+        if (phase === "failed") {
+          fail("The GPU arithmetic check failed", app.message() + " The integrator was not started.");
+          return;
+        }
+      }
+      if (phase === "running" && dt > 0) {
+        dts.push([now, dt]);
+        while (dts.length > 0 && now - dts[0][0] > 1000) dts.shift();
+        if (bench && !benchDone) {
+          if (benchStart === null) benchStart = now;
+          if (now - benchStart > 3000) benchDts.push(dt);
+          if (now - benchStart > 13000) {
+            benchDone = true;
+            const s = benchDts.slice().sort((a, b) => a - b);
+            const mean = benchDts.reduce((a, b) => a + b, 0) / benchDts.length;
+            const p95 = s[Math.min(s.length - 1, Math.floor(0.95 * s.length))];
+            const txt = "bench (500 h/s, " + app.particle_count() + " particles, 10 s): mean " + (1000 / mean).toFixed(1) + " fps, 5th percentile " + (1000 / p95).toFixed(1) + " fps, worst frame " + s[s.length - 1].toFixed(1) + " ms, " + benchDts.length + " frames";
+            $("bench").textContent = txt;
+            console.log(txt);
+          }
+        }
+      }
+      if (n++ % 10 === 0 && phase === "running") {
         const w = app.view_width_km();
-        $("readout").textContent = "t = " + app.time_days().toFixed(2) + " d    view width " + (w >= 1000 ? Math.round(w).toLocaleString("en-GB") : w.toFixed(1)) + " km";
+        const fps = dts.length > 1 ? (1000 * dts.length) / dts.reduce((a, b) => a + b[1], 0) : 0;
+        $("readout").textContent = fmtTime(app.time_days(), app.span_days()) + "    view " + (w >= 1000 ? Math.round(w).toLocaleString("en-GB") : w.toFixed(1)) + " km    " + fps.toFixed(0) + " fps    " + app.steps_per_frame() + " steps/frame" + (app.speed_limited() ? " (speed limited)" : "");
+      }
+      if (phase === "running" && n % 10 === 1) {
+        const m = app.message();
+        if (m) $("message").textContent = m;
       }
       requestAnimationFrame(loop);
     };

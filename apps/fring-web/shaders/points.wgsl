@@ -1,8 +1,9 @@
-// W1: draws discs (particles, moons, Saturn) as instanced quads.
+// W1, W2: draws discs (particles, moons, Saturn) as instanced quads.
 //
 // Instance (vertex buffer, 16 bytes, step mode instance):
-//   xy = position in km, rotating frame, RELATIVE TO THE EYE (the host subtracts
-//        the camera centre in f64 before it rounds to f32),
+//   xy = position in km, view plane, RELATIVE TO THE EYE (the host, for Saturn and
+//        the moons, and project.wgsl, for the particles, subtract the camera centre
+//        before they round to f32),
 //   z  = diameter in pixels,
 //   w  = colour id (0 particle, 1 Saturn, 2 + k moon k).
 // Uniform: scale = clip units per km (x, y), viewport = window size in pixels.
