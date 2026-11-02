@@ -242,24 +242,8 @@ pub fn run_pair_tangent(
         let t_end = j as f64 * dt_int;
         while ias.time_s() < t_end {
             ias.step(&mut force)?;
-            if std::env::var_os("FRING_DEBUG").is_some() && ias.steps() % 20000 == 0 {
-                eprintln!(
-                    "pair {index}: t {:.4} yr, dt {:.3e} s, steps {}, rejected {}",
-                    ias.time_s() / YEAR_S,
-                    ias.next_dt_s(),
-                    ias.steps(),
-                    ias.rejected_steps()
-                );
-            }
         }
         out.steps += ias.steps();
-        if std::env::var_os("FRING_DEBUG").is_some() {
-            eprintln!(
-                "pair {index} j {j}: {} steps so far, dt {:.1} s",
-                out.steps,
-                ias.next_dt_s()
-            );
-        }
         ias.dense_output(t_end, &mut y, &mut w);
         let mut d2 = 0.0;
         for k in 0..dim {
@@ -317,16 +301,7 @@ pub fn run_all(
             s.spawn(|| {
                 loop {
                     let i = next.fetch_add(1, Ordering::Relaxed);
-                    let i = i + std::env::var("FRING_PAIR_OFFSET")
-                        .ok()
-                        .and_then(|v| v.parse().ok())
-                        .unwrap_or(0);
-                    if i >= n_pairs
-                        + std::env::var("FRING_PAIR_OFFSET")
-                            .ok()
-                            .and_then(|v| v.parse().ok())
-                            .unwrap_or(0)
-                    {
+                    if i >= n_pairs {
                         break;
                     }
                     let t0 = std::time::Instant::now();
@@ -343,7 +318,7 @@ pub fn run_all(
                             p.log_growth.last().copied().unwrap_or(0.0)
                         );
                     }
-                    results.lock().expect("lock")[(i as usize) % (n_pairs as usize)] = Some(r);
+                    results.lock().expect("lock")[i as usize] = Some(r);
                 }
             });
         }

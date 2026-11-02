@@ -35,6 +35,7 @@ fn main() {
         Some("moons") => cmd_moons(&args[1..]),
         Some("laplace") => cmd_laplace(&args[1..]),
         Some("lyapunov") => cmd_lyapunov(&args[1..]),
+        Some("closest-bins") => cmd_closest_bins(&args[1..]),
         _ => Err("usage: fring-analyse map|compare|closest|apse|moons|laplace|lyapunov ...".into()),
     };
     if let Err(e) = r {
@@ -243,6 +244,48 @@ fn track_radius(_s: &setup::Setup) -> f64 {
     43.09 // params/moons.toml radius_km of Prometheus
 }
 
+/// `closest-bins <closest.csv> <out.csv> [bin_km]`: closest approach against the initial radius.
+fn cmd_closest_bins(a: &[String]) -> Res<()> {
+    let text = std::fs::read_to_string(&a[0])?;
+    let bin = num(a, 2, 50.0);
+    let hill = 63.4; // km, from the `closest` run (mean radius 139,378 km)
+    let mut rows: Vec<(f64, f64)> = Vec::new();
+    for line in text.lines().skip(1) {
+        let f: Vec<&str> = line.split(',').collect();
+        rows.push((f[1].parse()?, f[2].parse()?));
+    }
+    let r0 = rows.iter().map(|r| r.0).fold(f64::INFINITY, f64::min);
+    let r1 = rows.iter().map(|r| r.0).fold(0.0, f64::max);
+    let nb = ((r1 - r0) / bin).ceil() as usize + 1;
+    let mut bins: Vec<Vec<f64>> = vec![Vec::new(); nb];
+    for (r, d) in &rows {
+        bins[((r - r0) / bin) as usize].push(*d);
+    }
+    let mut w = BufWriter::new(File::create(&a[1])?);
+    writeln!(
+        w,
+        "r_lo_km,r_hi_km,n,frac_below_1_hill,frac_below_3_hill,frac_below_7p3_hill,median_min_km"
+    )?;
+    for (i, b) in bins.iter().enumerate() {
+        if b.is_empty() {
+            continue;
+        }
+        let f = |k: f64| b.iter().filter(|d| **d < k * hill).count() as f64 / b.len() as f64;
+        writeln!(
+            w,
+            "{:.1},{:.1},{},{:.4},{:.4},{:.4},{:.1}",
+            r0 + i as f64 * bin,
+            r0 + (i + 1) as f64 * bin,
+            b.len(),
+            f(1.0),
+            f(3.0),
+            f(7.3),
+            quantile(b, 0.5)
+        )?;
+    }
+    Ok(())
+}
+
 fn cmd_apse(a: &[String]) -> Res<()> {
     let out = &a[0];
     let mut w = create(out, "apse_fits.csv")?;
@@ -426,6 +469,19 @@ fn cmd_laplace(a: &[String]) -> Res<()> {
         to_deg_day(fr.n_rad_s - fr.kappa_rad_s)
     );
     let mut total = 0.0;
+    let mut csv = match a.get(1) {
+        Some(out) => {
+            let mut w = create(out, "laplace_secular.csv")?;
+            writeln!(w, "name,a_guiding_km,alpha,mu,rate_deg_per_day")?;
+            writeln!(
+                w,
+                "saturn_only,,,,{:.6}",
+                to_deg_day(fr.n_rad_s - fr.kappa_rad_s)
+            )?;
+            Some(w)
+        }
+        None => None,
+    };
     for g in moon_geometry(&run)? {
         let gm = all
             .iter()
@@ -436,12 +492,24 @@ fn cmd_laplace(a: &[String]) -> Res<()> {
         let mu = gm / saturn.gm_km3_s2;
         let rate = secular_apse_rate_rad_s(fr.n_rad_s, mu, a_core, a_gc, 4_000_000);
         total += rate;
+        if let Some(w) = csv.as_mut() {
+            writeln!(
+                w,
+                "{},{a_gc:.1},{:.5},{mu:.4e},{:.6}",
+                g.name,
+                a_core.min(a_gc) / a_core.max(a_gc),
+                to_deg_day(rate)
+            )?;
+        }
         let alpha = a_core.min(a_gc) / a_core.max(a_gc);
         println!(
             "{}: a_gc={a_gc:.1} km, alpha={alpha:.5}, mu={mu:.3e}, secular rate = {:.6} deg/d",
             g.name,
             to_deg_day(rate)
         );
+    }
+    if let Some(w) = csv.as_mut() {
+        writeln!(w, "sum_of_moons,,,,{:.6}", to_deg_day(total))?;
     }
     println!("sum of moons = {:.6} deg/d", to_deg_day(total));
     Ok(())
