@@ -2,6 +2,13 @@
 
 Read this file at the start of a session. When a mistake costs time, add an entry so that no agent makes it twice. Newest first. Each entry: what happened, why, and the rule now.
 
+## 2026-11-02 (phase 3, W2-COMPARE)
+
+### M25. A0's check loop in zsh ran no checks
+
+- **What:** in the A0 review of W2-COMPARE, A0 ran the Definition of done as `for c in "cargo fmt --all -- --check" ...; do $c; echo "EXIT $?"; done`. zsh does not split an unquoted `$c` at spaces (bash does), so each check became one command name with spaces and gave exit 127 (command not found). Only `build.sh`, a name without spaces, ran. The exit codes showed it at once, so no wrong claim reached the pull request.
+- **Rule:** in a zsh loop over commands, run each with `eval "$c"`. Read every exit code: 127 means the command did not run, not that the check failed.
+
 ## 2026-11-02 (phase 3, W2)
 
 ### M24. The multiply-by-one guard of `ds.wgsl` did not protect a new double-single shader

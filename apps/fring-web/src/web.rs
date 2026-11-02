@@ -11,11 +11,12 @@
 //! compiles the kernels, builds the moon ephemeris and makes the stepper.
 
 use crate::live::{
-    BLOCK_STEPS, Band, END_MARGIN_S, FLOATS_PER_INSTANCE, Governor, MAX_IN_FLIGHT, PANDORA,
-    PARTICLE_COUNT, ProjectionUniform, SPAN_S, STEP_S, Setup, StepPlanner, ViewFrame,
-    head_instances, view_transform,
+    BLOCK_STEPS, Band, COLOUR_FAINT_OFFSET, CompareMode, END_MARGIN_S, FLOATS_PER_INSTANCE,
+    Governor, MAX_IN_FLIGHT, PANDORA, PARTICLE_COUNT, ProjectionUniform, SPAN_S, STEP_S, Setup,
+    StepPlanner, ViewFrame, count_fits, head_instances_styled, instance_bytes, max_hours_for,
+    ref_base_slot, ref_bytes, view_transform,
 };
-use crate::view::Camera;
+use crate::view::{Camera, half_local_x, split_halves};
 use fring_gpu::gpu::Gpu;
 use fring_gpu::probe::SelfTest;
 use fring_gpu::stepper::GpuStepper;
@@ -68,10 +69,27 @@ pub struct App {
     uniform: wgpu::Buffer,
     bind_group: wgpu::BindGroup,
     instances: wgpu::Buffer,
+    /// Particle count that `instances` was sized for.
+    instances_n: u32,
     // Projection of the double-single state into `instances`.
     project_pipeline: wgpu::ComputePipeline,
     project_uniform: wgpu::Buffer,
     project_bind: Option<wgpu::BindGroup>,
+    // Reference picture: a copy of planes 0 and 1 (x, y) of the state, with its time.
+    ref_buffer: Option<wgpu::Buffer>,
+    /// Own uniform and bind group for the projection of the reference (a
+    /// second `write_buffer` to the live uniform would overwrite the first).
+    ref_uniform: wgpu::Buffer,
+    ref_bind: Option<wgpu::BindGroup>,
+    /// Instances in the head of the reference picture (written each frame).
+    ref_head_n: usize,
+    compare: CompareMode,
+    /// Time of the reference state, s.
+    ref_time_s: f64,
+    /// True after "Set to now": the reference is not the initial state.
+    ref_custom: bool,
+    /// "Set to now" was asked; the next frame does the copy.
+    ref_pending: bool,
     // Simulation.
     phase: Phase,
     setup: Setup,
@@ -79,6 +97,8 @@ pub struct App {
     kernels: Option<WhKernels>,
     stepper: Option<GpuStepper>,
     pandora_on: bool,
+    /// Number of particles of the running (or next) stepper.
+    count: u32,
     band: Band,
     view: ViewFrame,
     camera: Camera,
@@ -225,7 +245,7 @@ impl App {
         // vertex buffer and a storage buffer.
         let instances = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("instances"),
-            size: ((4 + PARTICLE_COUNT as usize) * FLOATS_PER_INSTANCE * 4) as u64,
+            size: instance_bytes(PARTICLE_COUNT),
             usage: wgpu::BufferUsages::VERTEX
                 | wgpu::BufferUsages::STORAGE
                 | wgpu::BufferUsages::COPY_DST,
@@ -247,6 +267,12 @@ impl App {
         });
         let project_uniform = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("project"),
+            size: 48,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let ref_uniform = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("project reference"),
             size: 48,
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
@@ -273,15 +299,25 @@ impl App {
             uniform,
             bind_group,
             instances,
+            instances_n: PARTICLE_COUNT,
             project_pipeline,
             project_uniform,
             project_bind: None,
+            ref_buffer: None,
+            ref_uniform,
+            ref_bind: None,
+            ref_head_n: 0,
+            compare: CompareMode::Off,
+            ref_time_s: 0.0,
+            ref_custom: false,
+            ref_pending: false,
             phase: Phase::SelfTesting(Box::new(self_test)),
             setup,
             full: None,
             kernels: None,
             stepper: None,
             pandora_on: true,
+            count: PARTICLE_COUNT,
             band,
             view,
             camera,
@@ -427,14 +463,44 @@ impl App {
 
     /// A mouse drag of `(dx, dy)` canvas pixels.
     pub fn pan(&mut self, dx_px: f64, dy_px: f64) {
-        let size = self.size();
+        let size = self.picture_size();
         self.camera.pan_pixels(dx_px, dy_px, size);
     }
 
     /// Zoom by `factor` (below 1 zooms in) about the canvas pixel `(x_px, y_px)`.
     pub fn zoom(&mut self, x_px: f64, y_px: f64, factor: f64) {
-        let size = self.size();
+        let size = self.picture_size();
+        // In "Side by side" the pointer is mapped into its own half.
+        let x_px = if self.compare == CompareMode::Side {
+            half_local_x(x_px, self.config.width)
+        } else {
+            x_px
+        };
         self.camera.zoom_about(x_px, y_px, factor, size);
+    }
+
+    /// Compare control: 0 off, 1 side by side, 2 overlay.
+    pub fn set_compare(&mut self, index: u32) -> Result<(), JsValue> {
+        self.compare = CompareMode::from_index(index)
+            .ok_or_else(|| err(format!("no compare mode {index}")))?;
+        Ok(())
+    }
+
+    /// Stores the current live state as the new reference (a copy on the GPU,
+    /// no read-back). The copy happens at the start of the next frame, before
+    /// that frame's steps, so the reference time is the time shown now.
+    pub fn set_reference_now(&mut self) {
+        self.ref_pending = true;
+    }
+
+    /// True if the reference was set with "Set to now" (it is not t = 0).
+    pub fn reference_is_custom(&self) -> bool {
+        self.ref_custom
+    }
+
+    /// Time of the reference state in days (0 after every restart).
+    pub fn reference_time_days(&self) -> f64 {
+        self.ref_time_s / 86_400.0
     }
 
     /// Simulated time in days (the time of the particle state).
@@ -463,12 +529,43 @@ impl App {
 
     /// Number of particles.
     pub fn particle_count(&self) -> u32 {
-        PARTICLE_COUNT
+        self.count
+    }
+
+    /// The fastest speed (simulated hours per real second) that the compute
+    /// budget allows for the current particle count.
+    pub fn max_speed_hours_per_s(&self) -> f64 {
+        max_hours_for(self.count)
+    }
+
+    /// Sets the number of particles and starts again from t = 0. A count that
+    /// does not fit the device is an error and changes nothing. Blocks for the
+    /// time that the initial state takes (the page shows a message first).
+    pub fn set_particle_count(&mut self, count: u32) -> Result<(), JsValue> {
+        let l = &self.gpu.limits;
+        count_fits(
+            count,
+            DEFAULT_WORKGROUP,
+            l.max_storage_buffer_binding_size,
+            l.max_buffer_size,
+            l.max_compute_workgroups_per_dimension,
+        )
+        .map_err(err)?;
+        self.setup.initial(self.band, count).map_err(err)?;
+        let old = self.count;
+        self.count = count;
+        if let Err(e) = self.restart() {
+            // Go back to the old count (best effort) and say what went wrong.
+            self.count = old;
+            let _ = self.restart();
+            return Err(e);
+        }
+        Ok(())
     }
 
     /// Width of the view in km.
     pub fn view_width_km(&self) -> f64 {
-        let size = self.size();
+        let size = self.picture_size();
         2.0 * self.camera.half_height_km * size[0] / size[1]
     }
 
@@ -502,6 +599,17 @@ impl App {
         [self.config.width as f64, self.config.height as f64]
     }
 
+    /// Size of one picture in pixels: the whole canvas, or one half of it in
+    /// "Side by side".
+    fn picture_size(&self) -> [f64; 2] {
+        let [w, h] = self.size();
+        if self.compare == CompareMode::Side {
+            [f64::from(self.config.width / 2), h]
+        } else {
+            [w, h]
+        }
+    }
+
     /// Compiles the kernels, builds the ephemeris and makes the stepper. This
     /// blocks for a second or two; the page has shown "preparing" first.
     fn prepare(&mut self) -> Result<(), String> {
@@ -522,7 +630,22 @@ impl App {
             return Ok(());
         };
         let system = self.setup.system(full, self.pandora_on);
-        let init = self.setup.initial(self.band, PARTICLE_COUNT)?;
+        let init = self.setup.initial(self.band, self.count)?;
+        // Free the old buffers first, so that the peak memory is one run.
+        self.stepper = None;
+        self.project_bind = None;
+        self.ref_bind = None;
+        if self.instances_n != self.count {
+            self.instances = self.device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("instances"),
+                size: instance_bytes(self.count),
+                usage: wgpu::BufferUsages::VERTEX
+                    | wgpu::BufferUsages::STORAGE
+                    | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            });
+            self.instances_n = self.count;
+        }
         let stepper = GpuStepper::new(
             &self.gpu,
             kernels,
@@ -551,10 +674,58 @@ impl App {
                 },
             ],
         }));
+        // The reference is the new initial state (t = 0). It holds planes 0 and 1
+        // (x, y) only; a view that reads z would need plane 2 as well.
+        let want = ref_bytes(stepper.capacity() as u64);
+        if self.ref_buffer.as_ref().is_none_or(|b| b.size() != want) {
+            self.ref_buffer = Some(self.device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("reference"),
+                size: want,
+                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            }));
+        }
+        if let Some(reference) = &self.ref_buffer {
+            let mut encoder = self
+                .device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("reference at t = 0"),
+                });
+            encoder.copy_buffer_to_buffer(stepper.state_buffer(), 0, reference, 0, want);
+            self.queue.submit([encoder.finish()]);
+        }
+        if let Some(reference) = &self.ref_buffer {
+            self.ref_bind = Some(self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("project reference"),
+                layout: &self.project_pipeline.get_bind_group_layout(0),
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: reference.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: self.instances.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: self.ref_uniform.as_entire_binding(),
+                    },
+                ],
+            }));
+        }
+        self.ref_time_s = stepper.time_s();
+        let lost = self.ref_custom;
+        self.ref_custom = false;
+        self.ref_pending = false;
         self.stepper = Some(stepper);
         self.failed_index = None;
         self.planner = StepPlanner::new();
-        self.note.clear();
+        self.note = if lost {
+            "The reference was reset to t = 0.".to_string()
+        } else {
+            String::new()
+        };
         Ok(())
     }
 
@@ -589,9 +760,11 @@ impl App {
         let (mut restart, mut steps) = (false, 0u64);
         let in_flight = self.in_flight.load(Ordering::Acquire);
         if let (Some(stepper), Some(full)) = (&self.stepper, &self.full) {
-            let (planned, limited) = self
-                .planner
-                .plan(dt_s, self.hours_per_s, self.governor.cap());
+            let (planned, limited) = self.planner.plan(
+                dt_s,
+                self.hours_per_s.min(max_hours_for(self.count)),
+                self.governor.cap(),
+            );
             let running = !self.paused && self.failed_index.is_none();
             let busy = in_flight >= MAX_IN_FLIGHT;
             steps = if running && !busy { planned } else { 0 };
@@ -607,8 +780,12 @@ impl App {
         }
         if restart {
             self.make_stepper().map_err(err)?;
-            self.note = "Reached the end of the 10-year moon ephemeris: started again from t = 0."
-                .to_string();
+            self.note = format!(
+                "Reached the end of the 10-year moon ephemeris: started again from t = 0. {}",
+                self.note
+            )
+            .trim_end()
+            .to_string();
             steps = 0;
         }
         self.steps_last = steps;
@@ -626,6 +803,22 @@ impl App {
         if let (Some(stepper), Some(full), Some(bind)) =
             (&mut self.stepper, &self.full, &self.project_bind)
         {
+            if self.ref_pending {
+                // Before this frame's steps: the reference is the state at the
+                // time that the page shows now.
+                if let Some(reference) = &self.ref_buffer {
+                    encoder.copy_buffer_to_buffer(
+                        stepper.state_buffer(),
+                        0,
+                        reference,
+                        0,
+                        ref_bytes(stepper.capacity() as u64),
+                    );
+                    self.ref_time_s = stepper.time_s();
+                    self.ref_custom = true;
+                }
+                self.ref_pending = false;
+            }
             if steps > 0
                 && let Err(e) = stepper.encode_steps(&mut encoder, steps)
             {
@@ -635,13 +828,15 @@ impl App {
             let t = stepper.time_s();
             let moons = self.setup.moon_positions(full, t).map_err(err)?;
             let view = view_transform(self.view, self.setup.n0_rad_s(), t, &moons);
-            head_n = head_instances(
+            head_n = head_instances_styled(
                 &self.setup,
                 &view,
                 self.camera.centre_km,
                 px_per_km,
                 &moons,
                 self.pandora_on,
+                true,
+                0.0,
                 &mut self.scratch,
             );
             floats_to_le_bytes(&self.scratch, &mut self.bytes);
@@ -659,6 +854,48 @@ impl App {
                 let mut pass = encoder.begin_compute_pass(&Default::default());
                 pass.set_pipeline(&self.project_pipeline);
                 pass.set_bind_group(0, bind, &[]);
+                pass.dispatch_workgroups((stepper.len() as u32).div_ceil(64), 1, 1);
+            }
+            // The reference picture, at its own time (frame angle and moons).
+            // Not encoded at all when Compare is off.
+            self.ref_head_n = 0;
+            if self.compare != CompareMode::Off
+                && let Some(ref_bind) = &self.ref_bind
+            {
+                let t_ref = self.ref_time_s;
+                let ref_moons = self.setup.moon_positions(full, t_ref).map_err(err)?;
+                let ref_view = view_transform(self.view, self.setup.n0_rad_s(), t_ref, &ref_moons);
+                let overlay = self.compare == CompareMode::Overlay;
+                self.ref_head_n = head_instances_styled(
+                    &self.setup,
+                    &ref_view,
+                    self.camera.centre_km,
+                    px_per_km,
+                    &ref_moons,
+                    self.pandora_on,
+                    !overlay,
+                    if overlay { COLOUR_FAINT_OFFSET } else { 0.0 },
+                    &mut self.scratch,
+                );
+                floats_to_le_bytes(&self.scratch, &mut self.bytes);
+                let base = ref_base_slot(self.count);
+                self.queue.write_buffer(
+                    &self.instances,
+                    u64::from(base) * (FLOATS_PER_INSTANCE * 4) as u64,
+                    &self.bytes,
+                );
+                let u_ref = ProjectionUniform::new(
+                    &ref_view,
+                    self.camera.centre_km,
+                    stepper.len() as u32,
+                    stepper.capacity() as u32,
+                    base + self.ref_head_n as u32,
+                );
+                self.queue
+                    .write_buffer(&self.ref_uniform, 0, &u_ref.to_bytes());
+                let mut pass = encoder.begin_compute_pass(&Default::default());
+                pass.set_pipeline(&self.project_pipeline);
+                pass.set_bind_group(0, ref_bind, &[]);
                 pass.dispatch_workgroups((stepper.len() as u32).div_ceil(64), 1, 1);
             }
             // B: about once a second, copy the failure flag for a later frame.
@@ -702,8 +939,14 @@ impl App {
 
     /// Renders `count` instances (0 clears the canvas only).
     fn draw(&mut self, count: u32) -> Result<(), JsValue> {
-        let size = self.size();
+        let size = self.picture_size();
         let px_per_km = self.camera.px_per_km(size[1]);
+        let instance_size = (FLOATS_PER_INSTANCE * 4) as u64;
+        let ref_count = if self.ref_head_n == 0 {
+            0
+        } else {
+            (self.ref_head_n + self.stepper.as_ref().map_or(0, GpuStepper::len)) as u32
+        };
         let frame_uniform = [
             (2.0 * px_per_km / size[0]) as f32,
             (2.0 * px_per_km / size[1]) as f32,
@@ -759,6 +1002,30 @@ impl App {
             if count > 0 {
                 pass.set_pipeline(&self.pipeline);
                 pass.set_bind_group(0, &self.bind_group, &[]);
+                if self.compare == CompareMode::Side && ref_count > 0 {
+                    // Reference on the left, live on the right: the same
+                    // frame uniform (both halves have the same size).
+                    let (left, right) = split_halves(self.config.width, self.config.height);
+                    let from = u64::from(ref_base_slot(self.count)) * instance_size;
+                    pass.set_viewport(left.x as f32, 0.0, left.w as f32, left.h as f32, 0.0, 1.0);
+                    pass.set_scissor_rect(left.x, 0, left.w, left.h);
+                    pass.set_vertex_buffer(0, self.instances.slice(from..));
+                    pass.draw(0..6, 0..ref_count);
+                    pass.set_viewport(
+                        right.x as f32,
+                        0.0,
+                        right.w as f32,
+                        right.h as f32,
+                        0.0,
+                        1.0,
+                    );
+                    pass.set_scissor_rect(right.x, 0, right.w, right.h);
+                } else if self.compare == CompareMode::Overlay && ref_count > 0 {
+                    // The faint reference first, so that the live dots lie on top.
+                    let from = u64::from(ref_base_slot(self.count)) * instance_size;
+                    pass.set_vertex_buffer(0, self.instances.slice(from..));
+                    pass.draw(0..6, 0..ref_count);
+                }
                 pass.set_vertex_buffer(0, self.instances.slice(..));
                 pass.draw(0..6, 0..count);
             }

@@ -5,7 +5,7 @@
 //        the moons, and project.wgsl, for the particles, subtract the camera centre
 //        before they round to f32),
 //   z  = diameter in pixels,
-//   w  = colour id (0 particle, 1 Saturn, 2 + k moon k).
+//   w  = colour id (0 particle, 1 Saturn, 2 + k moon k; +10 for the faint reference).
 // Uniform: scale = clip units per km (x, y), viewport = window size in pixels.
 //
 // The shader does only a multiply and an add per vertex: no trigonometry and no
@@ -44,7 +44,7 @@ fn vs_main(
     return out;
 }
 
-fn colour_of(id: f32) -> vec4<f32> {
+fn colour_base(id: f32) -> vec4<f32> {
     if (id < 0.5) {
         return vec4<f32>(0.62, 0.82, 1.0, 0.75);   // particle
     }
@@ -55,6 +55,21 @@ fn colour_of(id: f32) -> vec4<f32> {
         return vec4<f32>(1.0, 0.62, 0.20, 1.0);    // first moon (Prometheus)
     }
     return vec4<f32>(0.45, 0.95, 0.55, 1.0);       // second moon (Pandora)
+}
+
+// Ids of 10 and more are the faint reference of the overlay (W2-COMPARE): the
+// colour of id - 10, warmer and with a low alpha, so that it can be told from
+// the live dots on top.
+fn colour_of(id: f32) -> vec4<f32> {
+    if (id >= 9.5) {
+        var c = colour_base(id - 10.0);
+        if (id < 10.5) {
+            return vec4<f32>(1.0, 0.72, 0.38, 0.32);   // reference particle
+        }
+        c.a = c.a * 0.5;
+        return c;
+    }
+    return colour_base(id);
 }
 
 @fragment
