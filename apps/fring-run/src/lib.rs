@@ -11,7 +11,6 @@
 //!    stepping, and `meta.json` last (its presence means "finished").
 
 pub mod cli;
-mod sysinfo;
 
 use cli::Args;
 use fring_cpu::CpuBackend;
@@ -324,12 +323,12 @@ pub fn run(args: &Args) -> Result<Summary, RunError> {
     let (mut summary, machine) = match config.run.backend {
         BackendKind::Cpu => {
             let backend = setup(CpuBackend::new(&config, &system, &init))?;
-            let machine = sysinfo::machine("cpu");
+            let machine = fring_io::sysinfo::machine("cpu");
             (execute(backend, &ctx, &mut progress)?, machine)
         }
         BackendKind::Gpu => {
             let backend = setup(GpuBackend::new(&config, &system, &init))?;
-            let machine = sysinfo::machine(&format!(
+            let machine = fring_io::sysinfo::machine(&format!(
                 "gpu {}, mode {}",
                 backend.adapter_name(),
                 backend.mode().name()
@@ -340,7 +339,9 @@ pub fn run(args: &Args) -> Result<Summary, RunError> {
 
     // 4. meta.json, last.
     summary.wall_time_s = start.elapsed().as_secs_f64();
-    let git = sysinfo::git_hash(&std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
+    let git = fring_io::sysinfo::git_hash(
+        &std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
+    );
     let mut meta = RunMeta::new(
         env!("CARGO_PKG_VERSION"),
         &git,

@@ -12,6 +12,7 @@ license.workspace = true
 fring-model.workspace = true
 fring-cpu.workspace = true
 fring-gpu.workspace = true
+fring-io.workspace = true
 
 [lints]
 workspace = true
