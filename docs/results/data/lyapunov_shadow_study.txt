@@ -1,0 +1,31 @@
+# Shadow-orbit runs (rejected method; see docs/results/a1-analysis.md section 3). 100 yr, per-pair slope of L over years 30 to 100.
+# d0 1e-3 km (1 m), renorm 0.25 yr, kick 2 km, 100 pairs:
+100 pairs x 100 yr on 6 threads: 156.4 s; base steps per pair 2207269
+plain FTLE at 100 yr: mean 0.2251 std 0.0585 (se 0.0058) per yr
+slope of L over 30 to 100 yr: mean 0.1333 std 0.0637 (se 0.0064) per yr; median 0.1035
+2 d<Y>/dt over 30 to 100 yr: mean 0.1197 std 0.0710 (se 0.0071) per yr
+slope of L over 10 to 30 yr: mean 0.0951 std 0.0942
+slope of L over 30 to 60 yr: mean 0.1344 std 0.0694
+slope of L over 60 to 100 yr: mean 0.1332 std 0.0695
+
+== d0 1e-5 renorm 0.25 kick 2 seed 20261105
+40 pairs x 100 yr on 5 threads: 69.6 s; base steps per pair 2207269
+plain FTLE at 100 yr: mean 1.0292 std 0.0392 (se 0.0062) per yr
+slope of L over 30 to 100 yr: mean 0.9468 std 0.0510 (se 0.0081) per yr; median 0.9514
+2 d<Y>/dt over 30 to 100 yr: mean 0.9392 std 0.0563 (se 0.0089) per yr
+== d0 1e-1 renorm 0.25 kick 2 seed 20261105
+40 pairs x 100 yr on 5 threads: 61.5 s; base steps per pair 2207269
+plain FTLE at 100 yr: mean 0.1984 std 0.0896 (se 0.0142) per yr
+slope of L over 30 to 100 yr: mean 0.0853 std 0.1119 (se 0.0177) per yr; median 0.0201
+2 d<Y>/dt over 30 to 100 yr: mean 0.0654 std 0.1148 (se 0.0182) per yr
+== d0 1e-3 renorm 0.05 kick 2 seed 20261105
+40 pairs x 100 yr on 5 threads: 68.8 s; base steps per pair 2207269
+plain FTLE at 100 yr: mean 0.3256 std 0.0322 (se 0.0051) per yr
+slope of L over 30 to 100 yr: mean 0.2375 std 0.0322 (se 0.0051) per yr; median 0.2264
+2 d<Y>/dt over 30 to 100 yr: mean 0.2332 std 0.0288 (se 0.0046) per yr
+== d0 1e-3 renorm 1.0 kick 2 seed 20261105
+40 pairs x 100 yr on 5 threads: 69.4 s; base steps per pair 2207269
+plain FTLE at 100 yr: mean 0.1995 std 0.0856 (se 0.0135) per yr
+slope of L over 30 to 100 yr: mean 0.1016 std 0.1019 (se 0.0161) per yr; median 0.0512
+2 d<Y>/dt over 30 to 100 yr: mean 0.0686 std 0.1084 (se 0.0171) per yr
+== d0 1e-3 renorm 0.25 kick 0 seed 20261105

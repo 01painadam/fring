@@ -11,6 +11,11 @@ license.workspace = true
 [dependencies]
 fring-model.workspace = true
 fring-io.workspace = true
+fring-cpu.workspace = true
 
 [lints]
 workspace = true
+
+[[bin]]
+name = "fring-analyse"
+path = "src/bin/fring_analyse.rs"

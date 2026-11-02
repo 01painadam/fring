@@ -1,0 +1,486 @@
+{
+  "$schema": "https://vega.github.io/schema/vega-lite/v5.20.1.json",
+  "config": {
+    "view": {
+      "continuousHeight": 300,
+      "continuousWidth": 300,
+      "strokeWidth": 0
+    }
+  },
+  "data": {
+    "name": "data-52ad18e07b1e758972ee16de8dd5df19"
+  },
+  "datasets": {
+    "data-52ad18e07b1e758972ee16de8dd5df19": [
+      {
+        "fraction": 0.7222,
+        "limit": "closer than 1 R_H",
+        "r": 139725.0
+      },
+      {
+        "fraction": 0.5479,
+        "limit": "closer than 1 R_H",
+        "r": 139775.0
+      },
+      {
+        "fraction": 0.2101,
+        "limit": "closer than 1 R_H",
+        "r": 139825.0
+      },
+      {
+        "fraction": 0.0315,
+        "limit": "closer than 1 R_H",
+        "r": 139875.0
+      },
+      {
+        "fraction": 0.0,
+        "limit": "closer than 1 R_H",
+        "r": 139925.0
+      },
+      {
+        "fraction": 0.0,
+        "limit": "closer than 1 R_H",
+        "r": 139975.0
+      },
+      {
+        "fraction": 0.0,
+        "limit": "closer than 1 R_H",
+        "r": 140025.0
+      },
+      {
+        "fraction": 0.0,
+        "limit": "closer than 1 R_H",
+        "r": 140075.0
+      },
+      {
+        "fraction": 0.0,
+        "limit": "closer than 1 R_H",
+        "r": 140125.0
+      },
+      {
+        "fraction": 0.0,
+        "limit": "closer than 1 R_H",
+        "r": 140175.0
+      },
+      {
+        "fraction": 0.0,
+        "limit": "closer than 1 R_H",
+        "r": 140225.0
+      },
+      {
+        "fraction": 0.0,
+        "limit": "closer than 1 R_H",
+        "r": 140275.0
+      },
+      {
+        "fraction": 0.0,
+        "limit": "closer than 1 R_H",
+        "r": 140325.0
+      },
+      {
+        "fraction": 0.0,
+        "limit": "closer than 1 R_H",
+        "r": 140375.0
+      },
+      {
+        "fraction": 0.0,
+        "limit": "closer than 1 R_H",
+        "r": 140425.0
+      },
+      {
+        "fraction": 0.0,
+        "limit": "closer than 1 R_H",
+        "r": 140475.0
+      },
+      {
+        "fraction": 0.0,
+        "limit": "closer than 1 R_H",
+        "r": 140525.0
+      },
+      {
+        "fraction": 0.0,
+        "limit": "closer than 1 R_H",
+        "r": 140575.0
+      },
+      {
+        "fraction": 0.0,
+        "limit": "closer than 1 R_H",
+        "r": 140625.0
+      },
+      {
+        "fraction": 0.0,
+        "limit": "closer than 1 R_H",
+        "r": 140675.0
+      },
+      {
+        "fraction": 0.0,
+        "limit": "closer than 1 R_H",
+        "r": 140725.0
+      },
+      {
+        "fraction": 0.0,
+        "limit": "closer than 1 R_H",
+        "r": 140775.0
+      },
+      {
+        "fraction": 0.0,
+        "limit": "closer than 1 R_H",
+        "r": 140825.0
+      },
+      {
+        "fraction": 0.0,
+        "limit": "closer than 1 R_H",
+        "r": 140875.0
+      },
+      {
+        "fraction": 0.0,
+        "limit": "closer than 1 R_H",
+        "r": 140925.0
+      },
+      {
+        "fraction": 0.0,
+        "limit": "closer than 1 R_H",
+        "r": 140975.0
+      },
+      {
+        "fraction": 0.0,
+        "limit": "closer than 1 R_H",
+        "r": 141025.0
+      },
+      {
+        "fraction": 0.0,
+        "limit": "closer than 1 R_H",
+        "r": 141075.0
+      },
+      {
+        "fraction": 0.9497,
+        "limit": "closer than 3 R_H",
+        "r": 139725.0
+      },
+      {
+        "fraction": 0.9256,
+        "limit": "closer than 3 R_H",
+        "r": 139775.0
+      },
+      {
+        "fraction": 0.8604,
+        "limit": "closer than 3 R_H",
+        "r": 139825.0
+      },
+      {
+        "fraction": 0.6261,
+        "limit": "closer than 3 R_H",
+        "r": 139875.0
+      },
+      {
+        "fraction": 0.229,
+        "limit": "closer than 3 R_H",
+        "r": 139925.0
+      },
+      {
+        "fraction": 0.0289,
+        "limit": "closer than 3 R_H",
+        "r": 139975.0
+      },
+      {
+        "fraction": 0.0,
+        "limit": "closer than 3 R_H",
+        "r": 140025.0
+      },
+      {
+        "fraction": 0.0,
+        "limit": "closer than 3 R_H",
+        "r": 140075.0
+      },
+      {
+        "fraction": 0.0,
+        "limit": "closer than 3 R_H",
+        "r": 140125.0
+      },
+      {
+        "fraction": 0.0,
+        "limit": "closer than 3 R_H",
+        "r": 140175.0
+      },
+      {
+        "fraction": 0.0,
+        "limit": "closer than 3 R_H",
+        "r": 140225.0
+      },
+      {
+        "fraction": 0.0,
+        "limit": "closer than 3 R_H",
+        "r": 140275.0
+      },
+      {
+        "fraction": 0.0,
+        "limit": "closer than 3 R_H",
+        "r": 140325.0
+      },
+      {
+        "fraction": 0.0,
+        "limit": "closer than 3 R_H",
+        "r": 140375.0
+      },
+      {
+        "fraction": 0.0,
+        "limit": "closer than 3 R_H",
+        "r": 140425.0
+      },
+      {
+        "fraction": 0.0,
+        "limit": "closer than 3 R_H",
+        "r": 140475.0
+      },
+      {
+        "fraction": 0.0,
+        "limit": "closer than 3 R_H",
+        "r": 140525.0
+      },
+      {
+        "fraction": 0.0,
+        "limit": "closer than 3 R_H",
+        "r": 140575.0
+      },
+      {
+        "fraction": 0.0,
+        "limit": "closer than 3 R_H",
+        "r": 140625.0
+      },
+      {
+        "fraction": 0.0,
+        "limit": "closer than 3 R_H",
+        "r": 140675.0
+      },
+      {
+        "fraction": 0.0,
+        "limit": "closer than 3 R_H",
+        "r": 140725.0
+      },
+      {
+        "fraction": 0.0,
+        "limit": "closer than 3 R_H",
+        "r": 140775.0
+      },
+      {
+        "fraction": 0.0,
+        "limit": "closer than 3 R_H",
+        "r": 140825.0
+      },
+      {
+        "fraction": 0.0,
+        "limit": "closer than 3 R_H",
+        "r": 140875.0
+      },
+      {
+        "fraction": 0.0,
+        "limit": "closer than 3 R_H",
+        "r": 140925.0
+      },
+      {
+        "fraction": 0.0,
+        "limit": "closer than 3 R_H",
+        "r": 140975.0
+      },
+      {
+        "fraction": 0.0,
+        "limit": "closer than 3 R_H",
+        "r": 141025.0
+      },
+      {
+        "fraction": 0.0,
+        "limit": "closer than 3 R_H",
+        "r": 141075.0
+      },
+      {
+        "fraction": 1.0,
+        "limit": "closer than 7.3 R_H (459 km)",
+        "r": 139725.0
+      },
+      {
+        "fraction": 1.0,
+        "limit": "closer than 7.3 R_H (459 km)",
+        "r": 139775.0
+      },
+      {
+        "fraction": 1.0,
+        "limit": "closer than 7.3 R_H (459 km)",
+        "r": 139825.0
+      },
+      {
+        "fraction": 0.9914,
+        "limit": "closer than 7.3 R_H (459 km)",
+        "r": 139875.0
+      },
+      {
+        "fraction": 0.9187,
+        "limit": "closer than 7.3 R_H (459 km)",
+        "r": 139925.0
+      },
+      {
+        "fraction": 0.8845,
+        "limit": "closer than 7.3 R_H (459 km)",
+        "r": 139975.0
+      },
+      {
+        "fraction": 0.8724,
+        "limit": "closer than 7.3 R_H (459 km)",
+        "r": 140025.0
+      },
+      {
+        "fraction": 0.8032,
+        "limit": "closer than 7.3 R_H (459 km)",
+        "r": 140075.0
+      },
+      {
+        "fraction": 0.7092,
+        "limit": "closer than 7.3 R_H (459 km)",
+        "r": 140125.0
+      },
+      {
+        "fraction": 0.2971,
+        "limit": "closer than 7.3 R_H (459 km)",
+        "r": 140175.0
+      },
+      {
+        "fraction": 0.0028,
+        "limit": "closer than 7.3 R_H (459 km)",
+        "r": 140225.0
+      },
+      {
+        "fraction": 0.0,
+        "limit": "closer than 7.3 R_H (459 km)",
+        "r": 140275.0
+      },
+      {
+        "fraction": 0.0,
+        "limit": "closer than 7.3 R_H (459 km)",
+        "r": 140325.0
+      },
+      {
+        "fraction": 0.0,
+        "limit": "closer than 7.3 R_H (459 km)",
+        "r": 140375.0
+      },
+      {
+        "fraction": 0.0,
+        "limit": "closer than 7.3 R_H (459 km)",
+        "r": 140425.0
+      },
+      {
+        "fraction": 0.0,
+        "limit": "closer than 7.3 R_H (459 km)",
+        "r": 140475.0
+      },
+      {
+        "fraction": 0.0,
+        "limit": "closer than 7.3 R_H (459 km)",
+        "r": 140525.0
+      },
+      {
+        "fraction": 0.0,
+        "limit": "closer than 7.3 R_H (459 km)",
+        "r": 140575.0
+      },
+      {
+        "fraction": 0.0,
+        "limit": "closer than 7.3 R_H (459 km)",
+        "r": 140625.0
+      },
+      {
+        "fraction": 0.0,
+        "limit": "closer than 7.3 R_H (459 km)",
+        "r": 140675.0
+      },
+      {
+        "fraction": 0.0,
+        "limit": "closer than 7.3 R_H (459 km)",
+        "r": 140725.0
+      },
+      {
+        "fraction": 0.0,
+        "limit": "closer than 7.3 R_H (459 km)",
+        "r": 140775.0
+      },
+      {
+        "fraction": 0.0,
+        "limit": "closer than 7.3 R_H (459 km)",
+        "r": 140825.0
+      },
+      {
+        "fraction": 0.0,
+        "limit": "closer than 7.3 R_H (459 km)",
+        "r": 140875.0
+      },
+      {
+        "fraction": 0.0,
+        "limit": "closer than 7.3 R_H (459 km)",
+        "r": 140925.0
+      },
+      {
+        "fraction": 0.0,
+        "limit": "closer than 7.3 R_H (459 km)",
+        "r": 140975.0
+      },
+      {
+        "fraction": 0.0,
+        "limit": "closer than 7.3 R_H (459 km)",
+        "r": 141025.0
+      },
+      {
+        "fraction": 0.0,
+        "limit": "closer than 7.3 R_H (459 km)",
+        "r": 141075.0
+      }
+    ]
+  },
+  "encoding": {
+    "color": {
+      "field": "limit",
+      "legend": {
+        "columns": 3,
+        "orient": "bottom"
+      },
+      "title": null,
+      "type": "nominal"
+    },
+    "tooltip": [
+      {
+        "field": "r",
+        "type": "quantitative"
+      },
+      {
+        "field": "limit",
+        "type": "nominal"
+      },
+      {
+        "field": "fraction",
+        "type": "quantitative"
+      }
+    ],
+    "x": {
+      "field": "r",
+      "scale": {
+        "domain": [
+          139700,
+          141100
+        ],
+        "nice": false
+      },
+      "title": "Initial orbital radius (km)",
+      "type": "quantitative"
+    },
+    "y": {
+      "field": "fraction",
+      "title": "Fraction of particles",
+      "type": "quantitative"
+    }
+  },
+  "height": 240,
+  "mark": {
+    "point": true,
+    "type": "line"
+  },
+  "title": "Fraction of particles that come close to Prometheus in 10 years (50 km bins)",
+  "width": 620
+}

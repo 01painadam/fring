@@ -118,7 +118,7 @@ Written by `fring-run` at the end of a run that has a `[diagnostics.chaos]` tabl
 `id, a0_km, lambda_rel_prometheus_deg, ftle_per_day, log_growth, megno_mean, flags`
 
 - `id`: particle id.
-- `a0_km`: Keplerian semi-major axis of the initial state (point mass GM, vis-viva), km.
+- `a0_km`: Keplerian semi-major axis of the initial state (point mass GM, vis-viva), km. It is not the orbital radius: for a circular orbit near the core in J2 to J6 it is about 640 km larger (A1-ANALYSIS). A map against radius must use the initial radius from the config, not this column.
 - `lambda_rel_prometheus_deg`: initial inertial longitude of the particle minus that of Prometheus, degrees in [-180, 180). `NaN` if the run has no Prometheus.
 - `ftle_per_day`: finite-time Lyapunov exponent L / t, day^-1, with t the time of the last renormalisation.
 - `log_growth`: L, the sum of ln(d / d0) over the renormalisations (dimensionless).

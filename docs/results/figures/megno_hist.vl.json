@@ -1,0 +1,1692 @@
+{
+  "$schema": "https://vega.github.io/schema/vega-lite/v5.20.1.json",
+  "config": {
+    "view": {
+      "continuousHeight": 300,
+      "continuousWidth": 300,
+      "strokeWidth": 0
+    }
+  },
+  "datasets": {
+    "data-142918399432407b4305c377ed6ff174": [
+      {
+        "x": 1.5
+      },
+      {
+        "x": 2.5
+      },
+      {
+        "x": 5.0
+      }
+    ],
+    "data-8f05469efad4964ea3b2aa2b822df142": [
+      {
+        "count": 9,
+        "megno_hi": -1.75,
+        "megno_lo": -2.0,
+        "run": "5 years"
+      },
+      {
+        "count": 11,
+        "megno_hi": -1.5,
+        "megno_lo": -1.75,
+        "run": "5 years"
+      },
+      {
+        "count": 44,
+        "megno_hi": -1.25,
+        "megno_lo": -1.5,
+        "run": "5 years"
+      },
+      {
+        "count": 66,
+        "megno_hi": -1.0,
+        "megno_lo": -1.25,
+        "run": "5 years"
+      },
+      {
+        "count": 253,
+        "megno_hi": -0.75,
+        "megno_lo": -1.0,
+        "run": "5 years"
+      },
+      {
+        "count": 628,
+        "megno_hi": -0.5,
+        "megno_lo": -0.75,
+        "run": "5 years"
+      },
+      {
+        "count": 1365,
+        "megno_hi": -0.25,
+        "megno_lo": -0.5,
+        "run": "5 years"
+      },
+      {
+        "count": 3218,
+        "megno_hi": 0.0,
+        "megno_lo": -0.25,
+        "run": "5 years"
+      },
+      {
+        "count": 6226,
+        "megno_hi": 0.25,
+        "megno_lo": 0.0,
+        "run": "5 years"
+      },
+      {
+        "count": 7439,
+        "megno_hi": 0.5,
+        "megno_lo": 0.25,
+        "run": "5 years"
+      },
+      {
+        "count": 7873,
+        "megno_hi": 0.75,
+        "megno_lo": 0.5,
+        "run": "5 years"
+      },
+      {
+        "count": 7928,
+        "megno_hi": 1.0,
+        "megno_lo": 0.75,
+        "run": "5 years"
+      },
+      {
+        "count": 7442,
+        "megno_hi": 1.25,
+        "megno_lo": 1.0,
+        "run": "5 years"
+      },
+      {
+        "count": 6631,
+        "megno_hi": 1.5,
+        "megno_lo": 1.25,
+        "run": "5 years"
+      },
+      {
+        "count": 5975,
+        "megno_hi": 1.75,
+        "megno_lo": 1.5,
+        "run": "5 years"
+      },
+      {
+        "count": 5191,
+        "megno_hi": 2.0,
+        "megno_lo": 1.75,
+        "run": "5 years"
+      },
+      {
+        "count": 5002,
+        "megno_hi": 2.25,
+        "megno_lo": 2.0,
+        "run": "5 years"
+      },
+      {
+        "count": 4655,
+        "megno_hi": 2.5,
+        "megno_lo": 2.25,
+        "run": "5 years"
+      },
+      {
+        "count": 4351,
+        "megno_hi": 2.75,
+        "megno_lo": 2.5,
+        "run": "5 years"
+      },
+      {
+        "count": 4311,
+        "megno_hi": 3.0,
+        "megno_lo": 2.75,
+        "run": "5 years"
+      },
+      {
+        "count": 4214,
+        "megno_hi": 3.25,
+        "megno_lo": 3.0,
+        "run": "5 years"
+      },
+      {
+        "count": 4009,
+        "megno_hi": 3.5,
+        "megno_lo": 3.25,
+        "run": "5 years"
+      },
+      {
+        "count": 3806,
+        "megno_hi": 3.75,
+        "megno_lo": 3.5,
+        "run": "5 years"
+      },
+      {
+        "count": 3727,
+        "megno_hi": 4.0,
+        "megno_lo": 3.75,
+        "run": "5 years"
+      },
+      {
+        "count": 3346,
+        "megno_hi": 4.25,
+        "megno_lo": 4.0,
+        "run": "5 years"
+      },
+      {
+        "count": 3265,
+        "megno_hi": 4.5,
+        "megno_lo": 4.25,
+        "run": "5 years"
+      },
+      {
+        "count": 3112,
+        "megno_hi": 4.75,
+        "megno_lo": 4.5,
+        "run": "5 years"
+      },
+      {
+        "count": 2906,
+        "megno_hi": 5.0,
+        "megno_lo": 4.75,
+        "run": "5 years"
+      },
+      {
+        "count": 2662,
+        "megno_hi": 5.25,
+        "megno_lo": 5.0,
+        "run": "5 years"
+      },
+      {
+        "count": 2605,
+        "megno_hi": 5.5,
+        "megno_lo": 5.25,
+        "run": "5 years"
+      },
+      {
+        "count": 2346,
+        "megno_hi": 5.75,
+        "megno_lo": 5.5,
+        "run": "5 years"
+      },
+      {
+        "count": 2111,
+        "megno_hi": 6.0,
+        "megno_lo": 5.75,
+        "run": "5 years"
+      },
+      {
+        "count": 2172,
+        "megno_hi": 6.25,
+        "megno_lo": 6.0,
+        "run": "5 years"
+      },
+      {
+        "count": 1967,
+        "megno_hi": 6.5,
+        "megno_lo": 6.25,
+        "run": "5 years"
+      },
+      {
+        "count": 1830,
+        "megno_hi": 6.75,
+        "megno_lo": 6.5,
+        "run": "5 years"
+      },
+      {
+        "count": 1738,
+        "megno_hi": 7.0,
+        "megno_lo": 6.75,
+        "run": "5 years"
+      },
+      {
+        "count": 1750,
+        "megno_hi": 7.25,
+        "megno_lo": 7.0,
+        "run": "5 years"
+      },
+      {
+        "count": 1563,
+        "megno_hi": 7.5,
+        "megno_lo": 7.25,
+        "run": "5 years"
+      },
+      {
+        "count": 1542,
+        "megno_hi": 7.75,
+        "megno_lo": 7.5,
+        "run": "5 years"
+      },
+      {
+        "count": 1494,
+        "megno_hi": 8.0,
+        "megno_lo": 7.75,
+        "run": "5 years"
+      },
+      {
+        "count": 1364,
+        "megno_hi": 8.25,
+        "megno_lo": 8.0,
+        "run": "5 years"
+      },
+      {
+        "count": 1367,
+        "megno_hi": 8.5,
+        "megno_lo": 8.25,
+        "run": "5 years"
+      },
+      {
+        "count": 1297,
+        "megno_hi": 8.75,
+        "megno_lo": 8.5,
+        "run": "5 years"
+      },
+      {
+        "count": 1304,
+        "megno_hi": 9.0,
+        "megno_lo": 8.75,
+        "run": "5 years"
+      },
+      {
+        "count": 1162,
+        "megno_hi": 9.25,
+        "megno_lo": 9.0,
+        "run": "5 years"
+      },
+      {
+        "count": 1224,
+        "megno_hi": 9.5,
+        "megno_lo": 9.25,
+        "run": "5 years"
+      },
+      {
+        "count": 1186,
+        "megno_hi": 9.75,
+        "megno_lo": 9.5,
+        "run": "5 years"
+      },
+      {
+        "count": 1058,
+        "megno_hi": 10.0,
+        "megno_lo": 9.75,
+        "run": "5 years"
+      },
+      {
+        "count": 1096,
+        "megno_hi": 10.25,
+        "megno_lo": 10.0,
+        "run": "5 years"
+      },
+      {
+        "count": 1066,
+        "megno_hi": 10.5,
+        "megno_lo": 10.25,
+        "run": "5 years"
+      },
+      {
+        "count": 1046,
+        "megno_hi": 10.75,
+        "megno_lo": 10.5,
+        "run": "5 years"
+      },
+      {
+        "count": 989,
+        "megno_hi": 11.0,
+        "megno_lo": 10.75,
+        "run": "5 years"
+      },
+      {
+        "count": 997,
+        "megno_hi": 11.25,
+        "megno_lo": 11.0,
+        "run": "5 years"
+      },
+      {
+        "count": 1011,
+        "megno_hi": 11.5,
+        "megno_lo": 11.25,
+        "run": "5 years"
+      },
+      {
+        "count": 960,
+        "megno_hi": 11.75,
+        "megno_lo": 11.5,
+        "run": "5 years"
+      },
+      {
+        "count": 957,
+        "megno_hi": 12.0,
+        "megno_lo": 11.75,
+        "run": "5 years"
+      },
+      {
+        "count": 949,
+        "megno_hi": 12.25,
+        "megno_lo": 12.0,
+        "run": "5 years"
+      },
+      {
+        "count": 951,
+        "megno_hi": 12.5,
+        "megno_lo": 12.25,
+        "run": "5 years"
+      },
+      {
+        "count": 970,
+        "megno_hi": 12.75,
+        "megno_lo": 12.5,
+        "run": "5 years"
+      },
+      {
+        "count": 879,
+        "megno_hi": 13.0,
+        "megno_lo": 12.75,
+        "run": "5 years"
+      },
+      {
+        "count": 951,
+        "megno_hi": 13.25,
+        "megno_lo": 13.0,
+        "run": "5 years"
+      },
+      {
+        "count": 962,
+        "megno_hi": 13.5,
+        "megno_lo": 13.25,
+        "run": "5 years"
+      },
+      {
+        "count": 936,
+        "megno_hi": 13.75,
+        "megno_lo": 13.5,
+        "run": "5 years"
+      },
+      {
+        "count": 900,
+        "megno_hi": 14.0,
+        "megno_lo": 13.75,
+        "run": "5 years"
+      },
+      {
+        "count": 940,
+        "megno_hi": 14.25,
+        "megno_lo": 14.0,
+        "run": "5 years"
+      },
+      {
+        "count": 882,
+        "megno_hi": 14.5,
+        "megno_lo": 14.25,
+        "run": "5 years"
+      },
+      {
+        "count": 864,
+        "megno_hi": 14.75,
+        "megno_lo": 14.5,
+        "run": "5 years"
+      },
+      {
+        "count": 913,
+        "megno_hi": 15.0,
+        "megno_lo": 14.75,
+        "run": "5 years"
+      },
+      {
+        "count": 868,
+        "megno_hi": 15.25,
+        "megno_lo": 15.0,
+        "run": "5 years"
+      },
+      {
+        "count": 930,
+        "megno_hi": 15.5,
+        "megno_lo": 15.25,
+        "run": "5 years"
+      },
+      {
+        "count": 927,
+        "megno_hi": 15.75,
+        "megno_lo": 15.5,
+        "run": "5 years"
+      },
+      {
+        "count": 923,
+        "megno_hi": 16.0,
+        "megno_lo": 15.75,
+        "run": "5 years"
+      },
+      {
+        "count": 939,
+        "megno_hi": 16.25,
+        "megno_lo": 16.0,
+        "run": "5 years"
+      },
+      {
+        "count": 914,
+        "megno_hi": 16.5,
+        "megno_lo": 16.25,
+        "run": "5 years"
+      },
+      {
+        "count": 849,
+        "megno_hi": 16.75,
+        "megno_lo": 16.5,
+        "run": "5 years"
+      },
+      {
+        "count": 933,
+        "megno_hi": 17.0,
+        "megno_lo": 16.75,
+        "run": "5 years"
+      },
+      {
+        "count": 930,
+        "megno_hi": 17.25,
+        "megno_lo": 17.0,
+        "run": "5 years"
+      },
+      {
+        "count": 915,
+        "megno_hi": 17.5,
+        "megno_lo": 17.25,
+        "run": "5 years"
+      },
+      {
+        "count": 913,
+        "megno_hi": 17.75,
+        "megno_lo": 17.5,
+        "run": "5 years"
+      },
+      {
+        "count": 950,
+        "megno_hi": 18.0,
+        "megno_lo": 17.75,
+        "run": "5 years"
+      },
+      {
+        "count": 936,
+        "megno_hi": 18.25,
+        "megno_lo": 18.0,
+        "run": "5 years"
+      },
+      {
+        "count": 904,
+        "megno_hi": 18.5,
+        "megno_lo": 18.25,
+        "run": "5 years"
+      },
+      {
+        "count": 920,
+        "megno_hi": 18.75,
+        "megno_lo": 18.5,
+        "run": "5 years"
+      },
+      {
+        "count": 912,
+        "megno_hi": 19.0,
+        "megno_lo": 18.75,
+        "run": "5 years"
+      },
+      {
+        "count": 841,
+        "megno_hi": 19.25,
+        "megno_lo": 19.0,
+        "run": "5 years"
+      },
+      {
+        "count": 924,
+        "megno_hi": 19.5,
+        "megno_lo": 19.25,
+        "run": "5 years"
+      },
+      {
+        "count": 944,
+        "megno_hi": 19.75,
+        "megno_lo": 19.5,
+        "run": "5 years"
+      },
+      {
+        "count": 22664,
+        "megno_hi": 20.0,
+        "megno_lo": 19.75,
+        "run": "5 years"
+      },
+      {
+        "count": 4,
+        "megno_hi": -1.75,
+        "megno_lo": -2.0,
+        "run": "10 years"
+      },
+      {
+        "count": 14,
+        "megno_hi": -1.5,
+        "megno_lo": -1.75,
+        "run": "10 years"
+      },
+      {
+        "count": 27,
+        "megno_hi": -1.25,
+        "megno_lo": -1.5,
+        "run": "10 years"
+      },
+      {
+        "count": 59,
+        "megno_hi": -1.0,
+        "megno_lo": -1.25,
+        "run": "10 years"
+      },
+      {
+        "count": 156,
+        "megno_hi": -0.75,
+        "megno_lo": -1.0,
+        "run": "10 years"
+      },
+      {
+        "count": 415,
+        "megno_hi": -0.5,
+        "megno_lo": -0.75,
+        "run": "10 years"
+      },
+      {
+        "count": 776,
+        "megno_hi": -0.25,
+        "megno_lo": -0.5,
+        "run": "10 years"
+      },
+      {
+        "count": 1657,
+        "megno_hi": 0.0,
+        "megno_lo": -0.25,
+        "run": "10 years"
+      },
+      {
+        "count": 2888,
+        "megno_hi": 0.25,
+        "megno_lo": 0.0,
+        "run": "10 years"
+      },
+      {
+        "count": 3559,
+        "megno_hi": 0.5,
+        "megno_lo": 0.25,
+        "run": "10 years"
+      },
+      {
+        "count": 3991,
+        "megno_hi": 0.75,
+        "megno_lo": 0.5,
+        "run": "10 years"
+      },
+      {
+        "count": 4212,
+        "megno_hi": 1.0,
+        "megno_lo": 0.75,
+        "run": "10 years"
+      },
+      {
+        "count": 4070,
+        "megno_hi": 1.25,
+        "megno_lo": 1.0,
+        "run": "10 years"
+      },
+      {
+        "count": 3794,
+        "megno_hi": 1.5,
+        "megno_lo": 1.25,
+        "run": "10 years"
+      },
+      {
+        "count": 3655,
+        "megno_hi": 1.75,
+        "megno_lo": 1.5,
+        "run": "10 years"
+      },
+      {
+        "count": 3388,
+        "megno_hi": 2.0,
+        "megno_lo": 1.75,
+        "run": "10 years"
+      },
+      {
+        "count": 3028,
+        "megno_hi": 2.25,
+        "megno_lo": 2.0,
+        "run": "10 years"
+      },
+      {
+        "count": 2985,
+        "megno_hi": 2.5,
+        "megno_lo": 2.25,
+        "run": "10 years"
+      },
+      {
+        "count": 2913,
+        "megno_hi": 2.75,
+        "megno_lo": 2.5,
+        "run": "10 years"
+      },
+      {
+        "count": 2869,
+        "megno_hi": 3.0,
+        "megno_lo": 2.75,
+        "run": "10 years"
+      },
+      {
+        "count": 2981,
+        "megno_hi": 3.25,
+        "megno_lo": 3.0,
+        "run": "10 years"
+      },
+      {
+        "count": 2809,
+        "megno_hi": 3.5,
+        "megno_lo": 3.25,
+        "run": "10 years"
+      },
+      {
+        "count": 2862,
+        "megno_hi": 3.75,
+        "megno_lo": 3.5,
+        "run": "10 years"
+      },
+      {
+        "count": 2844,
+        "megno_hi": 4.0,
+        "megno_lo": 3.75,
+        "run": "10 years"
+      },
+      {
+        "count": 2892,
+        "megno_hi": 4.25,
+        "megno_lo": 4.0,
+        "run": "10 years"
+      },
+      {
+        "count": 2773,
+        "megno_hi": 4.5,
+        "megno_lo": 4.25,
+        "run": "10 years"
+      },
+      {
+        "count": 2897,
+        "megno_hi": 4.75,
+        "megno_lo": 4.5,
+        "run": "10 years"
+      },
+      {
+        "count": 2877,
+        "megno_hi": 5.0,
+        "megno_lo": 4.75,
+        "run": "10 years"
+      },
+      {
+        "count": 2844,
+        "megno_hi": 5.25,
+        "megno_lo": 5.0,
+        "run": "10 years"
+      },
+      {
+        "count": 2793,
+        "megno_hi": 5.5,
+        "megno_lo": 5.25,
+        "run": "10 years"
+      },
+      {
+        "count": 2687,
+        "megno_hi": 5.75,
+        "megno_lo": 5.5,
+        "run": "10 years"
+      },
+      {
+        "count": 2550,
+        "megno_hi": 6.0,
+        "megno_lo": 5.75,
+        "run": "10 years"
+      },
+      {
+        "count": 2584,
+        "megno_hi": 6.25,
+        "megno_lo": 6.0,
+        "run": "10 years"
+      },
+      {
+        "count": 2606,
+        "megno_hi": 6.5,
+        "megno_lo": 6.25,
+        "run": "10 years"
+      },
+      {
+        "count": 2414,
+        "megno_hi": 6.75,
+        "megno_lo": 6.5,
+        "run": "10 years"
+      },
+      {
+        "count": 2267,
+        "megno_hi": 7.0,
+        "megno_lo": 6.75,
+        "run": "10 years"
+      },
+      {
+        "count": 2073,
+        "megno_hi": 7.25,
+        "megno_lo": 7.0,
+        "run": "10 years"
+      },
+      {
+        "count": 2143,
+        "megno_hi": 7.5,
+        "megno_lo": 7.25,
+        "run": "10 years"
+      },
+      {
+        "count": 1957,
+        "megno_hi": 7.75,
+        "megno_lo": 7.5,
+        "run": "10 years"
+      },
+      {
+        "count": 1927,
+        "megno_hi": 8.0,
+        "megno_lo": 7.75,
+        "run": "10 years"
+      },
+      {
+        "count": 1813,
+        "megno_hi": 8.25,
+        "megno_lo": 8.0,
+        "run": "10 years"
+      },
+      {
+        "count": 1732,
+        "megno_hi": 8.5,
+        "megno_lo": 8.25,
+        "run": "10 years"
+      },
+      {
+        "count": 1632,
+        "megno_hi": 8.75,
+        "megno_lo": 8.5,
+        "run": "10 years"
+      },
+      {
+        "count": 1626,
+        "megno_hi": 9.0,
+        "megno_lo": 8.75,
+        "run": "10 years"
+      },
+      {
+        "count": 1525,
+        "megno_hi": 9.25,
+        "megno_lo": 9.0,
+        "run": "10 years"
+      },
+      {
+        "count": 1465,
+        "megno_hi": 9.5,
+        "megno_lo": 9.25,
+        "run": "10 years"
+      },
+      {
+        "count": 1388,
+        "megno_hi": 9.75,
+        "megno_lo": 9.5,
+        "run": "10 years"
+      },
+      {
+        "count": 1267,
+        "megno_hi": 10.0,
+        "megno_lo": 9.75,
+        "run": "10 years"
+      },
+      {
+        "count": 1262,
+        "megno_hi": 10.25,
+        "megno_lo": 10.0,
+        "run": "10 years"
+      },
+      {
+        "count": 1230,
+        "megno_hi": 10.5,
+        "megno_lo": 10.25,
+        "run": "10 years"
+      },
+      {
+        "count": 1204,
+        "megno_hi": 10.75,
+        "megno_lo": 10.5,
+        "run": "10 years"
+      },
+      {
+        "count": 1197,
+        "megno_hi": 11.0,
+        "megno_lo": 10.75,
+        "run": "10 years"
+      },
+      {
+        "count": 1110,
+        "megno_hi": 11.25,
+        "megno_lo": 11.0,
+        "run": "10 years"
+      },
+      {
+        "count": 1084,
+        "megno_hi": 11.5,
+        "megno_lo": 11.25,
+        "run": "10 years"
+      },
+      {
+        "count": 1062,
+        "megno_hi": 11.75,
+        "megno_lo": 11.5,
+        "run": "10 years"
+      },
+      {
+        "count": 1049,
+        "megno_hi": 12.0,
+        "megno_lo": 11.75,
+        "run": "10 years"
+      },
+      {
+        "count": 1032,
+        "megno_hi": 12.25,
+        "megno_lo": 12.0,
+        "run": "10 years"
+      },
+      {
+        "count": 945,
+        "megno_hi": 12.5,
+        "megno_lo": 12.25,
+        "run": "10 years"
+      },
+      {
+        "count": 1022,
+        "megno_hi": 12.75,
+        "megno_lo": 12.5,
+        "run": "10 years"
+      },
+      {
+        "count": 940,
+        "megno_hi": 13.0,
+        "megno_lo": 12.75,
+        "run": "10 years"
+      },
+      {
+        "count": 939,
+        "megno_hi": 13.25,
+        "megno_lo": 13.0,
+        "run": "10 years"
+      },
+      {
+        "count": 899,
+        "megno_hi": 13.5,
+        "megno_lo": 13.25,
+        "run": "10 years"
+      },
+      {
+        "count": 912,
+        "megno_hi": 13.75,
+        "megno_lo": 13.5,
+        "run": "10 years"
+      },
+      {
+        "count": 850,
+        "megno_hi": 14.0,
+        "megno_lo": 13.75,
+        "run": "10 years"
+      },
+      {
+        "count": 879,
+        "megno_hi": 14.25,
+        "megno_lo": 14.0,
+        "run": "10 years"
+      },
+      {
+        "count": 842,
+        "megno_hi": 14.5,
+        "megno_lo": 14.25,
+        "run": "10 years"
+      },
+      {
+        "count": 768,
+        "megno_hi": 14.75,
+        "megno_lo": 14.5,
+        "run": "10 years"
+      },
+      {
+        "count": 830,
+        "megno_hi": 15.0,
+        "megno_lo": 14.75,
+        "run": "10 years"
+      },
+      {
+        "count": 770,
+        "megno_hi": 15.25,
+        "megno_lo": 15.0,
+        "run": "10 years"
+      },
+      {
+        "count": 751,
+        "megno_hi": 15.5,
+        "megno_lo": 15.25,
+        "run": "10 years"
+      },
+      {
+        "count": 777,
+        "megno_hi": 15.75,
+        "megno_lo": 15.5,
+        "run": "10 years"
+      },
+      {
+        "count": 744,
+        "megno_hi": 16.0,
+        "megno_lo": 15.75,
+        "run": "10 years"
+      },
+      {
+        "count": 722,
+        "megno_hi": 16.25,
+        "megno_lo": 16.0,
+        "run": "10 years"
+      },
+      {
+        "count": 734,
+        "megno_hi": 16.5,
+        "megno_lo": 16.25,
+        "run": "10 years"
+      },
+      {
+        "count": 684,
+        "megno_hi": 16.75,
+        "megno_lo": 16.5,
+        "run": "10 years"
+      },
+      {
+        "count": 726,
+        "megno_hi": 17.0,
+        "megno_lo": 16.75,
+        "run": "10 years"
+      },
+      {
+        "count": 673,
+        "megno_hi": 17.25,
+        "megno_lo": 17.0,
+        "run": "10 years"
+      },
+      {
+        "count": 660,
+        "megno_hi": 17.5,
+        "megno_lo": 17.25,
+        "run": "10 years"
+      },
+      {
+        "count": 614,
+        "megno_hi": 17.75,
+        "megno_lo": 17.5,
+        "run": "10 years"
+      },
+      {
+        "count": 686,
+        "megno_hi": 18.0,
+        "megno_lo": 17.75,
+        "run": "10 years"
+      },
+      {
+        "count": 599,
+        "megno_hi": 18.25,
+        "megno_lo": 18.0,
+        "run": "10 years"
+      },
+      {
+        "count": 634,
+        "megno_hi": 18.5,
+        "megno_lo": 18.25,
+        "run": "10 years"
+      },
+      {
+        "count": 609,
+        "megno_hi": 18.75,
+        "megno_lo": 18.5,
+        "run": "10 years"
+      },
+      {
+        "count": 620,
+        "megno_hi": 19.0,
+        "megno_lo": 18.75,
+        "run": "10 years"
+      },
+      {
+        "count": 598,
+        "megno_hi": 19.25,
+        "megno_lo": 19.0,
+        "run": "10 years"
+      },
+      {
+        "count": 623,
+        "megno_hi": 19.5,
+        "megno_lo": 19.25,
+        "run": "10 years"
+      },
+      {
+        "count": 562,
+        "megno_hi": 19.75,
+        "megno_lo": 19.5,
+        "run": "10 years"
+      },
+      {
+        "count": 58470,
+        "megno_hi": 20.0,
+        "megno_lo": 19.75,
+        "run": "10 years"
+      },
+      {
+        "count": 1,
+        "megno_hi": -1.75,
+        "megno_lo": -2.0,
+        "run": "30 years"
+      },
+      {
+        "count": 4,
+        "megno_hi": -1.5,
+        "megno_lo": -1.75,
+        "run": "30 years"
+      },
+      {
+        "count": 2,
+        "megno_hi": -1.25,
+        "megno_lo": -1.5,
+        "run": "30 years"
+      },
+      {
+        "count": 14,
+        "megno_hi": -1.0,
+        "megno_lo": -1.25,
+        "run": "30 years"
+      },
+      {
+        "count": 32,
+        "megno_hi": -0.75,
+        "megno_lo": -1.0,
+        "run": "30 years"
+      },
+      {
+        "count": 66,
+        "megno_hi": -0.5,
+        "megno_lo": -0.75,
+        "run": "30 years"
+      },
+      {
+        "count": 122,
+        "megno_hi": -0.25,
+        "megno_lo": -0.5,
+        "run": "30 years"
+      },
+      {
+        "count": 219,
+        "megno_hi": 0.0,
+        "megno_lo": -0.25,
+        "run": "30 years"
+      },
+      {
+        "count": 334,
+        "megno_hi": 0.25,
+        "megno_lo": 0.0,
+        "run": "30 years"
+      },
+      {
+        "count": 463,
+        "megno_hi": 0.5,
+        "megno_lo": 0.25,
+        "run": "30 years"
+      },
+      {
+        "count": 542,
+        "megno_hi": 0.75,
+        "megno_lo": 0.5,
+        "run": "30 years"
+      },
+      {
+        "count": 621,
+        "megno_hi": 1.0,
+        "megno_lo": 0.75,
+        "run": "30 years"
+      },
+      {
+        "count": 642,
+        "megno_hi": 1.25,
+        "megno_lo": 1.0,
+        "run": "30 years"
+      },
+      {
+        "count": 659,
+        "megno_hi": 1.5,
+        "megno_lo": 1.25,
+        "run": "30 years"
+      },
+      {
+        "count": 689,
+        "megno_hi": 1.75,
+        "megno_lo": 1.5,
+        "run": "30 years"
+      },
+      {
+        "count": 720,
+        "megno_hi": 2.0,
+        "megno_lo": 1.75,
+        "run": "30 years"
+      },
+      {
+        "count": 704,
+        "megno_hi": 2.25,
+        "megno_lo": 2.0,
+        "run": "30 years"
+      },
+      {
+        "count": 649,
+        "megno_hi": 2.5,
+        "megno_lo": 2.25,
+        "run": "30 years"
+      },
+      {
+        "count": 633,
+        "megno_hi": 2.75,
+        "megno_lo": 2.5,
+        "run": "30 years"
+      },
+      {
+        "count": 610,
+        "megno_hi": 3.0,
+        "megno_lo": 2.75,
+        "run": "30 years"
+      },
+      {
+        "count": 636,
+        "megno_hi": 3.25,
+        "megno_lo": 3.0,
+        "run": "30 years"
+      },
+      {
+        "count": 544,
+        "megno_hi": 3.5,
+        "megno_lo": 3.25,
+        "run": "30 years"
+      },
+      {
+        "count": 579,
+        "megno_hi": 3.75,
+        "megno_lo": 3.5,
+        "run": "30 years"
+      },
+      {
+        "count": 489,
+        "megno_hi": 4.0,
+        "megno_lo": 3.75,
+        "run": "30 years"
+      },
+      {
+        "count": 532,
+        "megno_hi": 4.25,
+        "megno_lo": 4.0,
+        "run": "30 years"
+      },
+      {
+        "count": 545,
+        "megno_hi": 4.5,
+        "megno_lo": 4.25,
+        "run": "30 years"
+      },
+      {
+        "count": 533,
+        "megno_hi": 4.75,
+        "megno_lo": 4.5,
+        "run": "30 years"
+      },
+      {
+        "count": 500,
+        "megno_hi": 5.0,
+        "megno_lo": 4.75,
+        "run": "30 years"
+      },
+      {
+        "count": 509,
+        "megno_hi": 5.25,
+        "megno_lo": 5.0,
+        "run": "30 years"
+      },
+      {
+        "count": 558,
+        "megno_hi": 5.5,
+        "megno_lo": 5.25,
+        "run": "30 years"
+      },
+      {
+        "count": 496,
+        "megno_hi": 5.75,
+        "megno_lo": 5.5,
+        "run": "30 years"
+      },
+      {
+        "count": 539,
+        "megno_hi": 6.0,
+        "megno_lo": 5.75,
+        "run": "30 years"
+      },
+      {
+        "count": 515,
+        "megno_hi": 6.25,
+        "megno_lo": 6.0,
+        "run": "30 years"
+      },
+      {
+        "count": 598,
+        "megno_hi": 6.5,
+        "megno_lo": 6.25,
+        "run": "30 years"
+      },
+      {
+        "count": 576,
+        "megno_hi": 6.75,
+        "megno_lo": 6.5,
+        "run": "30 years"
+      },
+      {
+        "count": 589,
+        "megno_hi": 7.0,
+        "megno_lo": 6.75,
+        "run": "30 years"
+      },
+      {
+        "count": 577,
+        "megno_hi": 7.25,
+        "megno_lo": 7.0,
+        "run": "30 years"
+      },
+      {
+        "count": 618,
+        "megno_hi": 7.5,
+        "megno_lo": 7.25,
+        "run": "30 years"
+      },
+      {
+        "count": 619,
+        "megno_hi": 7.75,
+        "megno_lo": 7.5,
+        "run": "30 years"
+      },
+      {
+        "count": 595,
+        "megno_hi": 8.0,
+        "megno_lo": 7.75,
+        "run": "30 years"
+      },
+      {
+        "count": 647,
+        "megno_hi": 8.25,
+        "megno_lo": 8.0,
+        "run": "30 years"
+      },
+      {
+        "count": 661,
+        "megno_hi": 8.5,
+        "megno_lo": 8.25,
+        "run": "30 years"
+      },
+      {
+        "count": 705,
+        "megno_hi": 8.75,
+        "megno_lo": 8.5,
+        "run": "30 years"
+      },
+      {
+        "count": 737,
+        "megno_hi": 9.0,
+        "megno_lo": 8.75,
+        "run": "30 years"
+      },
+      {
+        "count": 724,
+        "megno_hi": 9.25,
+        "megno_lo": 9.0,
+        "run": "30 years"
+      },
+      {
+        "count": 707,
+        "megno_hi": 9.5,
+        "megno_lo": 9.25,
+        "run": "30 years"
+      },
+      {
+        "count": 803,
+        "megno_hi": 9.75,
+        "megno_lo": 9.5,
+        "run": "30 years"
+      },
+      {
+        "count": 754,
+        "megno_hi": 10.0,
+        "megno_lo": 9.75,
+        "run": "30 years"
+      },
+      {
+        "count": 785,
+        "megno_hi": 10.25,
+        "megno_lo": 10.0,
+        "run": "30 years"
+      },
+      {
+        "count": 858,
+        "megno_hi": 10.5,
+        "megno_lo": 10.25,
+        "run": "30 years"
+      },
+      {
+        "count": 859,
+        "megno_hi": 10.75,
+        "megno_lo": 10.5,
+        "run": "30 years"
+      },
+      {
+        "count": 876,
+        "megno_hi": 11.0,
+        "megno_lo": 10.75,
+        "run": "30 years"
+      },
+      {
+        "count": 908,
+        "megno_hi": 11.25,
+        "megno_lo": 11.0,
+        "run": "30 years"
+      },
+      {
+        "count": 872,
+        "megno_hi": 11.5,
+        "megno_lo": 11.25,
+        "run": "30 years"
+      },
+      {
+        "count": 891,
+        "megno_hi": 11.75,
+        "megno_lo": 11.5,
+        "run": "30 years"
+      },
+      {
+        "count": 931,
+        "megno_hi": 12.0,
+        "megno_lo": 11.75,
+        "run": "30 years"
+      },
+      {
+        "count": 948,
+        "megno_hi": 12.25,
+        "megno_lo": 12.0,
+        "run": "30 years"
+      },
+      {
+        "count": 961,
+        "megno_hi": 12.5,
+        "megno_lo": 12.25,
+        "run": "30 years"
+      },
+      {
+        "count": 938,
+        "megno_hi": 12.75,
+        "megno_lo": 12.5,
+        "run": "30 years"
+      },
+      {
+        "count": 987,
+        "megno_hi": 13.0,
+        "megno_lo": 12.75,
+        "run": "30 years"
+      },
+      {
+        "count": 856,
+        "megno_hi": 13.25,
+        "megno_lo": 13.0,
+        "run": "30 years"
+      },
+      {
+        "count": 1007,
+        "megno_hi": 13.5,
+        "megno_lo": 13.25,
+        "run": "30 years"
+      },
+      {
+        "count": 925,
+        "megno_hi": 13.75,
+        "megno_lo": 13.5,
+        "run": "30 years"
+      },
+      {
+        "count": 989,
+        "megno_hi": 14.0,
+        "megno_lo": 13.75,
+        "run": "30 years"
+      },
+      {
+        "count": 916,
+        "megno_hi": 14.25,
+        "megno_lo": 14.0,
+        "run": "30 years"
+      },
+      {
+        "count": 1008,
+        "megno_hi": 14.5,
+        "megno_lo": 14.25,
+        "run": "30 years"
+      },
+      {
+        "count": 957,
+        "megno_hi": 14.75,
+        "megno_lo": 14.5,
+        "run": "30 years"
+      },
+      {
+        "count": 955,
+        "megno_hi": 15.0,
+        "megno_lo": 14.75,
+        "run": "30 years"
+      },
+      {
+        "count": 970,
+        "megno_hi": 15.25,
+        "megno_lo": 15.0,
+        "run": "30 years"
+      },
+      {
+        "count": 951,
+        "megno_hi": 15.5,
+        "megno_lo": 15.25,
+        "run": "30 years"
+      },
+      {
+        "count": 923,
+        "megno_hi": 15.75,
+        "megno_lo": 15.5,
+        "run": "30 years"
+      },
+      {
+        "count": 867,
+        "megno_hi": 16.0,
+        "megno_lo": 15.75,
+        "run": "30 years"
+      },
+      {
+        "count": 898,
+        "megno_hi": 16.25,
+        "megno_lo": 16.0,
+        "run": "30 years"
+      },
+      {
+        "count": 903,
+        "megno_hi": 16.5,
+        "megno_lo": 16.25,
+        "run": "30 years"
+      },
+      {
+        "count": 848,
+        "megno_hi": 16.75,
+        "megno_lo": 16.5,
+        "run": "30 years"
+      },
+      {
+        "count": 870,
+        "megno_hi": 17.0,
+        "megno_lo": 16.75,
+        "run": "30 years"
+      },
+      {
+        "count": 867,
+        "megno_hi": 17.25,
+        "megno_lo": 17.0,
+        "run": "30 years"
+      },
+      {
+        "count": 828,
+        "megno_hi": 17.5,
+        "megno_lo": 17.25,
+        "run": "30 years"
+      },
+      {
+        "count": 846,
+        "megno_hi": 17.75,
+        "megno_lo": 17.5,
+        "run": "30 years"
+      },
+      {
+        "count": 814,
+        "megno_hi": 18.0,
+        "megno_lo": 17.75,
+        "run": "30 years"
+      },
+      {
+        "count": 770,
+        "megno_hi": 18.25,
+        "megno_lo": 18.0,
+        "run": "30 years"
+      },
+      {
+        "count": 750,
+        "megno_hi": 18.5,
+        "megno_lo": 18.25,
+        "run": "30 years"
+      },
+      {
+        "count": 763,
+        "megno_hi": 18.75,
+        "megno_lo": 18.5,
+        "run": "30 years"
+      },
+      {
+        "count": 718,
+        "megno_hi": 19.0,
+        "megno_lo": 18.75,
+        "run": "30 years"
+      },
+      {
+        "count": 678,
+        "megno_hi": 19.25,
+        "megno_lo": 19.0,
+        "run": "30 years"
+      },
+      {
+        "count": 674,
+        "megno_hi": 19.5,
+        "megno_lo": 19.25,
+        "run": "30 years"
+      },
+      {
+        "count": 590,
+        "megno_hi": 19.75,
+        "megno_lo": 19.5,
+        "run": "30 years"
+      },
+      {
+        "count": 51434,
+        "megno_hi": 20.0,
+        "megno_lo": 19.75,
+        "run": "30 years"
+      }
+    ]
+  },
+  "height": 260,
+  "layer": [
+    {
+      "data": {
+        "name": "data-8f05469efad4964ea3b2aa2b822df142"
+      },
+      "encoding": {
+        "color": {
+          "field": "run",
+          "scale": {
+            "range": [
+              "#56B4E9",
+              "#E69F00",
+              "#CC79A7"
+            ]
+          },
+          "title": "Run length",
+          "type": "nominal"
+        },
+        "tooltip": [
+          {
+            "field": "run",
+            "type": "nominal"
+          },
+          {
+            "field": "megno_lo",
+            "type": "quantitative"
+          },
+          {
+            "field": "count",
+            "type": "quantitative"
+          }
+        ],
+        "x": {
+          "field": "megno_lo",
+          "scale": {
+            "domain": [
+              -2,
+              20
+            ],
+            "nice": false
+          },
+          "title": "Mean MEGNO (last bin collects all larger values)",
+          "type": "quantitative"
+        },
+        "x2": {
+          "field": "megno_hi"
+        },
+        "y": {
+          "field": "count",
+          "scale": {
+            "type": "symlog"
+          },
+          "title": "Particles",
+          "type": "quantitative"
+        }
+      },
+      "mark": {
+        "opacity": 0.7,
+        "type": "bar"
+      }
+    },
+    {
+      "data": {
+        "name": "data-142918399432407b4305c377ed6ff174"
+      },
+      "encoding": {
+        "x": {
+          "field": "x",
+          "type": "quantitative"
+        }
+      },
+      "mark": {
+        "strokeDash": [
+          4,
+          3
+        ],
+        "type": "rule"
+      }
+    }
+  ],
+  "title": "Distribution of the mean MEGNO (dashed: class limits 1.5, 2.5 and 5)",
+  "width": 620
+}

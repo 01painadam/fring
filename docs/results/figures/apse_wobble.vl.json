@@ -1,0 +1,2992 @@
+{
+  "$schema": "https://vega.github.io/schema/vega-lite/v5.20.1.json",
+  "config": {
+    "view": {
+      "continuousHeight": 300,
+      "continuousWidth": 300,
+      "strokeWidth": 0
+    }
+  },
+  "data": {
+    "name": "data-11ee18b06b265b7c9e6b54a7a9732538"
+  },
+  "datasets": {
+    "data-11ee18b06b265b7c9e6b54a7a9732538": [
+      {
+        "residual_deg": -2.617,
+        "t_years": 0.0
+      },
+      {
+        "residual_deg": -2.5749,
+        "t_years": 0.0677
+      },
+      {
+        "residual_deg": -2.5504,
+        "t_years": 0.1355
+      },
+      {
+        "residual_deg": -2.5358,
+        "t_years": 0.2032
+      },
+      {
+        "residual_deg": -2.5318,
+        "t_years": 0.2709
+      },
+      {
+        "residual_deg": -2.575,
+        "t_years": 0.3387
+      },
+      {
+        "residual_deg": -2.7231,
+        "t_years": 0.4064
+      },
+      {
+        "residual_deg": -2.5637,
+        "t_years": 0.4741
+      },
+      {
+        "residual_deg": -2.5791,
+        "t_years": 0.5419
+      },
+      {
+        "residual_deg": -2.5076,
+        "t_years": 0.6096
+      },
+      {
+        "residual_deg": -2.3973,
+        "t_years": 0.6773
+      },
+      {
+        "residual_deg": -2.5856,
+        "t_years": 0.7451
+      },
+      {
+        "residual_deg": -2.4159,
+        "t_years": 0.8128
+      },
+      {
+        "residual_deg": -2.3084,
+        "t_years": 0.8805
+      },
+      {
+        "residual_deg": -2.3522,
+        "t_years": 0.9483
+      },
+      {
+        "residual_deg": -2.1675,
+        "t_years": 1.016
+      },
+      {
+        "residual_deg": -2.3476,
+        "t_years": 1.0837
+      },
+      {
+        "residual_deg": -2.2276,
+        "t_years": 1.1515
+      },
+      {
+        "residual_deg": -1.9373,
+        "t_years": 1.2192
+      },
+      {
+        "residual_deg": -2.0492,
+        "t_years": 1.2869
+      },
+      {
+        "residual_deg": -1.9417,
+        "t_years": 1.3547
+      },
+      {
+        "residual_deg": -1.9071,
+        "t_years": 1.4224
+      },
+      {
+        "residual_deg": -1.918,
+        "t_years": 1.4901
+      },
+      {
+        "residual_deg": -1.505,
+        "t_years": 1.5579
+      },
+      {
+        "residual_deg": -1.5949,
+        "t_years": 1.6256
+      },
+      {
+        "residual_deg": -1.6984,
+        "t_years": 1.6933
+      },
+      {
+        "residual_deg": -1.4721,
+        "t_years": 1.7611
+      },
+      {
+        "residual_deg": -1.5679,
+        "t_years": 1.8288
+      },
+      {
+        "residual_deg": -1.203,
+        "t_years": 1.8966
+      },
+      {
+        "residual_deg": -1.107,
+        "t_years": 1.9643
+      },
+      {
+        "residual_deg": -1.403,
+        "t_years": 2.032
+      },
+      {
+        "residual_deg": -1.1434,
+        "t_years": 2.0998
+      },
+      {
+        "residual_deg": -1.1569,
+        "t_years": 2.1675
+      },
+      {
+        "residual_deg": -0.8867,
+        "t_years": 2.2352
+      },
+      {
+        "residual_deg": -0.5349,
+        "t_years": 2.303
+      },
+      {
+        "residual_deg": -0.8453,
+        "t_years": 2.3707
+      },
+      {
+        "residual_deg": -0.8347,
+        "t_years": 2.4384
+      },
+      {
+        "residual_deg": -0.7448,
+        "t_years": 2.5062
+      },
+      {
+        "residual_deg": -0.7452,
+        "t_years": 2.5739
+      },
+      {
+        "residual_deg": -0.2312,
+        "t_years": 2.6416
+      },
+      {
+        "residual_deg": -0.462,
+        "t_years": 2.7094
+      },
+      {
+        "residual_deg": -0.4433,
+        "t_years": 2.7771
+      },
+      {
+        "residual_deg": -0.2728,
+        "t_years": 2.8448
+      },
+      {
+        "residual_deg": -0.4591,
+        "t_years": 2.9126
+      },
+      {
+        "residual_deg": -0.0978,
+        "t_years": 2.9803
+      },
+      {
+        "residual_deg": -0.1569,
+        "t_years": 3.048
+      },
+      {
+        "residual_deg": -0.1236,
+        "t_years": 3.1158
+      },
+      {
+        "residual_deg": 0.042,
+        "t_years": 3.1835
+      },
+      {
+        "residual_deg": 0.0096,
+        "t_years": 3.2512
+      },
+      {
+        "residual_deg": 0.0194,
+        "t_years": 3.319
+      },
+      {
+        "residual_deg": 0.019,
+        "t_years": 3.3867
+      },
+      {
+        "residual_deg": 0.2622,
+        "t_years": 3.4544
+      },
+      {
+        "residual_deg": 0.2968,
+        "t_years": 3.5222
+      },
+      {
+        "residual_deg": 0.3392,
+        "t_years": 3.5899
+      },
+      {
+        "residual_deg": 0.227,
+        "t_years": 3.6576
+      },
+      {
+        "residual_deg": 0.1975,
+        "t_years": 3.7254
+      },
+      {
+        "residual_deg": 0.4398,
+        "t_years": 3.7931
+      },
+      {
+        "residual_deg": 0.452,
+        "t_years": 3.8608
+      },
+      {
+        "residual_deg": 0.5274,
+        "t_years": 3.9286
+      },
+      {
+        "residual_deg": 0.4774,
+        "t_years": 3.9963
+      },
+      {
+        "residual_deg": 0.5107,
+        "t_years": 4.064
+      },
+      {
+        "residual_deg": 0.5761,
+        "t_years": 4.1318
+      },
+      {
+        "residual_deg": 0.5162,
+        "t_years": 4.1995
+      },
+      {
+        "residual_deg": 0.7115,
+        "t_years": 4.2672
+      },
+      {
+        "residual_deg": 0.6774,
+        "t_years": 4.335
+      },
+      {
+        "residual_deg": 0.8382,
+        "t_years": 4.4027
+      },
+      {
+        "residual_deg": 0.7556,
+        "t_years": 4.4704
+      },
+      {
+        "residual_deg": 0.464,
+        "t_years": 4.5382
+      },
+      {
+        "residual_deg": 0.769,
+        "t_years": 4.6059
+      },
+      {
+        "residual_deg": 0.8939,
+        "t_years": 4.6736
+      },
+      {
+        "residual_deg": 0.9339,
+        "t_years": 4.7414
+      },
+      {
+        "residual_deg": 1.0818,
+        "t_years": 4.8091
+      },
+      {
+        "residual_deg": 0.4746,
+        "t_years": 4.8768
+      },
+      {
+        "residual_deg": 0.6369,
+        "t_years": 4.9446
+      },
+      {
+        "residual_deg": 1.0886,
+        "t_years": 5.0123
+      },
+      {
+        "residual_deg": 0.949,
+        "t_years": 5.08
+      },
+      {
+        "residual_deg": 1.2424,
+        "t_years": 5.1478
+      },
+      {
+        "residual_deg": 0.8236,
+        "t_years": 5.2155
+      },
+      {
+        "residual_deg": 0.6517,
+        "t_years": 5.2833
+      },
+      {
+        "residual_deg": 1.1187,
+        "t_years": 5.351
+      },
+      {
+        "residual_deg": 1.1221,
+        "t_years": 5.4187
+      },
+      {
+        "residual_deg": 1.1721,
+        "t_years": 5.4865
+      },
+      {
+        "residual_deg": 0.9534,
+        "t_years": 5.5542
+      },
+      {
+        "residual_deg": 0.8913,
+        "t_years": 5.6219
+      },
+      {
+        "residual_deg": 0.8956,
+        "t_years": 5.6897
+      },
+      {
+        "residual_deg": 1.1311,
+        "t_years": 5.7574
+      },
+      {
+        "residual_deg": 1.1228,
+        "t_years": 5.8251
+      },
+      {
+        "residual_deg": 0.9139,
+        "t_years": 5.8929
+      },
+      {
+        "residual_deg": 1.085,
+        "t_years": 5.9606
+      },
+      {
+        "residual_deg": 0.8942,
+        "t_years": 6.0283
+      },
+      {
+        "residual_deg": 0.9768,
+        "t_years": 6.0961
+      },
+      {
+        "residual_deg": 1.0359,
+        "t_years": 6.1638
+      },
+      {
+        "residual_deg": 0.9075,
+        "t_years": 6.2315
+      },
+      {
+        "residual_deg": 1.0228,
+        "t_years": 6.2993
+      },
+      {
+        "residual_deg": 1.03,
+        "t_years": 6.367
+      },
+      {
+        "residual_deg": 0.9325,
+        "t_years": 6.4347
+      },
+      {
+        "residual_deg": 0.996,
+        "t_years": 6.5025
+      },
+      {
+        "residual_deg": 0.8228,
+        "t_years": 6.5702
+      },
+      {
+        "residual_deg": 0.9327,
+        "t_years": 6.6379
+      },
+      {
+        "residual_deg": 1.1286,
+        "t_years": 6.7057
+      },
+      {
+        "residual_deg": 0.8525,
+        "t_years": 6.7734
+      },
+      {
+        "residual_deg": 0.9648,
+        "t_years": 6.8411
+      },
+      {
+        "residual_deg": 0.8752,
+        "t_years": 6.9089
+      },
+      {
+        "residual_deg": 0.612,
+        "t_years": 6.9766
+      },
+      {
+        "residual_deg": 1.0244,
+        "t_years": 7.0443
+      },
+      {
+        "residual_deg": 0.8774,
+        "t_years": 7.1121
+      },
+      {
+        "residual_deg": 0.8276,
+        "t_years": 7.1798
+      },
+      {
+        "residual_deg": 0.8435,
+        "t_years": 7.2475
+      },
+      {
+        "residual_deg": 0.5151,
+        "t_years": 7.3153
+      },
+      {
+        "residual_deg": 0.7744,
+        "t_years": 7.383
+      },
+      {
+        "residual_deg": 0.6385,
+        "t_years": 7.4507
+      },
+      {
+        "residual_deg": 0.8184,
+        "t_years": 7.5185
+      },
+      {
+        "residual_deg": 0.8352,
+        "t_years": 7.5862
+      },
+      {
+        "residual_deg": 0.3106,
+        "t_years": 7.6539
+      },
+      {
+        "residual_deg": 0.739,
+        "t_years": 7.7217
+      },
+      {
+        "residual_deg": 0.5354,
+        "t_years": 7.7894
+      },
+      {
+        "residual_deg": 0.5159,
+        "t_years": 7.8571
+      },
+      {
+        "residual_deg": 0.8137,
+        "t_years": 7.9249
+      },
+      {
+        "residual_deg": 0.1848,
+        "t_years": 7.9926
+      },
+      {
+        "residual_deg": 0.5661,
+        "t_years": 8.0603
+      },
+      {
+        "residual_deg": 0.6757,
+        "t_years": 8.1281
+      },
+      {
+        "residual_deg": 0.2788,
+        "t_years": 8.1958
+      },
+      {
+        "residual_deg": 0.5702,
+        "t_years": 8.2635
+      },
+      {
+        "residual_deg": 0.1673,
+        "t_years": 8.3313
+      },
+      {
+        "residual_deg": 0.2248,
+        "t_years": 8.399
+      },
+      {
+        "residual_deg": 0.6163,
+        "t_years": 8.4667
+      },
+      {
+        "residual_deg": 0.4339,
+        "t_years": 8.5345
+      },
+      {
+        "residual_deg": 0.2023,
+        "t_years": 8.6022
+      },
+      {
+        "residual_deg": -0.0732,
+        "t_years": 8.67
+      },
+      {
+        "residual_deg": 0.2828,
+        "t_years": 8.7377
+      },
+      {
+        "residual_deg": 0.2172,
+        "t_years": 8.8054
+      },
+      {
+        "residual_deg": 0.3485,
+        "t_years": 8.8732
+      },
+      {
+        "residual_deg": 0.3331,
+        "t_years": 8.9409
+      },
+      {
+        "residual_deg": -0.3553,
+        "t_years": 9.0086
+      },
+      {
+        "residual_deg": 0.1746,
+        "t_years": 9.0764
+      },
+      {
+        "residual_deg": 0.1241,
+        "t_years": 9.1441
+      },
+      {
+        "residual_deg": -0.056,
+        "t_years": 9.2118
+      },
+      {
+        "residual_deg": 0.3072,
+        "t_years": 9.2796
+      },
+      {
+        "residual_deg": -0.3314,
+        "t_years": 9.3473
+      },
+      {
+        "residual_deg": 0.0676,
+        "t_years": 9.415
+      },
+      {
+        "residual_deg": 0.0792,
+        "t_years": 9.4828
+      },
+      {
+        "residual_deg": -0.4839,
+        "t_years": 9.5505
+      },
+      {
+        "residual_deg": 0.1076,
+        "t_years": 9.6182
+      },
+      {
+        "residual_deg": -0.2716,
+        "t_years": 9.686
+      },
+      {
+        "residual_deg": -0.0436,
+        "t_years": 9.7537
+      },
+      {
+        "residual_deg": 0.0661,
+        "t_years": 9.8214
+      },
+      {
+        "residual_deg": -0.4522,
+        "t_years": 9.8892
+      },
+      {
+        "residual_deg": -0.331,
+        "t_years": 9.9569
+      },
+      {
+        "residual_deg": -0.3149,
+        "t_years": 10.0246
+      },
+      {
+        "residual_deg": 0.0413,
+        "t_years": 10.0924
+      },
+      {
+        "residual_deg": -0.2864,
+        "t_years": 10.1601
+      },
+      {
+        "residual_deg": -0.3374,
+        "t_years": 10.2278
+      },
+      {
+        "residual_deg": -0.3845,
+        "t_years": 10.2956
+      },
+      {
+        "residual_deg": -0.5982,
+        "t_years": 10.3633
+      },
+      {
+        "residual_deg": 0.0008,
+        "t_years": 10.431
+      },
+      {
+        "residual_deg": -0.2936,
+        "t_years": 10.4988
+      },
+      {
+        "residual_deg": -0.5687,
+        "t_years": 10.5665
+      },
+      {
+        "residual_deg": -0.3046,
+        "t_years": 10.6342
+      },
+      {
+        "residual_deg": -0.5746,
+        "t_years": 10.702
+      },
+      {
+        "residual_deg": -0.3805,
+        "t_years": 10.7697
+      },
+      {
+        "residual_deg": -0.1805,
+        "t_years": 10.8374
+      },
+      {
+        "residual_deg": -0.6396,
+        "t_years": 10.9052
+      },
+      {
+        "residual_deg": -0.508,
+        "t_years": 10.9729
+      },
+      {
+        "residual_deg": -0.3936,
+        "t_years": 11.0406
+      },
+      {
+        "residual_deg": -0.5858,
+        "t_years": 11.1084
+      },
+      {
+        "residual_deg": -0.3223,
+        "t_years": 11.1761
+      },
+      {
+        "residual_deg": -0.5961,
+        "t_years": 11.2438
+      },
+      {
+        "residual_deg": -0.6985,
+        "t_years": 11.3116
+      },
+      {
+        "residual_deg": -0.2376,
+        "t_years": 11.3793
+      },
+      {
+        "residual_deg": -0.9214,
+        "t_years": 11.447
+      },
+      {
+        "residual_deg": -0.3485,
+        "t_years": 11.5148
+      },
+      {
+        "residual_deg": -0.4323,
+        "t_years": 11.5825
+      },
+      {
+        "residual_deg": -1.0925,
+        "t_years": 11.6502
+      },
+      {
+        "residual_deg": 0.0772,
+        "t_years": 11.718
+      },
+      {
+        "residual_deg": -0.8103,
+        "t_years": 11.7857
+      },
+      {
+        "residual_deg": -0.8882,
+        "t_years": 11.8534
+      },
+      {
+        "residual_deg": -0.2994,
+        "t_years": 11.9212
+      },
+      {
+        "residual_deg": -0.888,
+        "t_years": 11.9889
+      },
+      {
+        "residual_deg": -0.378,
+        "t_years": 12.0567
+      },
+      {
+        "residual_deg": -0.4568,
+        "t_years": 12.1244
+      },
+      {
+        "residual_deg": -0.7398,
+        "t_years": 12.1921
+      },
+      {
+        "residual_deg": -0.841,
+        "t_years": 12.2599
+      },
+      {
+        "residual_deg": -0.7456,
+        "t_years": 12.3276
+      },
+      {
+        "residual_deg": -0.3766,
+        "t_years": 12.3953
+      },
+      {
+        "residual_deg": -0.7178,
+        "t_years": 12.4631
+      },
+      {
+        "residual_deg": -0.5314,
+        "t_years": 12.5308
+      },
+      {
+        "residual_deg": -0.7222,
+        "t_years": 12.5985
+      },
+      {
+        "residual_deg": -1.0246,
+        "t_years": 12.6663
+      },
+      {
+        "residual_deg": -0.3927,
+        "t_years": 12.734
+      },
+      {
+        "residual_deg": -0.8944,
+        "t_years": 12.8017
+      },
+      {
+        "residual_deg": -0.6748,
+        "t_years": 12.8695
+      },
+      {
+        "residual_deg": -0.4116,
+        "t_years": 12.9372
+      },
+      {
+        "residual_deg": -0.9851,
+        "t_years": 13.0049
+      },
+      {
+        "residual_deg": -0.622,
+        "t_years": 13.0727
+      },
+      {
+        "residual_deg": -0.8985,
+        "t_years": 13.1404
+      },
+      {
+        "residual_deg": -1.0152,
+        "t_years": 13.2081
+      },
+      {
+        "residual_deg": -0.4335,
+        "t_years": 13.2759
+      },
+      {
+        "residual_deg": -0.5976,
+        "t_years": 13.3436
+      },
+      {
+        "residual_deg": -0.8048,
+        "t_years": 13.4113
+      },
+      {
+        "residual_deg": -0.9426,
+        "t_years": 13.4791
+      },
+      {
+        "residual_deg": -1.2288,
+        "t_years": 13.5468
+      },
+      {
+        "residual_deg": -0.5167,
+        "t_years": 13.6145
+      },
+      {
+        "residual_deg": -0.7103,
+        "t_years": 13.6823
+      },
+      {
+        "residual_deg": -0.781,
+        "t_years": 13.75
+      },
+      {
+        "residual_deg": -0.621,
+        "t_years": 13.8177
+      },
+      {
+        "residual_deg": -1.4854,
+        "t_years": 13.8855
+      },
+      {
+        "residual_deg": -0.638,
+        "t_years": 13.9532
+      },
+      {
+        "residual_deg": -0.7204,
+        "t_years": 14.0209
+      },
+      {
+        "residual_deg": -1.081,
+        "t_years": 14.0887
+      },
+      {
+        "residual_deg": -0.5537,
+        "t_years": 14.1564
+      },
+      {
+        "residual_deg": -1.1315,
+        "t_years": 14.2241
+      },
+      {
+        "residual_deg": -0.8302,
+        "t_years": 14.2919
+      },
+      {
+        "residual_deg": -0.8264,
+        "t_years": 14.3596
+      },
+      {
+        "residual_deg": -1.3427,
+        "t_years": 14.4273
+      },
+      {
+        "residual_deg": -0.6325,
+        "t_years": 14.4951
+      },
+      {
+        "residual_deg": -0.9357,
+        "t_years": 14.5628
+      },
+      {
+        "residual_deg": -0.8378,
+        "t_years": 14.6305
+      },
+      {
+        "residual_deg": -0.6981,
+        "t_years": 14.6983
+      },
+      {
+        "residual_deg": -1.4758,
+        "t_years": 14.766
+      },
+      {
+        "residual_deg": -0.9266,
+        "t_years": 14.8337
+      },
+      {
+        "residual_deg": -0.6767,
+        "t_years": 14.9015
+      },
+      {
+        "residual_deg": -0.9857,
+        "t_years": 14.9692
+      },
+      {
+        "residual_deg": -0.8457,
+        "t_years": 15.0369
+      },
+      {
+        "residual_deg": -1.0671,
+        "t_years": 15.1047
+      },
+      {
+        "residual_deg": -1.2422,
+        "t_years": 15.1724
+      },
+      {
+        "residual_deg": -0.6416,
+        "t_years": 15.2401
+      },
+      {
+        "residual_deg": -0.9258,
+        "t_years": 15.3079
+      },
+      {
+        "residual_deg": -1.1961,
+        "t_years": 15.3756
+      },
+      {
+        "residual_deg": -0.9042,
+        "t_years": 15.4433
+      },
+      {
+        "residual_deg": -1.0858,
+        "t_years": 15.5111
+      },
+      {
+        "residual_deg": -0.8406,
+        "t_years": 15.5788
+      },
+      {
+        "residual_deg": -0.8974,
+        "t_years": 15.6466
+      },
+      {
+        "residual_deg": -1.1356,
+        "t_years": 15.7143
+      },
+      {
+        "residual_deg": -1.0674,
+        "t_years": 15.782
+      },
+      {
+        "residual_deg": -0.9186,
+        "t_years": 15.8498
+      },
+      {
+        "residual_deg": -0.7134,
+        "t_years": 15.9175
+      },
+      {
+        "residual_deg": -0.9824,
+        "t_years": 15.9852
+      },
+      {
+        "residual_deg": -0.9948,
+        "t_years": 16.053
+      },
+      {
+        "residual_deg": -0.971,
+        "t_years": 16.1207
+      },
+      {
+        "residual_deg": -0.9648,
+        "t_years": 16.1884
+      },
+      {
+        "residual_deg": -0.734,
+        "t_years": 16.2562
+      },
+      {
+        "residual_deg": -1.1723,
+        "t_years": 16.3239
+      },
+      {
+        "residual_deg": -0.8332,
+        "t_years": 16.3916
+      },
+      {
+        "residual_deg": -0.7378,
+        "t_years": 16.4594
+      },
+      {
+        "residual_deg": -1.0326,
+        "t_years": 16.5271
+      },
+      {
+        "residual_deg": -0.6721,
+        "t_years": 16.5948
+      },
+      {
+        "residual_deg": -1.1795,
+        "t_years": 16.6626
+      },
+      {
+        "residual_deg": -0.9357,
+        "t_years": 16.7303
+      },
+      {
+        "residual_deg": -0.5893,
+        "t_years": 16.798
+      },
+      {
+        "residual_deg": -0.6732,
+        "t_years": 16.8658
+      },
+      {
+        "residual_deg": -0.987,
+        "t_years": 16.9335
+      },
+      {
+        "residual_deg": -0.9526,
+        "t_years": 17.0012
+      },
+      {
+        "residual_deg": -0.7504,
+        "t_years": 17.069
+      },
+      {
+        "residual_deg": -0.8227,
+        "t_years": 17.1367
+      },
+      {
+        "residual_deg": -0.577,
+        "t_years": 17.2044
+      },
+      {
+        "residual_deg": -0.6531,
+        "t_years": 17.2722
+      },
+      {
+        "residual_deg": -0.9762,
+        "t_years": 17.3399
+      },
+      {
+        "residual_deg": -0.5891,
+        "t_years": 17.4076
+      },
+      {
+        "residual_deg": -0.4424,
+        "t_years": 17.4754
+      },
+      {
+        "residual_deg": -0.9997,
+        "t_years": 17.5431
+      },
+      {
+        "residual_deg": -0.2494,
+        "t_years": 17.6108
+      },
+      {
+        "residual_deg": -0.8871,
+        "t_years": 17.6786
+      },
+      {
+        "residual_deg": -0.6493,
+        "t_years": 17.7463
+      },
+      {
+        "residual_deg": 0.0208,
+        "t_years": 17.814
+      },
+      {
+        "residual_deg": -1.1438,
+        "t_years": 17.8818
+      },
+      {
+        "residual_deg": -0.1366,
+        "t_years": 17.9495
+      },
+      {
+        "residual_deg": -0.5631,
+        "t_years": 18.0172
+      },
+      {
+        "residual_deg": -0.6156,
+        "t_years": 18.085
+      },
+      {
+        "residual_deg": -0.0019,
+        "t_years": 18.1527
+      },
+      {
+        "residual_deg": -0.6458,
+        "t_years": 18.2204
+      },
+      {
+        "residual_deg": -0.1564,
+        "t_years": 18.2882
+      },
+      {
+        "residual_deg": -0.5107,
+        "t_years": 18.3559
+      },
+      {
+        "residual_deg": -0.2984,
+        "t_years": 18.4236
+      },
+      {
+        "residual_deg": -0.0377,
+        "t_years": 18.4914
+      },
+      {
+        "residual_deg": -0.5402,
+        "t_years": 18.5591
+      },
+      {
+        "residual_deg": 0.3484,
+        "t_years": 18.6268
+      },
+      {
+        "residual_deg": -0.1445,
+        "t_years": 18.6946
+      },
+      {
+        "residual_deg": -0.272,
+        "t_years": 18.7623
+      },
+      {
+        "residual_deg": 0.016,
+        "t_years": 18.83
+      },
+      {
+        "residual_deg": -0.3494,
+        "t_years": 18.8978
+      },
+      {
+        "residual_deg": 0.1774,
+        "t_years": 18.9655
+      },
+      {
+        "residual_deg": 0.1633,
+        "t_years": 19.0333
+      },
+      {
+        "residual_deg": 0.2862,
+        "t_years": 19.101
+      },
+      {
+        "residual_deg": 0.0804,
+        "t_years": 19.1687
+      },
+      {
+        "residual_deg": -0.4675,
+        "t_years": 19.2365
+      },
+      {
+        "residual_deg": 0.4496,
+        "t_years": 19.3042
+      },
+      {
+        "residual_deg": 0.4612,
+        "t_years": 19.3719
+      },
+      {
+        "residual_deg": 0.2195,
+        "t_years": 19.4397
+      },
+      {
+        "residual_deg": 0.7143,
+        "t_years": 19.5074
+      },
+      {
+        "residual_deg": -0.246,
+        "t_years": 19.5751
+      },
+      {
+        "residual_deg": 0.213,
+        "t_years": 19.6429
+      },
+      {
+        "residual_deg": 0.8651,
+        "t_years": 19.7106
+      },
+      {
+        "residual_deg": 0.6126,
+        "t_years": 19.7783
+      },
+      {
+        "residual_deg": 0.6085,
+        "t_years": 19.8461
+      },
+      {
+        "residual_deg": 0.2563,
+        "t_years": 19.9138
+      },
+      {
+        "residual_deg": 0.6738,
+        "t_years": 19.9815
+      },
+      {
+        "residual_deg": 0.6021,
+        "t_years": 20.0493
+      },
+      {
+        "residual_deg": 0.7855,
+        "t_years": 20.117
+      },
+      {
+        "residual_deg": 1.1851,
+        "t_years": 20.1847
+      },
+      {
+        "residual_deg": 0.072,
+        "t_years": 20.2525
+      },
+      {
+        "residual_deg": 1.0492,
+        "t_years": 20.3202
+      },
+      {
+        "residual_deg": 1.17,
+        "t_years": 20.3879
+      },
+      {
+        "residual_deg": 0.1178,
+        "t_years": 20.4557
+      },
+      {
+        "residual_deg": 1.829,
+        "t_years": 20.5234
+      },
+      {
+        "residual_deg": 0.7807,
+        "t_years": 20.5911
+      },
+      {
+        "residual_deg": 0.6975,
+        "t_years": 20.6589
+      },
+      {
+        "residual_deg": 1.3577,
+        "t_years": 20.7266
+      },
+      {
+        "residual_deg": 0.7079,
+        "t_years": 20.7943
+      },
+      {
+        "residual_deg": 1.4836,
+        "t_years": 20.8621
+      },
+      {
+        "residual_deg": 1.2833,
+        "t_years": 20.9298
+      },
+      {
+        "residual_deg": 1.6386,
+        "t_years": 20.9975
+      },
+      {
+        "residual_deg": 0.9059,
+        "t_years": 21.0653
+      },
+      {
+        "residual_deg": 1.0868,
+        "t_years": 21.133
+      },
+      {
+        "residual_deg": 1.3678,
+        "t_years": 21.2007
+      },
+      {
+        "residual_deg": 1.4779,
+        "t_years": 21.2685
+      },
+      {
+        "residual_deg": 1.9606,
+        "t_years": 21.3362
+      },
+      {
+        "residual_deg": 1.3935,
+        "t_years": 21.4039
+      },
+      {
+        "residual_deg": 1.6784,
+        "t_years": 21.4717
+      },
+      {
+        "residual_deg": 0.8524,
+        "t_years": 21.5394
+      },
+      {
+        "residual_deg": 1.6404,
+        "t_years": 21.6071
+      },
+      {
+        "residual_deg": 2.0936,
+        "t_years": 21.6749
+      },
+      {
+        "residual_deg": 1.2258,
+        "t_years": 21.7426
+      },
+      {
+        "residual_deg": 2.4854,
+        "t_years": 21.8103
+      },
+      {
+        "residual_deg": 1.409,
+        "t_years": 21.8781
+      },
+      {
+        "residual_deg": 1.3761,
+        "t_years": 21.9458
+      },
+      {
+        "residual_deg": 2.3399,
+        "t_years": 22.0135
+      },
+      {
+        "residual_deg": 1.49,
+        "t_years": 22.0813
+      },
+      {
+        "residual_deg": 2.1375,
+        "t_years": 22.149
+      },
+      {
+        "residual_deg": 1.6997,
+        "t_years": 22.2167
+      },
+      {
+        "residual_deg": 1.9775,
+        "t_years": 22.2845
+      },
+      {
+        "residual_deg": 1.9438,
+        "t_years": 22.3522
+      },
+      {
+        "residual_deg": 2.0424,
+        "t_years": 22.42
+      },
+      {
+        "residual_deg": 2.146,
+        "t_years": 22.4877
+      },
+      {
+        "residual_deg": 1.4747,
+        "t_years": 22.5554
+      },
+      {
+        "residual_deg": 2.1232,
+        "t_years": 22.6232
+      },
+      {
+        "residual_deg": 2.2022,
+        "t_years": 22.6909
+      },
+      {
+        "residual_deg": 1.809,
+        "t_years": 22.7586
+      },
+      {
+        "residual_deg": 2.5079,
+        "t_years": 22.8264
+      },
+      {
+        "residual_deg": 1.57,
+        "t_years": 22.8941
+      },
+      {
+        "residual_deg": 2.0188,
+        "t_years": 22.9618
+      },
+      {
+        "residual_deg": 2.7423,
+        "t_years": 23.0296
+      },
+      {
+        "residual_deg": 1.9147,
+        "t_years": 23.0973
+      },
+      {
+        "residual_deg": 2.1429,
+        "t_years": 23.165
+      },
+      {
+        "residual_deg": 1.6372,
+        "t_years": 23.2328
+      },
+      {
+        "residual_deg": 2.0526,
+        "t_years": 23.3005
+      },
+      {
+        "residual_deg": 2.3335,
+        "t_years": 23.3682
+      },
+      {
+        "residual_deg": 2.4336,
+        "t_years": 23.436
+      },
+      {
+        "residual_deg": 2.3855,
+        "t_years": 23.5037
+      },
+      {
+        "residual_deg": 1.7126,
+        "t_years": 23.5714
+      },
+      {
+        "residual_deg": 2.2848,
+        "t_years": 23.6392
+      },
+      {
+        "residual_deg": 1.804,
+        "t_years": 23.7069
+      },
+      {
+        "residual_deg": 1.7962,
+        "t_years": 23.7746
+      },
+      {
+        "residual_deg": 2.2731,
+        "t_years": 23.8424
+      },
+      {
+        "residual_deg": 2.128,
+        "t_years": 23.9101
+      },
+      {
+        "residual_deg": 2.781,
+        "t_years": 23.9778
+      },
+      {
+        "residual_deg": 1.6257,
+        "t_years": 24.0456
+      },
+      {
+        "residual_deg": 1.6324,
+        "t_years": 24.1133
+      },
+      {
+        "residual_deg": 1.8582,
+        "t_years": 24.181
+      },
+      {
+        "residual_deg": 2.2391,
+        "t_years": 24.2488
+      },
+      {
+        "residual_deg": 2.6129,
+        "t_years": 24.3165
+      },
+      {
+        "residual_deg": 1.6697,
+        "t_years": 24.3842
+      },
+      {
+        "residual_deg": 1.8933,
+        "t_years": 24.452
+      },
+      {
+        "residual_deg": 1.7492,
+        "t_years": 24.5197
+      },
+      {
+        "residual_deg": 1.8342,
+        "t_years": 24.5874
+      },
+      {
+        "residual_deg": 2.2434,
+        "t_years": 24.6552
+      },
+      {
+        "residual_deg": 2.0841,
+        "t_years": 24.7229
+      },
+      {
+        "residual_deg": 1.7017,
+        "t_years": 24.7906
+      },
+      {
+        "residual_deg": 1.7564,
+        "t_years": 24.8584
+      },
+      {
+        "residual_deg": 1.7194,
+        "t_years": 24.9261
+      },
+      {
+        "residual_deg": 1.4656,
+        "t_years": 24.9938
+      },
+      {
+        "residual_deg": 2.3804,
+        "t_years": 25.0616
+      },
+      {
+        "residual_deg": 1.7052,
+        "t_years": 25.1293
+      },
+      {
+        "residual_deg": 1.4,
+        "t_years": 25.197
+      },
+      {
+        "residual_deg": 2.0633,
+        "t_years": 25.2648
+      },
+      {
+        "residual_deg": 1.019,
+        "t_years": 25.3325
+      },
+      {
+        "residual_deg": 1.9041,
+        "t_years": 25.4002
+      },
+      {
+        "residual_deg": 2.0165,
+        "t_years": 25.468
+      },
+      {
+        "residual_deg": 1.4875,
+        "t_years": 25.5357
+      },
+      {
+        "residual_deg": 1.0974,
+        "t_years": 25.6034
+      },
+      {
+        "residual_deg": 1.5213,
+        "t_years": 25.6712
+      },
+      {
+        "residual_deg": 1.3308,
+        "t_years": 25.7389
+      },
+      {
+        "residual_deg": 1.6128,
+        "t_years": 25.8067
+      },
+      {
+        "residual_deg": 1.9568,
+        "t_years": 25.8744
+      },
+      {
+        "residual_deg": 1.1401,
+        "t_years": 25.9421
+      },
+      {
+        "residual_deg": 1.0258,
+        "t_years": 26.0099
+      },
+      {
+        "residual_deg": 0.7089,
+        "t_years": 26.0776
+      },
+      {
+        "residual_deg": 1.734,
+        "t_years": 26.1453
+      },
+      {
+        "residual_deg": 1.3836,
+        "t_years": 26.2131
+      },
+      {
+        "residual_deg": 1.4649,
+        "t_years": 26.2808
+      },
+      {
+        "residual_deg": 0.798,
+        "t_years": 26.3485
+      },
+      {
+        "residual_deg": 0.5824,
+        "t_years": 26.4163
+      },
+      {
+        "residual_deg": 1.2405,
+        "t_years": 26.484
+      },
+      {
+        "residual_deg": 1.4539,
+        "t_years": 26.5517
+      },
+      {
+        "residual_deg": 0.4244,
+        "t_years": 26.6195
+      },
+      {
+        "residual_deg": 1.1353,
+        "t_years": 26.6872
+      },
+      {
+        "residual_deg": 0.8312,
+        "t_years": 26.7549
+      },
+      {
+        "residual_deg": 0.5007,
+        "t_years": 26.8227
+      },
+      {
+        "residual_deg": 1.3452,
+        "t_years": 26.8904
+      },
+      {
+        "residual_deg": 0.0669,
+        "t_years": 26.9581
+      },
+      {
+        "residual_deg": 0.8714,
+        "t_years": 27.0259
+      },
+      {
+        "residual_deg": 1.0513,
+        "t_years": 27.0936
+      },
+      {
+        "residual_deg": 0.7715,
+        "t_years": 27.1613
+      },
+      {
+        "residual_deg": 0.2006,
+        "t_years": 27.2291
+      },
+      {
+        "residual_deg": 0.271,
+        "t_years": 27.2968
+      },
+      {
+        "residual_deg": 0.1456,
+        "t_years": 27.3645
+      },
+      {
+        "residual_deg": 1.0007,
+        "t_years": 27.4323
+      },
+      {
+        "residual_deg": 0.6606,
+        "t_years": 27.5
+      },
+      {
+        "residual_deg": 0.14,
+        "t_years": 27.5677
+      },
+      {
+        "residual_deg": 0.4634,
+        "t_years": 27.6355
+      },
+      {
+        "residual_deg": 0.0769,
+        "t_years": 27.7032
+      },
+      {
+        "residual_deg": 0.2805,
+        "t_years": 27.7709
+      },
+      {
+        "residual_deg": 0.1708,
+        "t_years": 27.8387
+      },
+      {
+        "residual_deg": 0.0583,
+        "t_years": 27.9064
+      },
+      {
+        "residual_deg": -0.2278,
+        "t_years": 27.9741
+      },
+      {
+        "residual_deg": 0.6366,
+        "t_years": 28.0419
+      },
+      {
+        "residual_deg": 0.4058,
+        "t_years": 28.1096
+      },
+      {
+        "residual_deg": -0.7545,
+        "t_years": 28.1773
+      },
+      {
+        "residual_deg": 0.6967,
+        "t_years": 28.2451
+      },
+      {
+        "residual_deg": -0.7002,
+        "t_years": 28.3128
+      },
+      {
+        "residual_deg": -0.4714,
+        "t_years": 28.3805
+      },
+      {
+        "residual_deg": 0.509,
+        "t_years": 28.4483
+      },
+      {
+        "residual_deg": -0.6422,
+        "t_years": 28.516
+      },
+      {
+        "residual_deg": 0.5478,
+        "t_years": 28.5837
+      },
+      {
+        "residual_deg": -0.7143,
+        "t_years": 28.6515
+      },
+      {
+        "residual_deg": -0.5192,
+        "t_years": 28.7192
+      },
+      {
+        "residual_deg": -0.0596,
+        "t_years": 28.7869
+      },
+      {
+        "residual_deg": -0.6246,
+        "t_years": 28.8547
+      },
+      {
+        "residual_deg": -0.3121,
+        "t_years": 28.9224
+      },
+      {
+        "residual_deg": -0.1731,
+        "t_years": 28.9901
+      },
+      {
+        "residual_deg": -0.6212,
+        "t_years": 29.0579
+      },
+      {
+        "residual_deg": -0.6617,
+        "t_years": 29.1256
+      },
+      {
+        "residual_deg": -0.0502,
+        "t_years": 29.1934
+      },
+      {
+        "residual_deg": -0.851,
+        "t_years": 29.2611
+      },
+      {
+        "residual_deg": -0.7012,
+        "t_years": 29.3288
+      },
+      {
+        "residual_deg": -0.5469,
+        "t_years": 29.3966
+      },
+      {
+        "residual_deg": -0.7466,
+        "t_years": 29.4643
+      },
+      {
+        "residual_deg": -0.0201,
+        "t_years": 29.532
+      },
+      {
+        "residual_deg": -1.1168,
+        "t_years": 29.5998
+      },
+      {
+        "residual_deg": -0.5216,
+        "t_years": 29.6675
+      },
+      {
+        "residual_deg": -0.899,
+        "t_years": 29.7352
+      },
+      {
+        "residual_deg": -0.9612,
+        "t_years": 29.803
+      },
+      {
+        "residual_deg": -0.4611,
+        "t_years": 29.8707
+      },
+      {
+        "residual_deg": -1.0207,
+        "t_years": 29.9384
+      },
+      {
+        "residual_deg": -0.6552,
+        "t_years": 30.0062
+      },
+      {
+        "residual_deg": -0.8912,
+        "t_years": 30.0739
+      },
+      {
+        "residual_deg": -0.4013,
+        "t_years": 30.1416
+      },
+      {
+        "residual_deg": -0.9493,
+        "t_years": 30.2094
+      },
+      {
+        "residual_deg": -1.1645,
+        "t_years": 30.2771
+      },
+      {
+        "residual_deg": -1.3208,
+        "t_years": 30.3448
+      },
+      {
+        "residual_deg": -0.3123,
+        "t_years": 30.4126
+      },
+      {
+        "residual_deg": -1.2038,
+        "t_years": 30.4803
+      },
+      {
+        "residual_deg": -0.6489,
+        "t_years": 30.548
+      },
+      {
+        "residual_deg": -0.5269,
+        "t_years": 30.6158
+      },
+      {
+        "residual_deg": -1.7504,
+        "t_years": 30.6835
+      },
+      {
+        "residual_deg": -0.007,
+        "t_years": 30.7512
+      },
+      {
+        "residual_deg": -1.457,
+        "t_years": 30.819
+      },
+      {
+        "residual_deg": -1.1197,
+        "t_years": 30.8867
+      },
+      {
+        "residual_deg": -0.7315,
+        "t_years": 30.9544
+      },
+      {
+        "residual_deg": -0.9702,
+        "t_years": 31.0222
+      },
+      {
+        "residual_deg": -0.594,
+        "t_years": 31.0899
+      },
+      {
+        "residual_deg": -1.2479,
+        "t_years": 31.1576
+      },
+      {
+        "residual_deg": -0.5968,
+        "t_years": 31.2254
+      },
+      {
+        "residual_deg": -1.4301,
+        "t_years": 31.2931
+      },
+      {
+        "residual_deg": -0.6712,
+        "t_years": 31.3608
+      },
+      {
+        "residual_deg": -0.8774,
+        "t_years": 31.4286
+      },
+      {
+        "residual_deg": -1.4892,
+        "t_years": 31.4963
+      },
+      {
+        "residual_deg": -0.3169,
+        "t_years": 31.564
+      },
+      {
+        "residual_deg": -1.2666,
+        "t_years": 31.6318
+      },
+      {
+        "residual_deg": -0.7758,
+        "t_years": 31.6995
+      },
+      {
+        "residual_deg": -1.0042,
+        "t_years": 31.7672
+      },
+      {
+        "residual_deg": -1.9249,
+        "t_years": 31.835
+      },
+      {
+        "residual_deg": -0.3266,
+        "t_years": 31.9027
+      },
+      {
+        "residual_deg": 0.0207,
+        "t_years": 31.9704
+      },
+      {
+        "residual_deg": -1.6122,
+        "t_years": 32.0382
+      },
+      {
+        "residual_deg": -1.4955,
+        "t_years": 32.1059
+      },
+      {
+        "residual_deg": -0.8664,
+        "t_years": 32.1736
+      },
+      {
+        "residual_deg": -1.2688,
+        "t_years": 32.2414
+      },
+      {
+        "residual_deg": -0.6329,
+        "t_years": 32.3091
+      },
+      {
+        "residual_deg": -0.1187,
+        "t_years": 32.3768
+      },
+      {
+        "residual_deg": -1.5806,
+        "t_years": 32.4446
+      },
+      {
+        "residual_deg": -1.1617,
+        "t_years": 32.5123
+      },
+      {
+        "residual_deg": -0.4622,
+        "t_years": 32.58
+      },
+      {
+        "residual_deg": -1.4221,
+        "t_years": 32.6478
+      },
+      {
+        "residual_deg": -1.2596,
+        "t_years": 32.7155
+      },
+      {
+        "residual_deg": -0.1259,
+        "t_years": 32.7833
+      },
+      {
+        "residual_deg": -1.4261,
+        "t_years": 32.851
+      },
+      {
+        "residual_deg": -0.4293,
+        "t_years": 32.9187
+      },
+      {
+        "residual_deg": -0.5448,
+        "t_years": 32.9865
+      },
+      {
+        "residual_deg": -2.115,
+        "t_years": 33.0542
+      },
+      {
+        "residual_deg": -0.4961,
+        "t_years": 33.1219
+      },
+      {
+        "residual_deg": -0.806,
+        "t_years": 33.1897
+      },
+      {
+        "residual_deg": -0.3814,
+        "t_years": 33.2574
+      },
+      {
+        "residual_deg": -0.2264,
+        "t_years": 33.3251
+      },
+      {
+        "residual_deg": -1.5851,
+        "t_years": 33.3929
+      },
+      {
+        "residual_deg": -1.2918,
+        "t_years": 33.4606
+      },
+      {
+        "residual_deg": -0.4593,
+        "t_years": 33.5283
+      },
+      {
+        "residual_deg": -0.641,
+        "t_years": 33.5961
+      },
+      {
+        "residual_deg": -0.4673,
+        "t_years": 33.6638
+      },
+      {
+        "residual_deg": -0.6857,
+        "t_years": 33.7315
+      },
+      {
+        "residual_deg": -1.0126,
+        "t_years": 33.7993
+      },
+      {
+        "residual_deg": -0.148,
+        "t_years": 33.867
+      },
+      {
+        "residual_deg": -1.579,
+        "t_years": 33.9347
+      },
+      {
+        "residual_deg": -0.3716,
+        "t_years": 34.0025
+      },
+      {
+        "residual_deg": -0.2263,
+        "t_years": 34.0702
+      },
+      {
+        "residual_deg": -1.6561,
+        "t_years": 34.1379
+      },
+      {
+        "residual_deg": 0.4599,
+        "t_years": 34.2057
+      },
+      {
+        "residual_deg": -0.2154,
+        "t_years": 34.2734
+      },
+      {
+        "residual_deg": -1.5455,
+        "t_years": 34.3411
+      },
+      {
+        "residual_deg": -0.7401,
+        "t_years": 34.4089
+      },
+      {
+        "residual_deg": -0.2163,
+        "t_years": 34.4766
+      },
+      {
+        "residual_deg": -0.6689,
+        "t_years": 34.5443
+      },
+      {
+        "residual_deg": 0.0702,
+        "t_years": 34.6121
+      },
+      {
+        "residual_deg": -0.229,
+        "t_years": 34.6798
+      },
+      {
+        "residual_deg": -1.3724,
+        "t_years": 34.7475
+      },
+      {
+        "residual_deg": -0.2522,
+        "t_years": 34.8153
+      },
+      {
+        "residual_deg": -0.8352,
+        "t_years": 34.883
+      },
+      {
+        "residual_deg": 0.3977,
+        "t_years": 34.9507
+      },
+      {
+        "residual_deg": 0.1247,
+        "t_years": 35.0185
+      },
+      {
+        "residual_deg": -0.7665,
+        "t_years": 35.0862
+      },
+      {
+        "residual_deg": -0.393,
+        "t_years": 35.1539
+      },
+      {
+        "residual_deg": -0.5083,
+        "t_years": 35.2217
+      },
+      {
+        "residual_deg": 0.0995,
+        "t_years": 35.2894
+      },
+      {
+        "residual_deg": -0.6539,
+        "t_years": 35.3571
+      },
+      {
+        "residual_deg": 0.0267,
+        "t_years": 35.4249
+      },
+      {
+        "residual_deg": 0.2985,
+        "t_years": 35.4926
+      },
+      {
+        "residual_deg": 0.0033,
+        "t_years": 35.5603
+      },
+      {
+        "residual_deg": -0.2758,
+        "t_years": 35.6281
+      },
+      {
+        "residual_deg": -0.6945,
+        "t_years": 35.6958
+      },
+      {
+        "residual_deg": 0.0846,
+        "t_years": 35.7635
+      },
+      {
+        "residual_deg": 0.5521,
+        "t_years": 35.8313
+      },
+      {
+        "residual_deg": 0.5175,
+        "t_years": 35.899
+      },
+      {
+        "residual_deg": -1.1741,
+        "t_years": 35.9667
+      },
+      {
+        "residual_deg": 0.1354,
+        "t_years": 36.0345
+      },
+      {
+        "residual_deg": 0.6958,
+        "t_years": 36.1022
+      },
+      {
+        "residual_deg": -0.3028,
+        "t_years": 36.17
+      },
+      {
+        "residual_deg": 0.8863,
+        "t_years": 36.2377
+      },
+      {
+        "residual_deg": -0.1204,
+        "t_years": 36.3054
+      },
+      {
+        "residual_deg": -0.2509,
+        "t_years": 36.3732
+      },
+      {
+        "residual_deg": 0.9443,
+        "t_years": 36.4409
+      },
+      {
+        "residual_deg": -0.1006,
+        "t_years": 36.5086
+      },
+      {
+        "residual_deg": 0.0697,
+        "t_years": 36.5764
+      },
+      {
+        "residual_deg": 1.1799,
+        "t_years": 36.6441
+      },
+      {
+        "residual_deg": 0.5607,
+        "t_years": 36.7118
+      },
+      {
+        "residual_deg": 0.6456,
+        "t_years": 36.7796
+      },
+      {
+        "residual_deg": -0.4129,
+        "t_years": 36.8473
+      },
+      {
+        "residual_deg": 0.6242,
+        "t_years": 36.915
+      },
+      {
+        "residual_deg": 0.3856,
+        "t_years": 36.9828
+      },
+      {
+        "residual_deg": 1.6921,
+        "t_years": 37.0505
+      },
+      {
+        "residual_deg": 0.3208,
+        "t_years": 37.1182
+      },
+      {
+        "residual_deg": -0.252,
+        "t_years": 37.186
+      },
+      {
+        "residual_deg": 1.3248,
+        "t_years": 37.2537
+      },
+      {
+        "residual_deg": 0.7105,
+        "t_years": 37.3214
+      },
+      {
+        "residual_deg": 0.7413,
+        "t_years": 37.3892
+      },
+      {
+        "residual_deg": 0.5784,
+        "t_years": 37.4569
+      },
+      {
+        "residual_deg": 0.6234,
+        "t_years": 37.5246
+      },
+      {
+        "residual_deg": 1.1126,
+        "t_years": 37.5924
+      },
+      {
+        "residual_deg": 1.218,
+        "t_years": 37.6601
+      },
+      {
+        "residual_deg": -0.0756,
+        "t_years": 37.7278
+      },
+      {
+        "residual_deg": 1.2066,
+        "t_years": 37.7956
+      },
+      {
+        "residual_deg": 1.1808,
+        "t_years": 37.8633
+      },
+      {
+        "residual_deg": 1.4547,
+        "t_years": 37.931
+      },
+      {
+        "residual_deg": 0.7237,
+        "t_years": 37.9988
+      },
+      {
+        "residual_deg": 0.5758,
+        "t_years": 38.0665
+      },
+      {
+        "residual_deg": 1.3073,
+        "t_years": 38.1342
+      },
+      {
+        "residual_deg": 0.2203,
+        "t_years": 38.202
+      },
+      {
+        "residual_deg": 2.0978,
+        "t_years": 38.2697
+      },
+      {
+        "residual_deg": 0.9487,
+        "t_years": 38.3374
+      },
+      {
+        "residual_deg": 0.5044,
+        "t_years": 38.4052
+      },
+      {
+        "residual_deg": 1.8022,
+        "t_years": 38.4729
+      },
+      {
+        "residual_deg": 1.455,
+        "t_years": 38.5406
+      },
+      {
+        "residual_deg": -0.0013,
+        "t_years": 38.6084
+      },
+      {
+        "residual_deg": 1.7723,
+        "t_years": 38.6761
+      },
+      {
+        "residual_deg": 1.5766,
+        "t_years": 38.7438
+      },
+      {
+        "residual_deg": 1.2867,
+        "t_years": 38.8116
+      },
+      {
+        "residual_deg": 1.0483,
+        "t_years": 38.8793
+      },
+      {
+        "residual_deg": 0.8511,
+        "t_years": 38.947
+      },
+      {
+        "residual_deg": 1.5971,
+        "t_years": 39.0148
+      },
+      {
+        "residual_deg": 1.3956,
+        "t_years": 39.0825
+      },
+      {
+        "residual_deg": 1.4416,
+        "t_years": 39.1502
+      },
+      {
+        "residual_deg": 1.2708,
+        "t_years": 39.218
+      },
+      {
+        "residual_deg": 1.2897,
+        "t_years": 39.2857
+      },
+      {
+        "residual_deg": 1.2267,
+        "t_years": 39.3534
+      },
+      {
+        "residual_deg": 1.5797,
+        "t_years": 39.4212
+      },
+      {
+        "residual_deg": 0.852,
+        "t_years": 39.4889
+      },
+      {
+        "residual_deg": 1.741,
+        "t_years": 39.5567
+      },
+      {
+        "residual_deg": 1.7159,
+        "t_years": 39.6244
+      },
+      {
+        "residual_deg": 1.5491,
+        "t_years": 39.6921
+      },
+      {
+        "residual_deg": 1.3386,
+        "t_years": 39.7599
+      },
+      {
+        "residual_deg": 0.5072,
+        "t_years": 39.8276
+      },
+      {
+        "residual_deg": 2.3566,
+        "t_years": 39.8953
+      },
+      {
+        "residual_deg": 1.8564,
+        "t_years": 39.9631
+      },
+      {
+        "residual_deg": 1.6301,
+        "t_years": 40.0308
+      },
+      {
+        "residual_deg": 0.7669,
+        "t_years": 40.0985
+      },
+      {
+        "residual_deg": 1.0622,
+        "t_years": 40.1663
+      },
+      {
+        "residual_deg": 2.1423,
+        "t_years": 40.234
+      },
+      {
+        "residual_deg": 1.9484,
+        "t_years": 40.3017
+      },
+      {
+        "residual_deg": 1.2164,
+        "t_years": 40.3695
+      },
+      {
+        "residual_deg": 1.0062,
+        "t_years": 40.4372
+      },
+      {
+        "residual_deg": 1.5888,
+        "t_years": 40.5049
+      },
+      {
+        "residual_deg": 2.1588,
+        "t_years": 40.5727
+      },
+      {
+        "residual_deg": 1.7416,
+        "t_years": 40.6404
+      },
+      {
+        "residual_deg": 1.695,
+        "t_years": 40.7081
+      },
+      {
+        "residual_deg": 1.216,
+        "t_years": 40.7759
+      },
+      {
+        "residual_deg": 1.0068,
+        "t_years": 40.8436
+      },
+      {
+        "residual_deg": 2.3724,
+        "t_years": 40.9113
+      },
+      {
+        "residual_deg": 0.8133,
+        "t_years": 40.9791
+      },
+      {
+        "residual_deg": 1.6269,
+        "t_years": 41.0468
+      },
+      {
+        "residual_deg": 1.7054,
+        "t_years": 41.1145
+      },
+      {
+        "residual_deg": 1.9906,
+        "t_years": 41.1823
+      },
+      {
+        "residual_deg": 1.4173,
+        "t_years": 41.25
+      },
+      {
+        "residual_deg": 0.4495,
+        "t_years": 41.3177
+      },
+      {
+        "residual_deg": 2.6532,
+        "t_years": 41.3855
+      },
+      {
+        "residual_deg": 1.158,
+        "t_years": 41.4532
+      },
+      {
+        "residual_deg": 1.4709,
+        "t_years": 41.5209
+      },
+      {
+        "residual_deg": 2.1522,
+        "t_years": 41.5887
+      },
+      {
+        "residual_deg": 0.6657,
+        "t_years": 41.6564
+      },
+      {
+        "residual_deg": 2.241,
+        "t_years": 41.7241
+      },
+      {
+        "residual_deg": 1.166,
+        "t_years": 41.7919
+      },
+      {
+        "residual_deg": 1.5175,
+        "t_years": 41.8596
+      },
+      {
+        "residual_deg": 1.2934,
+        "t_years": 41.9273
+      },
+      {
+        "residual_deg": 1.1704,
+        "t_years": 41.9951
+      },
+      {
+        "residual_deg": 2.0574,
+        "t_years": 42.0628
+      },
+      {
+        "residual_deg": 0.335,
+        "t_years": 42.1305
+      },
+      {
+        "residual_deg": 2.4086,
+        "t_years": 42.1983
+      },
+      {
+        "residual_deg": 1.6906,
+        "t_years": 42.266
+      },
+      {
+        "residual_deg": 0.9661,
+        "t_years": 42.3337
+      },
+      {
+        "residual_deg": 1.5904,
+        "t_years": 42.4015
+      },
+      {
+        "residual_deg": 0.9347,
+        "t_years": 42.4692
+      },
+      {
+        "residual_deg": 0.8741,
+        "t_years": 42.5369
+      },
+      {
+        "residual_deg": 2.3727,
+        "t_years": 42.6047
+      },
+      {
+        "residual_deg": 2.205,
+        "t_years": 42.6724
+      },
+      {
+        "residual_deg": -0.2523,
+        "t_years": 42.7401
+      },
+      {
+        "residual_deg": 1.6146,
+        "t_years": 42.8079
+      },
+      {
+        "residual_deg": 0.7634,
+        "t_years": 42.8756
+      },
+      {
+        "residual_deg": 1.6286,
+        "t_years": 42.9434
+      },
+      {
+        "residual_deg": 1.4498,
+        "t_years": 43.0111
+      },
+      {
+        "residual_deg": 0.6582,
+        "t_years": 43.0788
+      },
+      {
+        "residual_deg": 1.1056,
+        "t_years": 43.1466
+      },
+      {
+        "residual_deg": 0.927,
+        "t_years": 43.2143
+      },
+      {
+        "residual_deg": 1.5331,
+        "t_years": 43.282
+      },
+      {
+        "residual_deg": 0.4844,
+        "t_years": 43.3498
+      },
+      {
+        "residual_deg": 1.7734,
+        "t_years": 43.4175
+      },
+      {
+        "residual_deg": 0.3648,
+        "t_years": 43.4852
+      },
+      {
+        "residual_deg": 0.5222,
+        "t_years": 43.553
+      },
+      {
+        "residual_deg": 1.3208,
+        "t_years": 43.6207
+      },
+      {
+        "residual_deg": 0.0034,
+        "t_years": 43.6884
+      },
+      {
+        "residual_deg": 1.5628,
+        "t_years": 43.7562
+      },
+      {
+        "residual_deg": 0.5413,
+        "t_years": 43.8239
+      },
+      {
+        "residual_deg": 0.4252,
+        "t_years": 43.8916
+      },
+      {
+        "residual_deg": 1.2982,
+        "t_years": 43.9594
+      },
+      {
+        "residual_deg": 0.8864,
+        "t_years": 44.0271
+      },
+      {
+        "residual_deg": -0.5023,
+        "t_years": 44.0948
+      },
+      {
+        "residual_deg": 0.3545,
+        "t_years": 44.1626
+      },
+      {
+        "residual_deg": 1.3044,
+        "t_years": 44.2303
+      },
+      {
+        "residual_deg": -0.1872,
+        "t_years": 44.298
+      },
+      {
+        "residual_deg": 1.3888,
+        "t_years": 44.3658
+      },
+      {
+        "residual_deg": -1.645,
+        "t_years": 44.4335
+      },
+      {
+        "residual_deg": 1.36,
+        "t_years": 44.5012
+      },
+      {
+        "residual_deg": 0.7211,
+        "t_years": 44.569
+      },
+      {
+        "residual_deg": -0.4514,
+        "t_years": 44.6367
+      },
+      {
+        "residual_deg": 0.894,
+        "t_years": 44.7044
+      },
+      {
+        "residual_deg": -0.8074,
+        "t_years": 44.7722
+      },
+      {
+        "residual_deg": 0.0296,
+        "t_years": 44.8399
+      },
+      {
+        "residual_deg": 0.3206,
+        "t_years": 44.9076
+      },
+      {
+        "residual_deg": 0.9198,
+        "t_years": 44.9754
+      },
+      {
+        "residual_deg": -1.1031,
+        "t_years": 45.0431
+      },
+      {
+        "residual_deg": -0.541,
+        "t_years": 45.1108
+      },
+      {
+        "residual_deg": 0.2856,
+        "t_years": 45.1786
+      },
+      {
+        "residual_deg": -0.5532,
+        "t_years": 45.2463
+      },
+      {
+        "residual_deg": -0.1938,
+        "t_years": 45.314
+      },
+      {
+        "residual_deg": -0.6885,
+        "t_years": 45.3818
+      },
+      {
+        "residual_deg": -0.4658,
+        "t_years": 45.4495
+      },
+      {
+        "residual_deg": 0.3697,
+        "t_years": 45.5172
+      },
+      {
+        "residual_deg": -0.8254,
+        "t_years": 45.585
+      },
+      {
+        "residual_deg": -0.5808,
+        "t_years": 45.6527
+      },
+      {
+        "residual_deg": -1.8253,
+        "t_years": 45.7204
+      },
+      {
+        "residual_deg": -0.227,
+        "t_years": 45.7882
+      },
+      {
+        "residual_deg": -0.3372,
+        "t_years": 45.8559
+      },
+      {
+        "residual_deg": -0.5139,
+        "t_years": 45.9236
+      },
+      {
+        "residual_deg": -0.612,
+        "t_years": 45.9914
+      },
+      {
+        "residual_deg": -2.3777,
+        "t_years": 46.0591
+      },
+      {
+        "residual_deg": -0.6575,
+        "t_years": 46.1268
+      },
+      {
+        "residual_deg": -0.4692,
+        "t_years": 46.1946
+      },
+      {
+        "residual_deg": -1.4145,
+        "t_years": 46.2623
+      },
+      {
+        "residual_deg": -1.603,
+        "t_years": 46.33
+      },
+      {
+        "residual_deg": -0.5712,
+        "t_years": 46.3978
+      },
+      {
+        "residual_deg": -0.7197,
+        "t_years": 46.4655
+      },
+      {
+        "residual_deg": -1.1581,
+        "t_years": 46.5333
+      },
+      {
+        "residual_deg": -2.2637,
+        "t_years": 46.601
+      },
+      {
+        "residual_deg": -1.8344,
+        "t_years": 46.6687
+      },
+      {
+        "residual_deg": -0.9574,
+        "t_years": 46.7365
+      },
+      {
+        "residual_deg": -1.2549,
+        "t_years": 46.8042
+      },
+      {
+        "residual_deg": -1.015,
+        "t_years": 46.8719
+      },
+      {
+        "residual_deg": -2.7941,
+        "t_years": 46.9397
+      },
+      {
+        "residual_deg": -1.5778,
+        "t_years": 47.0074
+      },
+      {
+        "residual_deg": -0.6528,
+        "t_years": 47.0751
+      },
+      {
+        "residual_deg": -2.7788,
+        "t_years": 47.1429
+      },
+      {
+        "residual_deg": -1.2169,
+        "t_years": 47.2106
+      },
+      {
+        "residual_deg": -2.0314,
+        "t_years": 47.2783
+      },
+      {
+        "residual_deg": -1.7096,
+        "t_years": 47.3461
+      },
+      {
+        "residual_deg": -1.1743,
+        "t_years": 47.4138
+      },
+      {
+        "residual_deg": -2.4043,
+        "t_years": 47.4815
+      },
+      {
+        "residual_deg": -2.2749,
+        "t_years": 47.5493
+      },
+      {
+        "residual_deg": -2.3504,
+        "t_years": 47.617
+      },
+      {
+        "residual_deg": -1.0538,
+        "t_years": 47.6847
+      },
+      {
+        "residual_deg": -2.6294,
+        "t_years": 47.7525
+      },
+      {
+        "residual_deg": -2.4624,
+        "t_years": 47.8202
+      },
+      {
+        "residual_deg": -1.6664,
+        "t_years": 47.8879
+      },
+      {
+        "residual_deg": -3.1952,
+        "t_years": 47.9557
+      },
+      {
+        "residual_deg": -1.111,
+        "t_years": 48.0234
+      },
+      {
+        "residual_deg": -2.0847,
+        "t_years": 48.0911
+      },
+      {
+        "residual_deg": -2.5138,
+        "t_years": 48.1589
+      },
+      {
+        "residual_deg": -2.7646,
+        "t_years": 48.2266
+      },
+      {
+        "residual_deg": -1.8878,
+        "t_years": 48.2943
+      },
+      {
+        "residual_deg": -2.5498,
+        "t_years": 48.3621
+      },
+      {
+        "residual_deg": -2.9794,
+        "t_years": 48.4298
+      },
+      {
+        "residual_deg": -0.8349,
+        "t_years": 48.4975
+      },
+      {
+        "residual_deg": -3.7317,
+        "t_years": 48.5653
+      },
+      {
+        "residual_deg": -1.8604,
+        "t_years": 48.633
+      },
+      {
+        "residual_deg": -3.0658,
+        "t_years": 48.7007
+      },
+      {
+        "residual_deg": -2.1892,
+        "t_years": 48.7685
+      },
+      {
+        "residual_deg": -2.2483,
+        "t_years": 48.8362
+      },
+      {
+        "residual_deg": -2.8292,
+        "t_years": 48.9039
+      },
+      {
+        "residual_deg": -2.788,
+        "t_years": 48.9717
+      },
+      {
+        "residual_deg": -2.3694,
+        "t_years": 49.0394
+      },
+      {
+        "residual_deg": -1.5046,
+        "t_years": 49.1071
+      },
+      {
+        "residual_deg": -4.0723,
+        "t_years": 49.1749
+      },
+      {
+        "residual_deg": -1.8221,
+        "t_years": 49.2426
+      },
+      {
+        "residual_deg": -2.2998,
+        "t_years": 49.3103
+      },
+      {
+        "residual_deg": -3.746,
+        "t_years": 49.3781
+      },
+      {
+        "residual_deg": -1.718,
+        "t_years": 49.4458
+      },
+      {
+        "residual_deg": -2.6031,
+        "t_years": 49.5135
+      },
+      {
+        "residual_deg": -4.4053,
+        "t_years": 49.5813
+      },
+      {
+        "residual_deg": -0.6682,
+        "t_years": 49.649
+      },
+      {
+        "residual_deg": -2.6689,
+        "t_years": 49.7167
+      },
+      {
+        "residual_deg": -2.9019,
+        "t_years": 49.7845
+      },
+      {
+        "residual_deg": -2.4334,
+        "t_years": 49.8522
+      },
+      {
+        "residual_deg": -2.8647,
+        "t_years": 49.92
+      },
+      {
+        "residual_deg": -2.4491,
+        "t_years": 49.9877
+      }
+    ]
+  },
+  "encoding": {
+    "x": {
+      "field": "t_years",
+      "title": "Time (years)",
+      "type": "quantitative"
+    },
+    "y": {
+      "field": "residual_deg",
+      "title": "Apse longitude minus linear fit (deg)",
+      "type": "quantitative"
+    }
+  },
+  "height": 220,
+  "mark": {
+    "color": "#0072B2",
+    "type": "line"
+  },
+  "title": "Apse longitude of the core pattern, both moons: wobble about the mean rate",
+  "width": 620
+}

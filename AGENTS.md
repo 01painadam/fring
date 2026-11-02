@@ -158,4 +158,12 @@ cd validation && uv run python scripts/v3_particles.py           # V3, about 2 m
 cd validation && uv run python scripts/v3_compare.py --rust <file.csv>   # V3, compare a Rust trajectory (long CSV) with the reference
 ```
 
+Analysis commands (A8; `fring-analyse` reads run directories, and the plots are a `uv` project in `crates/fring-analysis/python/` with Altair). `docs/results/a1-analysis.md` lists the full set of runs:
+
+```sh
+cargo run -p fring-analysis --release --bin fring-analyse -- map|compare|closest|apse|moons|laplace|lyapunov ...   # see the header of src/bin/fring_analyse.rs
+cd crates/fring-analysis/python && uv sync                    # install altair, vl-convert-python, pandas, numpy
+cd crates/fring-analysis/python && uv run python plots.py     # all figures from docs/results/data/ to docs/results/figures/ (PNG and Vega-Lite JSON)
+```
+
 Web commands: A7 adds them here when task W1 is done.

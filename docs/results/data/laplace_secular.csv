@@ -1,0 +1,5 @@
+name,a_guiding_km,alpha,mu,rate_deg_per_day
+saturn_only,,,,2.698407
+prometheus,139378.0,0.99398,2.8235e-10,0.000719
+pandora,141712.3,0.98949,2.4413e-10,0.000201
+sum_of_moons,,,,0.000920

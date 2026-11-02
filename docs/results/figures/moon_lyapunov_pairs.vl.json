@@ -1,0 +1,488 @@
+{
+  "$schema": "https://vega.github.io/schema/vega-lite/v5.20.1.json",
+  "config": {
+    "view": {
+      "continuousHeight": 300,
+      "continuousWidth": 300,
+      "strokeWidth": 0
+    }
+  },
+  "datasets": {
+    "data-52b2b0f612262fc99ac7d9c43e7c79bd": [
+      {
+        "pair": 0,
+        "slope": 0.0296
+      },
+      {
+        "pair": 1,
+        "slope": 0.0302
+      },
+      {
+        "pair": 2,
+        "slope": 0.0307
+      },
+      {
+        "pair": 3,
+        "slope": 0.2896
+      },
+      {
+        "pair": 4,
+        "slope": 0.0632
+      },
+      {
+        "pair": 5,
+        "slope": 0.2743
+      },
+      {
+        "pair": 6,
+        "slope": 0.0309
+      },
+      {
+        "pair": 7,
+        "slope": 0.0328
+      },
+      {
+        "pair": 8,
+        "slope": 0.0292
+      },
+      {
+        "pair": 9,
+        "slope": 0.0292
+      },
+      {
+        "pair": 10,
+        "slope": 0.0337
+      },
+      {
+        "pair": 11,
+        "slope": 0.2206
+      },
+      {
+        "pair": 12,
+        "slope": 0.0222
+      },
+      {
+        "pair": 13,
+        "slope": 0.0312
+      },
+      {
+        "pair": 14,
+        "slope": 0.372
+      },
+      {
+        "pair": 15,
+        "slope": 0.0303
+      },
+      {
+        "pair": 16,
+        "slope": 0.0335
+      },
+      {
+        "pair": 17,
+        "slope": 0.023
+      },
+      {
+        "pair": 18,
+        "slope": 0.0309
+      },
+      {
+        "pair": 19,
+        "slope": 0.0309
+      },
+      {
+        "pair": 20,
+        "slope": 0.2288
+      },
+      {
+        "pair": 21,
+        "slope": 0.031
+      },
+      {
+        "pair": 22,
+        "slope": 0.256
+      },
+      {
+        "pair": 23,
+        "slope": 0.031
+      },
+      {
+        "pair": 24,
+        "slope": 0.0311
+      },
+      {
+        "pair": 25,
+        "slope": 0.0304
+      },
+      {
+        "pair": 26,
+        "slope": 0.3411
+      },
+      {
+        "pair": 27,
+        "slope": 0.0308
+      },
+      {
+        "pair": 28,
+        "slope": 0.0354
+      },
+      {
+        "pair": 29,
+        "slope": 0.2343
+      },
+      {
+        "pair": 30,
+        "slope": 0.0303
+      },
+      {
+        "pair": 31,
+        "slope": 0.0311
+      },
+      {
+        "pair": 32,
+        "slope": 0.031
+      },
+      {
+        "pair": 33,
+        "slope": 0.0308
+      },
+      {
+        "pair": 34,
+        "slope": 0.0388
+      },
+      {
+        "pair": 35,
+        "slope": 0.0312
+      },
+      {
+        "pair": 36,
+        "slope": 0.1603
+      },
+      {
+        "pair": 37,
+        "slope": 0.2467
+      },
+      {
+        "pair": 38,
+        "slope": 0.0307
+      },
+      {
+        "pair": 39,
+        "slope": 0.1285
+      },
+      {
+        "pair": 40,
+        "slope": 0.2459
+      },
+      {
+        "pair": 41,
+        "slope": 0.0317
+      },
+      {
+        "pair": 42,
+        "slope": 0.1395
+      },
+      {
+        "pair": 43,
+        "slope": 0.0664
+      },
+      {
+        "pair": 44,
+        "slope": 0.0151
+      },
+      {
+        "pair": 45,
+        "slope": 0.0351
+      },
+      {
+        "pair": 46,
+        "slope": 0.0829
+      },
+      {
+        "pair": 47,
+        "slope": 0.031
+      },
+      {
+        "pair": 48,
+        "slope": 0.0315
+      },
+      {
+        "pair": 49,
+        "slope": 0.0456
+      },
+      {
+        "pair": 50,
+        "slope": 0.0305
+      },
+      {
+        "pair": 51,
+        "slope": 0.1581
+      },
+      {
+        "pair": 52,
+        "slope": 0.022
+      },
+      {
+        "pair": 53,
+        "slope": 0.031
+      },
+      {
+        "pair": 54,
+        "slope": 0.1833
+      },
+      {
+        "pair": 55,
+        "slope": 0.0293
+      },
+      {
+        "pair": 56,
+        "slope": 0.0306
+      },
+      {
+        "pair": 57,
+        "slope": 0.0296
+      },
+      {
+        "pair": 58,
+        "slope": 0.1828
+      },
+      {
+        "pair": 59,
+        "slope": 0.1457
+      },
+      {
+        "pair": 60,
+        "slope": 0.031
+      },
+      {
+        "pair": 61,
+        "slope": 0.0316
+      },
+      {
+        "pair": 62,
+        "slope": 0.0529
+      },
+      {
+        "pair": 63,
+        "slope": 0.2759
+      },
+      {
+        "pair": 64,
+        "slope": 0.0306
+      },
+      {
+        "pair": 65,
+        "slope": 0.0302
+      },
+      {
+        "pair": 66,
+        "slope": 0.2578
+      },
+      {
+        "pair": 67,
+        "slope": 0.0302
+      },
+      {
+        "pair": 68,
+        "slope": 0.0174
+      },
+      {
+        "pair": 69,
+        "slope": 0.0309
+      },
+      {
+        "pair": 70,
+        "slope": 0.0295
+      },
+      {
+        "pair": 71,
+        "slope": 0.0308
+      },
+      {
+        "pair": 72,
+        "slope": 0.0267
+      },
+      {
+        "pair": 73,
+        "slope": 0.0681
+      },
+      {
+        "pair": 74,
+        "slope": 0.0386
+      },
+      {
+        "pair": 75,
+        "slope": 0.0434
+      },
+      {
+        "pair": 76,
+        "slope": 0.032
+      },
+      {
+        "pair": 77,
+        "slope": 0.0305
+      },
+      {
+        "pair": 78,
+        "slope": 0.1561
+      },
+      {
+        "pair": 79,
+        "slope": 0.0314
+      },
+      {
+        "pair": 80,
+        "slope": 0.0313
+      },
+      {
+        "pair": 81,
+        "slope": 0.0283
+      },
+      {
+        "pair": 82,
+        "slope": 0.2472
+      },
+      {
+        "pair": 83,
+        "slope": 0.0307
+      },
+      {
+        "pair": 84,
+        "slope": 0.2125
+      },
+      {
+        "pair": 85,
+        "slope": 0.0309
+      },
+      {
+        "pair": 86,
+        "slope": 0.0301
+      },
+      {
+        "pair": 87,
+        "slope": 0.1966
+      },
+      {
+        "pair": 88,
+        "slope": 0.2706
+      },
+      {
+        "pair": 89,
+        "slope": 0.0276
+      },
+      {
+        "pair": 90,
+        "slope": 0.0308
+      },
+      {
+        "pair": 91,
+        "slope": 0.0298
+      },
+      {
+        "pair": 92,
+        "slope": 0.0305
+      },
+      {
+        "pair": 93,
+        "slope": 0.2083
+      },
+      {
+        "pair": 94,
+        "slope": 0.0312
+      },
+      {
+        "pair": 95,
+        "slope": 0.0215
+      },
+      {
+        "pair": 96,
+        "slope": 0.1735
+      },
+      {
+        "pair": 97,
+        "slope": 0.0392
+      },
+      {
+        "pair": 98,
+        "slope": 0.0324
+      },
+      {
+        "pair": 99,
+        "slope": 0.0302
+      }
+    ],
+    "data-e1bd4fb9a4bfb8863166d25c517b03b5": [
+      {
+        "label": "split used in the note",
+        "x": 0.1
+      },
+      {
+        "label": "literature low",
+        "x": 0.3
+      },
+      {
+        "label": "literature high",
+        "x": 0.35
+      }
+    ]
+  },
+  "height": 240,
+  "layer": [
+    {
+      "data": {
+        "name": "data-52b2b0f612262fc99ac7d9c43e7c79bd"
+      },
+      "encoding": {
+        "tooltip": [
+          {
+            "aggregate": "count",
+            "type": "quantitative"
+          }
+        ],
+        "x": {
+          "bin": {
+            "step": 0.02
+          },
+          "field": "slope",
+          "title": "Growth rate of ln(separation), fitted over years 30 to 100 (1/year)",
+          "type": "quantitative"
+        },
+        "y": {
+          "aggregate": "count",
+          "title": "Independent runs",
+          "type": "quantitative"
+        }
+      },
+      "mark": {
+        "color": "#0072B2",
+        "type": "bar"
+      }
+    },
+    {
+      "data": {
+        "name": "data-e1bd4fb9a4bfb8863166d25c517b03b5"
+      },
+      "encoding": {
+        "tooltip": [
+          {
+            "field": "label",
+            "type": "nominal"
+          }
+        ],
+        "x": {
+          "field": "x",
+          "type": "quantitative"
+        }
+      },
+      "mark": {
+        "color": "#D55E00",
+        "strokeDash": [
+          4,
+          3
+        ],
+        "type": "rule"
+      }
+    }
+  ],
+  "title": "Lyapunov exponent of Prometheus and Pandora: 100 independent runs (two populations)",
+  "width": 620
+}
