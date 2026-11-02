@@ -133,6 +133,56 @@ fn every_variant_parses_and_round_trips() {
 }
 
 #[test]
+fn eccentric_band_parses_round_trips_and_is_checked() {
+    const CORE: &str = "kind = \"core\"\nsemi_major_axis_km = 140220.0\nsigma_semi_major_axis_km = 5.0\n\
+                        eccentricity = 0.0024\napse_longitude_deg = 0.0";
+    assert!(
+        EXAMPLE.contains(CORE),
+        "test setup: core block not in example"
+    );
+    let with = |min: &str, e: &str, apse: &str| {
+        EXAMPLE.replacen(
+            CORE,
+            &format!(
+                "kind = \"eccentric_band\"\nmin_semi_major_axis_km = {min}\n\
+                 max_semi_major_axis_km = 140700.0\neccentricity = {e}\napse_longitude_deg = {apse}"
+            ),
+            1,
+        )
+    };
+    let c = RunConfig::from_toml_str(&with("140150.0", "0.0024", "353.78")).unwrap();
+    assert_eq!(
+        c.particles.distribution,
+        Distribution::EccentricBand {
+            min_semi_major_axis_km: 140_150.0,
+            max_semi_major_axis_km: 140_700.0,
+            eccentricity: 0.0024,
+            apse_longitude_deg: 353.78,
+        }
+    );
+    let again = RunConfig::from_toml_str(&c.to_toml_string().unwrap()).unwrap();
+    assert_eq!(again, c);
+    // e = 0 is allowed (the circular control of ICR-007).
+    assert!(RunConfig::from_toml_str(&with("140150.0", "0.0", "0.0")).is_ok());
+    assert_config_error(
+        RunConfig::from_toml_str(&with("140150.0", "1.0", "0.0")),
+        "eccentricity",
+    );
+    assert_config_error(
+        RunConfig::from_toml_str(&with("140150.0", "-0.1", "0.0")),
+        "eccentricity",
+    );
+    assert_config_error(
+        RunConfig::from_toml_str(&with("140150.0", "0.0024", "nan")),
+        "apse_longitude_deg",
+    );
+    assert_config_error(
+        RunConfig::from_toml_str(&with("140700.0", "0.0024", "0.0")),
+        "min_semi_major_axis_km",
+    );
+}
+
+#[test]
 fn unknown_field_is_an_error() {
     let text = EXAMPLE.replace("step_s = 360.0", "step_sec = 360.0");
     assert_config_error(RunConfig::from_toml_str(&text), "step_sec");
