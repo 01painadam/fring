@@ -4,7 +4,7 @@ Role A8. Date 2026-11-02. Model: Saturn J2 to J6, Prometheus and Pandora (PLAN s
 
 ## Summary
 
-1. **There is no quiet band, but there is a quiet zone.** Between the moons, almost every circular orbit is chaotic. The chaos is weakest in a broad zone from 140,150 to 140,700 km. The core (140,222.43 km) sits in the inner part of this zone. In that zone the Lyapunov rate of a particle is about 0.9 per year (a Lyapunov time of about 1.1 years, or 650 orbits). Near the moons it is 2 per year (flanks) and 5 to 8 per year (edges). The number 0.9 per year does not change when the run grows from 5 to 10 to 30 years. So the zone is not "regular but slow to show it". It is genuinely chaotic, only less so.
+1. **There is no quiet band, but there is a quiet zone.** Between the moons, almost every circular orbit is chaotic. The chaos is weakest in a broad zone from 140,150 to 140,700 km. The core (140,222.43 km) sits in the inner part of this zone. In that zone the Lyapunov rate of a particle is about 0.9 per year (a Lyapunov time of about 1.1 years, or 650 orbits). Near the moons it is 2 per year (flanks) and 5 to 8 per year (edges). The rate stays at 0.84 to 0.91 per year at 10 and 30 years, where a regular orbit would give 0.4 and 0.13 per year (λ = 2⟨Y⟩/t with ⟨Y⟩ = 2). So the zone is not "regular but slow to show it". It is genuinely chaotic, only less so.
 2. **The moons close most of the apse-rate gap at the core.** Saturn alone (J2 to J6) gives 2.69841 deg/day. With both moons, 50-year runs give 2.69981 deg/day (spread 0.00009 over three runs, so the moons add +0.00140 deg/day). The observed rate is 2.70025 ± 0.00029 deg/day. The remaining gap is 0.00044 deg/day, or 1.3 sigma (both errors). The G0 gap of 6 sigma was Saturn alone.
 3. **The moons are chaotic in about a quarter of the cases, with a Lyapunov time of 4.5 years.** 100 independent runs of 100 years: 26 % are chaotic with a rate of 0.223 ± 0.061 per year. The other 74 % show only the linear (Kepler shear) growth. The nominal start state is chaotic (0.175 ± 0.015 per year). The finite-time rates of G1 (0.14 to 0.49 per year) were mostly Kepler shear, not chaos (section 3).
 
@@ -52,6 +52,7 @@ Fractions in radius windows (`data/window_summary.csv`; λ = 2 × median ⟨Y⟩
 | 140,900 to 141,100 (outer edge) | 82 % | 90 % | 5.4 / 5.3 / 4.8 |
 
 - The profile has a minimum of λ across 140,150 to 140,700 km. The core is on the inner side of it.
+- At 5 years the λ of the quiet zone is at the floor of the method: a regular orbit has ⟨Y⟩ ≈ 2, which gives λ = 4/t = 0.8 per year. The 5-year value alone therefore cannot separate chaos from regular motion. The 10-year and 30-year values can (floor 0.4 and 0.13 per year). (A0 review.)
 - Longitude relative to Prometheus does not matter. In the quiet zone the chaotic fraction is 0.396 to 0.435 in the 36 longitude bins. The scatter is 0.011, the same as counting noise (0.011). Use `figures/chaos_profile.png`, not the 2D maps, to read the result.
 - There is a comb in radius. The bounded fraction repeats with a period of 8 to 10 km (FFT, `plots.py comb`). The spacing of first-order resonances with Prometheus near m = 110 is (2/3) a / m² = 7.7 km. This is probably the resonance comb, but I did not test it further.
 
@@ -92,7 +93,7 @@ Fractions in radius windows (`data/window_summary.csv`; λ = 2 × median ⟨Y⟩
 - **Result:** the mean of the three runs with both moons is 2.69981 deg/day, with a spread of 0.00009 and a fit error of 0.0001 (jackknife over 10 blocks), so I quote 2.6998 ± 0.0002. The moons' share is +0.0014 ± 0.0002 deg/day.
 - **The fit error is not the whole story.** The apse phase wobbles with the 6.2-year anti-alignment period of the moons. The rate over 10-year windows varies between 2.6983 and 2.7008 deg/day. The observation covers a few years of one phase, so its value may carry the same wobble.
 - **Fair comparison.** Our model stops at J6. G0 found that J8 to J12 add +0.0001 deg/day (J2 to J12: 2.69851, ours: 2.69841). The real planet has them, so the fair total is 2.6999 deg/day. That is 0.00035 below the observed value (1.2 sigma on the observed error alone, 1.0 sigma with ours added). The G0 comparison of 6 sigma used Saturn alone.
-- **Prometheus alone lowers the rate and the secular formula is wrong in sign.** The formula (Laplace coefficients, Murray and Dermott 7.3, moon radii from their mean motions) gives +0.00072 (Prometheus) and +0.00020 (Pandora), sum +0.00092 deg/day. The simulation gives −0.00030 and +0.00046. The core is at the m = 110 corotation resonance with Prometheus, where the secular average does not apply. The two moons together are not the sum of the two single-moon runs. Treat the analytic number as a rough check of the order of magnitude, not as a prediction.
+- **Prometheus alone lowers the rate and the secular formula is wrong in sign.** The formula (Laplace coefficients, Murray and Dermott 7.3, moon radii from their mean motions) gives +0.00072 (Prometheus) and +0.00020 (Pandora), sum +0.00092 deg/day. The simulation gives −0.00030 and +0.00046. The core is at the m = 110 corotation resonance with Prometheus, where the secular average does not apply. The two moons together are not the sum of the two single-moon runs. One reason: `fring-run` builds the ephemeris from the moons in `[moons] include`, so in a single-moon run that moon has no 121:118 resonance, no chaos and no 6.2-year anti-alignment cycle. The single-moon runs therefore do not split the result with both moons into two shares (A0 review). Treat the analytic number as a rough check of the order of magnitude, not as a prediction.
 - **Forced eccentricity (A0 estimate 3 × 10⁻⁵ for Prometheus, 1 × 10⁻⁵ for Pandora).** The rms deviation of the e-vector from the free circle is 1.4 × 10⁻⁴ (Prometheus), 4.7 × 10⁻⁵ (Pandora), 1.5 × 10⁻⁴ (both), and 5 × 10⁻⁶ without moons (frame rounding). It is about 5 times larger than the estimate, which is plausible near a resonance. With e_free = 0.0022 the free part is still about 15 times the forced part, so the fit gives the free precession. With both moons the mean e over the 50 years is 0.00218 (start 0.00235).
 
 ## 3. Lyapunov time of the moons (G1)
@@ -106,13 +107,13 @@ Fractions in radius windows (`data/window_summary.csv`; λ = 2 × median ⟨Y⟩
 | Group | Runs | Rate (1/yr) |
 |---|---|---|
 | chaotic (slope above 0.1) | 26 | 0.223 ± 0.061 (spread), ± 0.012 (error of the mean), range 0.13 to 0.37; Lyapunov time 4.5 yr |
-| regular | 74 | 0.033 ± 0.010 (shear, about 1/t) |
+| regular | 74 | 0.033 ± 0.010; not exponential (MEGNO rate 0.013). Pure linear shear growth would give ln(100/30)/70 = 0.017, so the growth is closer to t² (A0 review) |
 | all 100 | 100 | 0.083 ± 0.090; median 0.031 |
 | nominal start state (kick 0), 8 directions | 8 | 0.175 ± 0.015; Lyapunov time 5.7 yr |
 
 - A MEGNO check gives 2 d⟨Y⟩/dt = 0.067 ± 0.101 (all) and 0.227 ± 0.027 (nominal state).
 - Nine of the 100 runs change class between years 30 to 60 and years 60 to 100, so the chaos is intermittent. For the nominal state the slope is 0.31 in years 30 to 60 and 0.13 in years 60 to 100. The mean rate of a chaotic run therefore carries an error from the window.
-- **Compared with the literature (0.30 to 0.35 per year).** Our chaotic rate is 0.22 ± 0.06, a factor 1.4 below. One reason could be that our model has only two moons. I did not test this. The result does not depend on d0, the renormalisation interval or the seed.
+- **Compared with the literature (0.30 to 0.35 per year).** Our chaotic rate is 0.22 ± 0.06, a factor 1.4 below. GR03b trace the chaos to the 121:118 resonance between the two moons, so the missing other moons are not a likely cause. The overlap of the four resonance components depends on the moon masses and eccentricities in `params/`, and the literature value may be a mean over runs that are chaotic only part of the time. The difference is open (A0 review). The result does not depend on d0, the renormalisation interval or the seed.
 - **The moons are regular in three quarters of the 2 km neighbourhood.** The real Prometheus state is uncertain by about 10 km (G0: 11.8 km between two ephemerides), so the run-to-run difference matters for any 100-year comparison with observations.
 
 ## Limits
