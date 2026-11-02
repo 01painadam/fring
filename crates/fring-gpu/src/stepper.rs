@@ -101,6 +101,11 @@ pub struct GpuStepper {
     status_buf: wgpu::Buffer,
     prm_buf: wgpu::Buffer,
     shadow_buf: Option<wgpu::Buffer>,
+    mode: Mode,
+    /// The words of the `prm` uniform with the rule off.
+    prm_words: Vec<f32>,
+    /// The moon radii of the rule (ICR-006), km; `None` = rule off.
+    radii_km: Option<Vec<f64>>,
     slots: Vec<Slot>,
     next_slot: usize,
     chaos: Option<GpuChaos>,
@@ -154,7 +159,8 @@ impl GpuStepper {
         let gms: Vec<f64> = eph.tracks.iter().map(|t| t.gm_km3_s2).collect();
         let c = Consts::<{ model::M4 }>::for_step(&system.saturn, &gms, step_s);
         let prm_buf = mk((wh::PARAM_WORDS * 4) as u64, uni);
-        q.write_buffer(&prm_buf, 0, &le_bytes(&wh::params(&c, &gms)));
+        let prm_words = wh::params(&c, &gms);
+        q.write_buffer(&prm_buf, 0, &le_bytes(&prm_words));
 
         // State: 6 planes of DS values.
         let state_buf = mk(state_bytes, rw);
@@ -202,6 +208,9 @@ impl GpuStepper {
             status_buf,
             prm_buf,
             shadow_buf,
+            mode,
+            prm_words,
+            radii_km: None,
             slots: Vec::new(),
             next_slot: 0,
             chaos: None,
@@ -328,6 +337,11 @@ impl GpuStepper {
         let q = self.kernels.gpu().queue();
         let slot = &self.slots[idx];
         q.write_buffer(&slot.table, 0, &le_bytes(&packed));
+        if self.radii_km.is_some() {
+            // The moons at the sync times of the block, for the rule (rows n, n + 1).
+            let rows = wh::sync_rows(&self.eph, self.start_s, self.step_s, first, block);
+            q.write_buffer(&slot.table, (block * ROW * 4) as u64, &le_bytes(&rows));
+        }
         let ctl = wh::control(block, self.n, self.cap, self.n_moons);
         let ctl_bytes: Vec<u8> = ctl.iter().flat_map(|x| x.to_le_bytes()).collect();
         q.write_buffer(&slot.ctl, 0, &ctl_bytes);
@@ -376,6 +390,59 @@ impl GpuStepper {
             used += 1;
         }
         Ok(())
+    }
+
+    /// Switches the moon-radius rule of ICR-006 on, with one radius in km for
+    /// each moon (the moon order of the `System`; the mean radii `radius_km`
+    /// of `params/moons.toml`). A radius of 0 leaves that moon out. For each
+    /// drift between two kicks (and the half drifts at the ends of a block)
+    /// the kernel interpolates the position of the particle relative to each
+    /// moon linearly between the two ends and finds the minimum distance; if
+    /// it is less than the radius of moon `k`, the particle is dropped with
+    /// reason `2 + k` (see [`Self::status_buffer`]). A drift whose ends have no
+    /// moon position (a time outside the ephemeris at the very end of the
+    /// run) is not checked.
+    ///
+    /// Call it before the first step. The rule is off by default; with it off
+    /// the results are bit for bit those of a stepper without this method.
+    ///
+    /// # Errors
+    /// [`Error::Config`] if steps were already recorded, if the mode is C, if
+    /// chaos is on, if the number of radii differs from the number of moons
+    /// (at most 4: the kernels take 4 moons, and the status words for moons 4
+    /// and 5 stay reserved), or if a radius is negative or not finite.
+    pub fn set_moon_radii_km(&mut self, radii_km: &[f64]) -> Result<()> {
+        let err = |m: String| Err(Error::Config(m));
+        if self.steps_total > 0 {
+            return err("set_moon_radii_km must be called before the first step".into());
+        }
+        let Some(entry) = self.mode.entry_rule() else {
+            return err("the moon-radius rule is not available in mode C".into());
+        };
+        if self.chaos.is_some() {
+            return err("the moon-radius rule cannot be combined with chaos".into());
+        }
+        if radii_km.len() != self.n_moons {
+            return err(format!(
+                "{} moon radii for {} moons",
+                radii_km.len(),
+                self.n_moons
+            ));
+        }
+        if radii_km.iter().any(|r| !(r.is_finite() && *r >= 0.0)) {
+            return err("moon radii must be finite and not negative".into());
+        }
+        let words = wh::with_radii(&self.prm_words, radii_km);
+        let q = self.kernels.gpu().queue();
+        q.write_buffer(&self.prm_buf, 0, &le_bytes(&words));
+        self.pipeline = self.kernels.pipeline(entry);
+        self.radii_km = Some(radii_km.to_vec());
+        Ok(())
+    }
+
+    /// The moon radii of the rule, km, if it is on.
+    pub fn moon_radii_km(&self) -> Option<&[f64]> {
+        self.radii_km.as_deref()
     }
 
     /// Time of the recorded state, s: `start + steps * step_s`.

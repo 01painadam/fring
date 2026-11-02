@@ -384,6 +384,36 @@ fn seg_min_d2(a: vec3<f32>, b: vec3<f32>) -> f32 {
     return dot_f(c, c);
 }
 
+// Relative positions to each moon at the end of the last checked drift.
+var<private> rprev: array<vec3<f32>, 4>;
+var<private> rvalid: bool;
+
+// Starts the rule at the sync time at the start of the block (table row `row`).
+fn rule_start(row: u32, p: V3) {
+    rvalid = row_valid(row);
+    if (rvalid) {
+        for (var j = 0u; j < prm_n_moons(); j++) { rprev[j] = moon_rel(row, j, p); }
+    }
+}
+
+// The drift that ended at p, where the moons are at table row `row`. Returns 0
+// if no moon was hit, else 1 + the lowest moon index hit. A drift with no
+// moon position at either end is skipped.
+fn rule_step(row: u32, p: V3) -> u32 {
+    let now_valid = row_valid(row);
+    var hit = 0u;
+    if (now_valid) {
+        for (var j = 0u; j < prm_n_moons(); j++) {
+            let b = moon_rel(row, j, p);
+            let r2 = prm_r2(j);
+            if (rvalid && hit == 0u && r2 > 0.0 && seg_min_d2(rprev[j], b) < r2) { hit = j + 1u; }
+            rprev[j] = b;
+        }
+    }
+    rvalid = now_valid;
+    return hit;
+}
+
 // ---- Entry points: one block of prm_n_steps() steps per particle ----
 
 // ICR-006: a particle with a reason other than 0 is frozen. Its thread
@@ -441,6 +471,94 @@ fn step_dp(@builtin(global_invocation_id) id: vec3<u32>, @builtin(num_workgroups
         ok = ok && o.ok;
     }
     if (ok) { store(i, o.p, o.v); } else { drop_particle(i, 1u); }
+}
+
+// As step_d, with the moon-radius rule (ICR-006): a particle whose path comes
+// within the radius of moon k, in any drift of the block, is dropped with
+// reason 2 + k and not stored. Table rows n and n + 1 hold the moons at the
+// sync times at the start and at the end of the block.
+@compute @workgroup_size(WG_SIZE)
+fn step_d_r(@builtin(global_invocation_id) id: vec3<u32>, @builtin(num_workgroups) nw: vec3<u32>) {
+    ds_one = prm_one();
+    let i = id.y * nw.x * u32(WG_SIZE) + id.x;
+    if (i >= prm_n_particles()) { return; }
+    if (is_dropped(i)) { return; }
+    let n = prm_n_steps();
+    let h = prm_h();
+    let half = prm_half();
+    let p0 = load_p(i);
+    rule_start(n, p0);
+    var o = drift_d(p0, load_v(i), half);
+    var ok = o.ok;
+    var reason = 0u;
+    if (ok) {
+        let hit = rule_step(0u, o.p);
+        if (hit != 0u) { reason = hit + 1u; }
+    }
+    for (var k = 0u; k < n; k++) {
+        if (!ok || reason != 0u) { break; }
+        let v = kick_dir(k, o.p, o.v);
+        var dt = h;
+        var row = k + 1u;
+        if (k + 1u == n) { dt = half; row = n + 1u; }
+        o = drift_d(o.p, v, dt);
+        ok = ok && o.ok;
+        if (ok) {
+            let hit = rule_step(row, o.p);
+            if (hit != 0u) { reason = hit + 1u; }
+        }
+    }
+    if (!ok) {
+        drop_particle(i, 1u);
+    } else if (reason != 0u) {
+        drop_particle(i, reason);
+    } else {
+        store(i, o.p, o.v);
+    }
+}
+
+// As step_dp, with the moon-radius rule (ICR-006): a particle whose path comes
+// within the radius of moon k, in any drift of the block, is dropped with
+// reason 2 + k and not stored. Table rows n and n + 1 hold the moons at the
+// sync times at the start and at the end of the block.
+@compute @workgroup_size(WG_SIZE)
+fn step_dp_r(@builtin(global_invocation_id) id: vec3<u32>, @builtin(num_workgroups) nw: vec3<u32>) {
+    ds_one = prm_one();
+    let i = id.y * nw.x * u32(WG_SIZE) + id.x;
+    if (i >= prm_n_particles()) { return; }
+    if (is_dropped(i)) { return; }
+    let n = prm_n_steps();
+    let h = prm_h();
+    let half = prm_half();
+    let p0 = load_p(i);
+    rule_start(n, p0);
+    var o = drift_d(p0, load_v(i), half);
+    var ok = o.ok;
+    var reason = 0u;
+    if (ok) {
+        let hit = rule_step(0u, o.p);
+        if (hit != 0u) { reason = hit + 1u; }
+    }
+    for (var k = 0u; k < n; k++) {
+        if (!ok || reason != 0u) { break; }
+        let v = kick_dir_plus(k, o.p, o.v);
+        var dt = h;
+        var row = k + 1u;
+        if (k + 1u == n) { dt = half; row = n + 1u; }
+        o = drift_d(o.p, v, dt);
+        ok = ok && o.ok;
+        if (ok) {
+            let hit = rule_step(row, o.p);
+            if (hit != 0u) { reason = hit + 1u; }
+        }
+    }
+    if (!ok) {
+        drop_particle(i, 1u);
+    } else if (reason != 0u) {
+        drop_particle(i, reason);
+    } else {
+        store(i, o.p, o.v);
+    }
 }
 
 @compute @workgroup_size(WG_SIZE)

@@ -45,6 +45,16 @@ impl Mode {
         }
     }
 
+    /// The entry point with the moon-radius rule of ICR-006, or `None` for
+    /// option C, which has no such rule.
+    pub fn entry_rule(self) -> Option<&'static str> {
+        match self {
+            Mode::D => Some("step_d_r"),
+            Mode::Dp => Some("step_dp_r"),
+            Mode::C => None,
+        }
+    }
+
     /// `"d"` or `"c"`.
     pub fn name(self) -> &'static str {
         match self {
@@ -93,6 +103,17 @@ pub fn pack_table(table: &KickTable<f64>, scale: f64) -> Vec<f32> {
         }
     }
     out
+}
+
+/// `base` (the words of [`params`]) with the radii of the rule in km: R squared
+/// in km² for each moon at word 36, and the rule flag at word 40.
+pub fn with_radii(base: &[f32], radii_km: &[f64]) -> Vec<f32> {
+    let mut v = base.to_vec();
+    for (j, r) in radii_km.iter().enumerate().take(MAX_MOONS) {
+        v[36 + j] = (r * r) as f32;
+    }
+    v[40] = 1.0;
+    v
 }
 
 /// The two extra rows after the kick rows of a block, for the moon-radius rule
@@ -174,14 +195,12 @@ pub fn params_with_radii<const M: u8>(
     for d in gm_d {
         v.extend(ds2(d));
     }
-    let mut r2 = [0f32; MAX_MOONS];
-    for (j, r) in radii_km.unwrap_or(&[]).iter().enumerate().take(MAX_MOONS) {
-        r2[j] = (r * r) as f32;
-    }
-    v.extend(r2);
-    v.extend([f32::from(u8::from(radii_km.is_some())), 0.0, 0.0, 0.0]);
+    v.extend([0.0; 8]);
     debug_assert_eq!(v.len(), PARAM_WORDS);
-    v
+    match radii_km {
+        Some(r) => with_radii(&v, r),
+        None => v,
+    }
 }
 
 /// The control uniform of one dispatch: steps, particles, plane stride, moons.
