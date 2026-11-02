@@ -28,24 +28,20 @@
 
 use crate::gpu::Gpu;
 use crate::spike::{Consts, State, kick_scale, state_from_f64, state_to_f64};
+use crate::stepper::{GpuStepper, plan_capacity};
 use crate::wf32::model;
-use crate::wh::{self, HostTable, Mode, ROW};
-use crate::wh_gpu::{DEFAULT_WORKGROUP, NO_FAILURE, WhKernels, grid, unbound};
-use fring_model::config::ChaosConfig;
-use fring_model::physics::chaos::shadow_offset_km;
+use crate::wh::{self, HostTable, Mode};
+use crate::wh_gpu::{DEFAULT_WORKGROUP, NO_FAILURE, WhKernels, unbound};
 use fring_model::physics::{
     EpicycleElements, KickTable, SaturnField, epicycle_state, interpolate_moons,
 };
 use fring_model::{
-    Backend, ChaosReport, Error, InitialState, MoonEphemeris, MoonState, ParticleView, Particles,
-    Result, RunConfig, StepStats, System, Vec3,
+    Backend, ChaosReport, Error, InitialState, MoonState, ParticleView, Particles, Result,
+    RunConfig, StepStats, System, Vec3,
 };
 use rayon::prelude::*;
 
-/// Number of table buffers in flight.
-const RING: usize = 3;
-/// Most steps in one dispatch.
-pub const MAX_BLOCK_STEPS: usize = 4096;
+pub use crate::stepper::MAX_BLOCK_STEPS;
 /// Particle-steps per dispatch that keep one command buffer near 0.2 s on the
 /// M4 (macOS stops GPU work that runs for several seconds).
 const TARGET_PARTICLE_STEPS: usize = 200_000_000;
@@ -91,57 +87,25 @@ impl Options {
     }
 }
 
-/// Buffers and pipeline of the chaos indicator (ICR-003, ADR 0008); only
-/// made with `[diagnostics.chaos]`.
-struct GpuChaos {
-    cfg: ChaosConfig,
-    acc_buf: wgpu::Buffer,
-    acc_stage: wgpu::Buffer,
-    renorm_pipeline: wgpu::ComputePipeline,
-    renorm_bind: wgpu::BindGroup,
-}
-
-struct Slot {
-    table: wgpu::Buffer,
-    ctl: wgpu::Buffer,
-    bind: wgpu::BindGroup,
-    /// As `bind`, with the shadow state (chaos only).
-    bind_shadow: Option<wgpu::BindGroup>,
-    last: Option<wgpu::SubmissionIndex>,
-}
-
-/// The wgpu backend (see the module documentation).
+/// The wgpu backend (see the module documentation). It keeps a
+/// [`GpuStepper`] and adds the blocking parts: the ring of slots with its
+/// poll, the read-back of the snapshot, the failure flag and the start-up
+/// check.
 pub struct GpuBackend {
     kernels: WhKernels,
     mode: Mode,
-    pipeline: wgpu::ComputePipeline,
+    stepper: GpuStepper,
     field: SaturnField<f64>,
-    eph: MoonEphemeris,
-    table: KickTable<f64>,
-    scale: f64,
-    step_s: f64,
-    start_s: f64,
-    steps_total: u64,
     ids: Vec<u32>,
     n: usize,
     cap: usize,
-    block_steps: usize,
-    n_moons: usize,
-    state_buf: wgpu::Buffer,
-    status_buf: wgpu::Buffer,
     status_stage: wgpu::Buffer,
     stage: wgpu::Buffer,
-    slots: Vec<Slot>,
-    next_slot: usize,
+    acc_stage: Option<wgpu::Buffer>,
     snapshot: Particles,
     snapshot_stale: bool,
     energy0: Vec<f64>,
     max_rel_energy_error: f64,
-    chaos: Option<GpuChaos>,
-}
-
-fn le_bytes(w: &[f32]) -> Vec<u8> {
-    w.iter().flat_map(|x| x.to_le_bytes()).collect()
 }
 
 impl GpuBackend {
@@ -177,29 +141,29 @@ impl GpuBackend {
             return Err(Error::Backend("no GPU adapter found".to_string()));
         };
         let wg = opts.workgroup;
-        if !wg.is_power_of_two() || wg > gpu.limits.max_compute_workgroup_size_x {
-            return Err(Error::Config(format!(
-                "workgroup size {wg} is not a power of two within the device limit"
-            )));
-        }
-        let cap = n.next_multiple_of(wg as usize).max(wg as usize);
+        // Before the self-test, so a too large run fails early.
+        let cap = plan_capacity(&gpu, n, wg)?;
         let state_bytes = (6 * cap * 8) as u64;
-        let (max_bind, max_buf) = (
-            gpu.limits.max_storage_buffer_binding_size,
-            gpu.limits.max_buffer_size,
-        );
-        if state_bytes > max_bind || state_bytes > max_buf {
-            return Err(Error::Backend(format!(
-                "{n} particles need a state buffer of {state_bytes} bytes; {} allows \
-                 max_storage_buffer_binding_size {max_bind} and max_buffer_size {max_buf} bytes",
-                gpu.info.name
-            )));
-        }
         let kernels = WhKernels::new(&gpu, wg)?;
         startup_check(&kernels, opts.mode, system, init.time_s, step_s)?;
 
+        let block_steps = opts
+            .block_steps
+            .unwrap_or_else(|| (TARGET_PARTICLE_STEPS / n.max(1)).clamp(8, MAX_BLOCK_STEPS))
+            .clamp(1, MAX_BLOCK_STEPS);
+        let chaos_cfg = config.diagnostics.as_ref().and_then(|d| d.chaos);
+        let stepper = GpuStepper::new(
+            &gpu,
+            &kernels,
+            system,
+            init,
+            step_s,
+            block_steps,
+            opts.mode,
+            chaos_cfg,
+        )?;
+
         let d = gpu.device();
-        let q = gpu.queue();
         let mk = |size: u64, usage: wgpu::BufferUsages| {
             d.create_buffer(&wgpu::BufferDescriptor {
                 label: None,
@@ -208,96 +172,8 @@ impl GpuBackend {
                 mapped_at_creation: false,
             })
         };
-        let rw = wgpu::BufferUsages::STORAGE
-            | wgpu::BufferUsages::COPY_SRC
-            | wgpu::BufferUsages::COPY_DST;
-        let uni = wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST;
         let read = wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST;
-
-        // Constants.
-        let gms: Vec<f64> = eph.tracks.iter().map(|t| t.gm_km3_s2).collect();
-        let c = Consts::<{ model::M4 }>::for_step(&system.saturn, &gms, step_s);
-        let prm_buf = mk((wh::PARAM_WORDS * 4) as u64, uni);
-        q.write_buffer(&prm_buf, 0, &le_bytes(&wh::params(&c, &gms)));
-
-        // State: 6 planes of DS values.
-        let state_buf = mk(state_bytes, rw);
-        let states: Vec<State<{ model::M4 }>> = (0..n)
-            .map(|i| state_from_f64(p.position_km(i), p.velocity_km_s(i)))
-            .collect();
-        q.write_buffer(
-            &state_buf,
-            0,
-            &le_bytes(&crate::wh_gpu::pack_states(&states, cap)),
-        );
-        let status_buf = mk(4, rw);
-        q.write_buffer(&status_buf, 0, &NO_FAILURE.to_le_bytes());
-        let block_steps = opts
-            .block_steps
-            .unwrap_or_else(|| (TARGET_PARTICLE_STEPS / n.max(1)).clamp(8, MAX_BLOCK_STEPS))
-            .clamp(1, MAX_BLOCK_STEPS);
-        let chaos_cfg = config.diagnostics.as_ref().and_then(|d| d.chaos);
-        let shadow_buf = chaos_cfg.map(|cfg| {
-            // The shadow starts d0 away in the radial direction (position only).
-            let shadows: Vec<State<{ model::M4 }>> = (0..n)
-                .map(|i| {
-                    let dir = shadow_offset_km(p.position_km(i), cfg.offset_km);
-                    state_from_f64(p.position_km(i) + dir, p.velocity_km_s(i))
-                })
-                .collect();
-            let buf = mk(state_bytes, rw);
-            q.write_buffer(
-                &buf,
-                0,
-                &le_bytes(&crate::wh_gpu::pack_states(&shadows, cap)),
-            );
-            buf
-        });
-        let slots = (0..RING)
-            .map(|_| {
-                let table = mk((block_steps * ROW * 4) as u64, rw);
-                let ctl = mk(16, uni);
-                let bind = kernels.bind_group(&state_buf, &table, &prm_buf, &ctl, &status_buf);
-                let bind_shadow = shadow_buf
-                    .as_ref()
-                    .map(|sb| kernels.bind_group(sb, &table, &prm_buf, &ctl, &status_buf));
-                Slot {
-                    table,
-                    ctl,
-                    bind,
-                    bind_shadow,
-                    last: None,
-                }
-            })
-            .collect();
-        let chaos = match (chaos_cfg, shadow_buf) {
-            (Some(cfg), Some(shadow_buf)) => {
-                let acc_bytes = (crate::chaos::ACC_PLANES * cap * 8) as u64;
-                let acc_buf = mk(acc_bytes, rw); // zero: j = 0, sums 0
-                let cprm = mk(16, uni);
-                q.write_buffer(&cprm, 0, &le_bytes(&[cfg.offset_km as f32, 0.0, 0.0, 0.0]));
-                let ctl = mk(16, uni);
-                let ctl_words = wh::control(1, n, cap, eph.tracks.len());
-                let ctl_bytes: Vec<u8> = ctl_words.iter().flat_map(|x| x.to_le_bytes()).collect();
-                q.write_buffer(&ctl, 0, &ctl_bytes);
-                let renorm_bind = kernels.chaos_bind_group(
-                    &state_buf,
-                    &prm_buf,
-                    &ctl,
-                    &shadow_buf,
-                    &acc_buf,
-                    &cprm,
-                );
-                Some(GpuChaos {
-                    cfg,
-                    acc_buf,
-                    acc_stage: mk(acc_bytes, read),
-                    renorm_pipeline: kernels.chaos_pipeline(),
-                    renorm_bind,
-                })
-            }
-            _ => None,
-        };
+        let acc_stage = chaos_cfg.map(|_| mk((crate::chaos::ACC_PLANES * cap * 8) as u64, read));
 
         let field = SaturnField::<f64>::from_params(&system.saturn);
         let energy0 = if eph.tracks.is_empty() {
@@ -308,33 +184,32 @@ impl GpuBackend {
             Vec::new()
         };
         Ok(Self {
-            pipeline: kernels.pipeline(opts.mode.entry()),
             mode: opts.mode,
+            stepper,
             field,
-            eph: eph.clone(),
-            table: KickTable::for_ephemeris(eph),
-            scale: kick_scale(step_s),
-            step_s,
-            start_s: init.time_s,
-            steps_total: 0,
             ids: p.id.clone(),
             n,
             cap,
-            block_steps,
-            n_moons: eph.tracks.len(),
-            state_buf,
-            status_buf,
             status_stage: mk(16, read),
             stage: mk(state_bytes, read),
-            slots,
-            next_slot: 0,
+            acc_stage,
             snapshot: p.clone(),
             snapshot_stale: false,
             energy0,
             max_rel_energy_error: 0.0,
-            chaos,
             kernels,
         })
+    }
+
+    /// The non-blocking core (read-only), for example to compare its buffers.
+    pub fn stepper(&self) -> &GpuStepper {
+        &self.stepper
+    }
+
+    /// The GPU (device and queue) that the backend uses, for example to read
+    /// the buffers of [`Self::stepper`].
+    pub fn gpu(&self) -> &Gpu {
+        self.kernels.gpu()
     }
 
     /// The number format of the kernels.
@@ -358,11 +233,11 @@ impl GpuBackend {
 
     /// Steps per dispatch.
     pub fn block_steps(&self) -> usize {
-        self.block_steps
+        self.stepper.block_steps()
     }
 
     fn has_moons(&self) -> bool {
-        self.n_moons > 0
+        self.stepper.n_moons() > 0
     }
 
     /// Waits for the GPU and returns the failure flag.
@@ -370,7 +245,7 @@ impl GpuBackend {
         let gpu = self.kernels.gpu();
         let d = gpu.device();
         let mut enc = d.create_command_encoder(&Default::default());
-        enc.copy_buffer_to_buffer(&self.status_buf, 0, &self.status_stage, 0, 4);
+        enc.copy_buffer_to_buffer(self.stepper.status_buffer(), 0, &self.status_stage, 0, 4);
         gpu.queue().submit([enc.finish()]);
         self.status_stage
             .map_async(wgpu::MapMode::Read, .., |r| r.expect("map failed"));
@@ -393,7 +268,7 @@ impl GpuBackend {
         let d = gpu.device();
         let size = (6 * self.cap * 8) as u64;
         let mut enc = d.create_command_encoder(&Default::default());
-        enc.copy_buffer_to_buffer(&self.state_buf, 0, &self.stage, 0, size);
+        enc.copy_buffer_to_buffer(self.stepper.state_buffer(), 0, &self.stage, 0, size);
         gpu.queue().submit([enc.finish()]);
         self.stage
             .map_async(wgpu::MapMode::Read, .., |r| r.expect("map failed"));
@@ -454,77 +329,53 @@ impl Backend for GpuBackend {
     fn step(&mut self, n_steps: u64) -> Result<()> {
         let gpu = self.kernels.gpu().clone();
         let (d, q) = (gpu.device(), gpu.queue());
-        let (gx, gy) = grid(self.cap, self.kernels.workgroup);
+        // `encode_block` counts each block in the stepper at once. A failed
+        // call must leave the count as it was (the state is unspecified, but
+        // `time_s` and `steps_total` must not move), so it is set back.
+        let base = self.stepper.steps_total;
         let mut done = 0u64;
         while done < n_steps {
-            let first = self.steps_total + done;
-            let mut block = (n_steps - done).min(self.block_steps as u64);
-            if let Some(c) = &self.chaos {
-                // Blocks end at multiples of K (as in CpuBackend), so the
-                // renormalisation steps do not depend on how the caller
-                // splits the run.
-                let k = u64::from(c.cfg.renorm_steps);
-                block = block.min(k - first % k);
-            }
-            let renorm_now = self
-                .chaos
-                .as_ref()
-                .is_some_and(|c| (first + block).is_multiple_of(u64::from(c.cfg.renorm_steps)));
-            let block = block as usize;
-            // The host works while the GPU runs the previous blocks.
-            self.table
-                .fill(&self.eph, self.start_s, self.step_s, first, block)?;
-            let packed = wh::pack_table(&self.table, self.scale);
-            let slot = &mut self.slots[self.next_slot];
-            if let Some(idx) = slot.last.take() {
-                d.poll(wgpu::PollType::Wait {
-                    submission_index: Some(idx),
-                    timeout: None,
-                })
-                .expect("GPU poll failed");
-            }
-            q.write_buffer(&slot.table, 0, &le_bytes(&packed));
-            let ctl = wh::control(block, self.n, self.cap, self.n_moons);
-            let ctl_bytes: Vec<u8> = ctl.iter().flat_map(|x| x.to_le_bytes()).collect();
-            q.write_buffer(&slot.ctl, 0, &ctl_bytes);
             let mut enc = d.create_command_encoder(&Default::default());
-            {
-                let mut pass = enc.begin_compute_pass(&Default::default());
-                pass.set_pipeline(&self.pipeline);
-                pass.set_bind_group(0, &slot.bind, &[]);
-                pass.dispatch_workgroups(gx, gy, 1);
-                if let (Some(c), Some(bs)) = (&self.chaos, &slot.bind_shadow) {
-                    pass.set_bind_group(0, bs, &[]);
-                    pass.dispatch_workgroups(gx, gy, 1);
-                    if renorm_now {
-                        pass.set_pipeline(&c.renorm_pipeline);
-                        pass.set_bind_group(0, &c.renorm_bind, &[]);
-                        pass.dispatch_workgroups(gx, gy, 1);
+            let r = self
+                .stepper
+                .encode_block(&mut enc, n_steps - done, 0, |last| {
+                    if let Some(idx) = last {
+                        d.poll(wgpu::PollType::Wait {
+                            submission_index: Some(idx),
+                            timeout: None,
+                        })
+                        .expect("GPU poll failed");
                     }
+                });
+            let (block, slot) = match r {
+                Ok(v) => v,
+                Err(e) => {
+                    self.stepper.steps_total = base;
+                    return Err(e);
                 }
-            }
-            slot.last = Some(q.submit([enc.finish()]));
-            self.next_slot = (self.next_slot + 1) % RING;
-            done += block as u64;
+            };
+            let idx = q.submit([enc.finish()]);
+            self.stepper.set_last(slot, idx);
+            done += block;
         }
         self.snapshot_stale = true;
         let flag = self.failure_flag();
         if flag != NO_FAILURE {
+            self.stepper.steps_total = base;
             let idx = flag as usize;
             let id = self.ids.get(idx).copied().unwrap_or(u32::MAX);
             return Err(unbound(id, flag));
         }
-        self.steps_total += n_steps;
         Ok(())
     }
 
     fn time_s(&self) -> f64 {
-        self.start_s + self.steps_total as f64 * self.step_s
+        self.stepper.time_s()
     }
 
     fn moons(&self) -> MoonState {
         let t = self.time_s();
-        interpolate_moons(&self.eph, t).unwrap_or(MoonState {
+        interpolate_moons(self.stepper.ephemeris(), t).unwrap_or(MoonState {
             time_s: t,
             moons: Vec::new(),
         })
@@ -539,29 +390,30 @@ impl Backend for GpuBackend {
     }
 
     fn chaos(&mut self) -> Result<Option<ChaosReport>> {
-        let Some(c) = &self.chaos else {
+        let (Some((cfg, acc_buf)), Some(acc_stage)) =
+            (self.stepper.chaos_parts(), self.acc_stage.as_ref())
+        else {
             return Ok(None);
         };
         let gpu = self.kernels.gpu();
         let d = gpu.device();
         let size = (crate::chaos::ACC_PLANES * self.cap * 8) as u64;
         let mut enc = d.create_command_encoder(&Default::default());
-        enc.copy_buffer_to_buffer(&c.acc_buf, 0, &c.acc_stage, 0, size);
+        enc.copy_buffer_to_buffer(acc_buf, 0, acc_stage, 0, size);
         gpu.queue().submit([enc.finish()]);
-        c.acc_stage
-            .map_async(wgpu::MapMode::Read, .., |r| r.expect("map failed"));
+        acc_stage.map_async(wgpu::MapMode::Read, .., |r| r.expect("map failed"));
         d.poll(wgpu::PollType::wait_indefinitely())
             .expect("GPU poll failed");
         let words: Vec<f32> = {
-            let view = c.acc_stage.get_mapped_range(..).expect("range");
+            let view = acc_stage.get_mapped_range(..).expect("range");
             view.as_chunks::<4>()
                 .0
                 .iter()
                 .map(|b| f32::from_le_bytes(*b))
                 .collect()
         };
-        c.acc_stage.unmap();
-        let interval_s = f64::from(c.cfg.renorm_steps) * self.step_s;
+        acc_stage.unmap();
+        let interval_s = f64::from(cfg.renorm_steps) * self.stepper.step_s();
         Ok(Some(crate::chaos::report(
             &words,
             self.cap,
@@ -587,7 +439,7 @@ impl Backend for GpuBackend {
         };
         Ok(StepStats {
             time_s: self.time_s(),
-            steps_total: self.steps_total,
+            steps_total: self.stepper.steps_total,
             max_rel_energy_error,
             ..Default::default()
         })
