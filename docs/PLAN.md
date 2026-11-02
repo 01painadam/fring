@@ -269,6 +269,7 @@ Task format: ID, owner, description, acceptance criteria. Tasks in the same phas
 ### Phase 3: first web toy
 
 - **W1 (A7).** `fring-web` scaffold: Rust to wasm32 with wgpu (WebGPU), renders particles in the rotating frame. *Done when:* it runs in current Chrome and Safari.
+- **W2-GPU (A3; added for W2).** ICR-005 items 1 to 5: blocking items of `fring-gpu` are native-only (target cfg), `Gpu::from_parts`, `WhKernels::compile`, two-phase `SelfTest`, and `GpuStepper` (the non-blocking core of `GpuBackend`). *Done when:* `GpuStepper` gives the same states, bit for bit, as `GpuBackend::step` (with and without moons and chaos); `SelfTest::submit` and `poll` give the same result as `self_test`; all existing tests pass; `cargo check -p fring-gpu --target wasm32-unknown-unknown` passes; `fring-bench` shows no slow-down.
 - **W2 (A7).** Live test-particle mode using the `fring-gpu` shaders: about 10⁵ particles, controls for time speed, Pandora on/off, and initial band. *Done when:* runs at 30 fps or more on the Mac mini; deploys as a static site.
 
 - **A2-ANALYSIS (A8; added at gate G2, does not block gate G3).** (a) Closest-approach distribution to Pandora for the particles of the 10-year chaos map (A1-ANALYSIS harness). (b) Chaos map of core-like eccentric orbits (e = 0.0024, apse aligned with the core) across the quiet zone, at 10 and 30 years, against the circular map. *Done when:* a note in `docs/results/` says whether the outer edge of the map needs sub-stepping, and whether eccentric core orbits are more or less chaotic than circular ones.
