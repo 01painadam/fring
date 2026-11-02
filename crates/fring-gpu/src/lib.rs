@@ -11,13 +11,16 @@
 //!   `shaders/spike.wgsl`).
 //! - [`spike_gpu`]: the same options on the GPU.
 
+#[cfg(not(target_arch = "wasm32"))]
 pub mod backend;
 pub mod chaos;
 pub mod ds;
 pub mod gpu;
 pub mod probe;
 pub mod spike;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod spike_gpu;
+pub mod stepper;
 pub mod wf32;
 pub mod wh;
 pub mod wh_gpu;

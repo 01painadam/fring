@@ -4,10 +4,14 @@
 
 use crate::ds::Ds;
 use crate::gpu::Gpu;
+#[cfg(not(target_arch = "wasm32"))]
 use crate::probe::self_test;
 use crate::spike::State;
+#[cfg(not(target_arch = "wasm32"))]
 use crate::wh::ROW;
-use fring_model::{Error, Result};
+use fring_model::Error;
+#[cfg(not(target_arch = "wasm32"))]
+use fring_model::Result;
 
 /// The WGSL source: DS library, sine and cosine, production kernels. The
 /// text `WG_SIZE` is replaced by the workgroup size.
@@ -25,6 +29,7 @@ pub const DEFAULT_WORKGROUP: u32 = 64;
 pub const NO_FAILURE: u32 = u32::MAX;
 
 /// Compiled shader module and layout of the production kernels.
+#[derive(Clone)]
 pub struct WhKernels {
     gpu: Gpu,
     module: wgpu::ShaderModule,
@@ -54,8 +59,16 @@ impl WhKernels {
     ///
     /// # Errors
     /// [`Error::Backend`] if the self-test fails.
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn new(gpu: &Gpu, workgroup: u32) -> Result<Self> {
         self_test(gpu)?;
+        Ok(Self::compile(gpu, workgroup))
+    }
+
+    /// Compiles the kernels with no self-test. The caller must have run the
+    /// self-test ([`crate::probe::SelfTest`]) and must not use the kernels if
+    /// it failed (ADR 0006).
+    pub fn compile(gpu: &Gpu, workgroup: u32) -> Self {
         let d = gpu.device();
         let src = WH_WGSL.replace("WG_SIZE", &workgroup.to_string());
         let module = d.create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -96,7 +109,7 @@ impl WhKernels {
             bind_group_layouts: &[Some(&chaos_layout)],
             immediate_size: 0,
         });
-        Ok(Self {
+        Self {
             gpu: gpu.clone(),
             module,
             layout,
@@ -104,7 +117,7 @@ impl WhKernels {
             chaos_layout,
             chaos_pipeline_layout,
             workgroup,
-        })
+        }
     }
 
     /// The GPU.
@@ -201,6 +214,7 @@ impl WhKernels {
     /// and kick table (see [`crate::wh`]) and returns the result and
     /// `status[0]` (the smallest index of a failed particle, or
     /// [`NO_FAILURE`]). Creates its buffers; for tests and the start-up check.
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn apply<const M: u8>(
         &self,
         name: &str,

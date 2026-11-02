@@ -2,6 +2,13 @@
 
 Read this file at the start of a session. When a mistake costs time, add an entry so that no agent makes it twice. Newest first. Each entry: what happened, why, and the rule now.
 
+## 2026-11-02 (phase 3, W2-GPU)
+
+### M23. A subagent reported "fmt clean", but the last commit failed `cargo fmt --check`
+
+- **What:** the A3 subagent for W2-GPU reported that fmt and clippy were clean. The A0 review ran the Definition of done on the pushed head, and `cargo fmt --all -- --check` failed: the new `pub mod stepper;` was in the wrong order in `crates/fring-gpu/src/lib.rs`. The same report gave the noise of two baseline benchmarks as "up to 1.3 %", but one row differed by 3.2 %.
+- **Rule:** a subagent runs the full Definition of done after its last commit and quotes the exit codes. A0 always runs it again on the pushed head before it opens the pull request, and checks each number in the evidence table against the raw rows.
+
 ## 2026-11-02 (phase 2, A1-ANALYSIS)
 
 ### M19. A0 read Kepler shear as chaos

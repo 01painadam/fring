@@ -5,6 +5,7 @@
 //! need. Task G2 replaces it with the real backend (persistent buffers,
 //! moon table, blocks of steps).
 
+#[cfg(not(target_arch = "wasm32"))]
 use std::time::{Duration, Instant};
 
 /// An open GPU device and its queue (cheap to clone: the handles are shared).
@@ -32,8 +33,26 @@ pub fn from_words(w: &[u32]) -> Vec<f32> {
 }
 
 impl Gpu {
+    /// Wraps a device that the caller opened (a browser opens it
+    /// asynchronously, with an adapter that fits the canvas). `info` and
+    /// `limits` are those of the adapter.
+    pub fn from_parts(
+        device: wgpu::Device,
+        queue: wgpu::Queue,
+        info: wgpu::AdapterInfo,
+        limits: wgpu::Limits,
+    ) -> Self {
+        Self {
+            device,
+            queue,
+            info,
+            limits,
+        }
+    }
+
     /// Opens the default high-performance adapter. Returns `None` if there is
     /// no GPU (for example on a CI runner), so callers can skip GPU work.
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn new() -> Option<Self> {
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
         let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
@@ -97,6 +116,7 @@ impl Gpu {
     }
 
     /// Compiles `entry` and runs it once; see [`Kernel::run`].
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn run(
         &self,
         shader: &str,
@@ -113,10 +133,13 @@ impl Gpu {
 
 /// A compiled compute kernel (one entry point).
 pub struct Kernel<'g> {
+    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
     gpu: &'g Gpu,
+    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
     pipeline: wgpu::ComputePipeline,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl Kernel<'_> {
     /// Runs the kernel `dispatches` times with `workgroups` workgroups in x.
     ///

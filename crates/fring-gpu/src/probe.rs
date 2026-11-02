@@ -10,10 +10,15 @@
 //! The kernels are in `shaders/probe.wgsl` (with `ds.wgsl` and `trig.wgsl`).
 
 use crate::ds::Ds;
-use crate::gpu::{Gpu, from_words, to_words};
+use crate::gpu::Gpu;
+#[cfg(not(target_arch = "wasm32"))]
+use crate::gpu::{from_words, to_words};
+#[cfg(not(target_arch = "wasm32"))]
 use crate::wf32::{model, sin_cos_f32};
 use fring_model::rng::{Counter, Philox, Stream};
 use fring_model::{Error, Result};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU8, Ordering};
 
 /// The WGSL source of the probe: the DS and trig libraries and the kernels.
 pub const PROBE_WGSL: &str = concat!(
@@ -207,6 +212,7 @@ fn inputs_ds(n: usize) -> Vec<f32> {
 
 /// Angles: x uniform in [-π, π] (f32), and a DS angle (z, w) uniform in
 /// [-0.25, 0.25]; y is 0.
+#[cfg(not(target_arch = "wasm32"))]
 fn inputs_angles(n: usize) -> Vec<f32> {
     let rng = Philox::from_seed(0x6732);
     let mut v = Vec::with_capacity(4 * n);
@@ -224,7 +230,8 @@ fn inputs_angles(n: usize) -> Vec<f32> {
 }
 
 /// Runs `entry` on `input` (four f32 per value); the guard uniform is
-/// bound when `guarded`.
+/// bound when `guarded`. Blocks (native only).
+#[cfg(not(target_arch = "wasm32"))]
 fn run(gpu: &Gpu, entry: &str, input: &[f32], guarded: bool) -> Vec<f32> {
     let n = input.len() / 4;
     let mut bufs = vec![to_words(input), vec![0u32; input.len()]];
@@ -245,10 +252,31 @@ fn rel_u2(got: (f32, f32), exact: f64) -> f64 {
 }
 
 /// The checks of [`self_test`] (and part of [`run_probe`]) on `n` values.
+#[cfg(not(target_arch = "wasm32"))]
 fn core_checks(gpu: &Gpu, n: usize, r: &mut ProbeReport) {
-    r.n = n;
     let basic = inputs_f32(n);
-    let out = run(gpu, "probe_sum", &basic, true);
+    let out_sum = run(gpu, "probe_sum", &basic, true);
+    let out_prod = run(gpu, "probe_prod", &basic, false);
+    let dsin = inputs_ds(n);
+    let out_ds = run(gpu, "probe_ds", &dsin, true);
+    check_outputs(n, &basic, &out_sum, &out_prod, &dsin, &out_ds, r);
+}
+
+/// The comparisons of the core checks: GPU outputs against exact values and
+/// the Rust twins. `basic` and `dsin` are the inputs (four f32 per value);
+/// `out_*` are the outputs of `probe_sum`, `probe_prod` and `probe_ds`. Shared
+/// by the blocking and the two-phase self-test, so there is one set of checks.
+fn check_outputs(
+    n: usize,
+    basic: &[f32],
+    out_sum: &[f32],
+    out_prod: &[f32],
+    dsin: &[f32],
+    out_ds: &[f32],
+    r: &mut ProbeReport,
+) {
+    r.n = n;
+    let out = out_sum;
     for i in 0..n {
         let exact = basic[4 * i] as f64 + basic[4 * i + 1] as f64;
         let o = &out[4 * i..4 * i + 4];
@@ -262,7 +290,7 @@ fn core_checks(gpu: &Gpu, n: usize, r: &mut ProbeReport) {
             r.fast_two_sum_fail += 1;
         }
     }
-    let out = run(gpu, "probe_prod", &basic, false);
+    let out = out_prod;
     for i in 0..n {
         let exact = basic[4 * i] as f64 * basic[4 * i + 1] as f64;
         let o = &out[4 * i..4 * i + 4];
@@ -283,8 +311,7 @@ fn core_checks(gpu: &Gpu, n: usize, r: &mut ProbeReport) {
             r.plain_dekker_fail += 1;
         }
     }
-    let dsin = inputs_ds(n);
-    let out = run(gpu, "probe_ds", &dsin, true);
+    let out = out_ds;
     for i in 0..n {
         let d = &dsin[4 * i..4 * i + 4];
         let (a, b) = (
@@ -309,26 +336,215 @@ fn core_checks(gpu: &Gpu, n: usize, r: &mut ProbeReport) {
 /// TwoSum, Fast2Sum, fma product error and DS add and mul on
 /// [`N_SELF_TEST`] values (about 0.1 s) and returns [`Error::Backend`] with
 /// the failed conditions if DS does not work on this GPU and compiler.
+#[cfg(not(target_arch = "wasm32"))]
 pub fn self_test(gpu: &Gpu) -> Result<()> {
-    let mut r = ProbeReport::default();
-    core_checks(gpu, N_SELF_TEST, &mut r);
-    let f = r.failures();
-    if f.is_empty() {
-        Ok(())
-    } else {
-        Err(Error::Backend(format!(
-            "double-single self-test failed on {} {:?}: {}. The shader compiler \
-             may have re-associated the guarded sums (ADR 0006); do not run \
-             the double-single kernels on this GPU.",
-            gpu.info.name,
-            gpu.info.backend,
-            f.join("; ")
-        )))
+    let mut t = SelfTest::submit(gpu);
+    gpu.device()
+        .poll(wgpu::PollType::wait_indefinitely())
+        .expect("GPU poll failed");
+    t.poll().expect("the map has finished after the wait")
+}
+
+/// The error of a failed self-test (one text for both forms of the test).
+fn self_test_error(info: &wgpu::AdapterInfo, failures: &[String]) -> Error {
+    Error::Backend(format!(
+        "double-single self-test failed on {} {:?}: {}. The shader compiler \
+         may have re-associated the guarded sums (ADR 0006); do not run \
+         the double-single kernels on this GPU.",
+        info.name,
+        info.backend,
+        failures.join("; ")
+    ))
+}
+
+const MAP_PENDING: u8 = 0;
+const MAP_OK: u8 = 1;
+const MAP_FAILED: u8 = 2;
+
+/// The self-test in two phases, for callers that must not block (a browser).
+///
+/// [`SelfTest::submit`] writes the inputs, records the three core kernels in
+/// one submission, copies the outputs to one `MAP_READ` buffer and starts the
+/// map. [`SelfTest::poll`] returns `None` until the map has finished, then the
+/// result of the same checks as [`self_test`], with the same error text.
+pub struct SelfTest {
+    gpu: Gpu,
+    stage: wgpu::Buffer,
+    state: Arc<AtomicU8>,
+    basic: Vec<f32>,
+    dsin: Vec<f32>,
+    n: usize,
+    done: bool,
+}
+
+impl SelfTest {
+    /// Starts the test: one submission and one `map_async`. Does not block.
+    pub fn submit(gpu: &Gpu) -> Self {
+        let n = N_SELF_TEST;
+        let d = gpu.device();
+        let q = gpu.queue();
+        let basic = inputs_f32(n);
+        let dsin = inputs_ds(n);
+        let size = (4 * n * 4) as u64;
+        let module = d.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("self-test"),
+            source: wgpu::ShaderSource::Wgsl(PROBE_WGSL.into()),
+        });
+        let buf = |usage| {
+            d.create_buffer(&wgpu::BufferDescriptor {
+                label: None,
+                size,
+                usage,
+                mapped_at_creation: false,
+            })
+        };
+        let rw = wgpu::BufferUsages::STORAGE
+            | wgpu::BufferUsages::COPY_SRC
+            | wgpu::BufferUsages::COPY_DST;
+        let bytes = |w: &[f32]| -> Vec<u8> { w.iter().flat_map(|x| x.to_le_bytes()).collect() };
+        // The guard uniform of `run`: 1.0 (ADR 0006, M16).
+        let guard = d.create_buffer(&wgpu::BufferDescriptor {
+            label: None,
+            size: 16,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        q.write_buffer(&guard, 0, &bytes(&[1.0, 0.0, 0.0, 0.0]));
+        let stage = d.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("self-test stage"),
+            size: 3 * size,
+            usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let mut enc = d.create_command_encoder(&Default::default());
+        let mut outs = Vec::new();
+        {
+            let mut pass = enc.begin_compute_pass(&Default::default());
+            for (entry, input, guarded) in [
+                ("probe_sum", &basic, true),
+                ("probe_prod", &basic, false),
+                ("probe_ds", &dsin, true),
+            ] {
+                let inb = buf(rw);
+                q.write_buffer(&inb, 0, &bytes(input));
+                let outb = buf(rw);
+                let pipeline = d.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+                    label: Some(entry),
+                    layout: None,
+                    module: &module,
+                    entry_point: Some(entry),
+                    compilation_options: Default::default(),
+                    cache: None,
+                });
+                let mut entries = vec![
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: inb.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: outb.as_entire_binding(),
+                    },
+                ];
+                if guarded {
+                    entries.push(wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: guard.as_entire_binding(),
+                    });
+                }
+                let bind = d.create_bind_group(&wgpu::BindGroupDescriptor {
+                    label: None,
+                    layout: &pipeline.get_bind_group_layout(0),
+                    entries: &entries,
+                });
+                pass.set_pipeline(&pipeline);
+                pass.set_bind_group(0, &bind, &[]);
+                pass.dispatch_workgroups(n.div_ceil(64) as u32, 1, 1);
+                outs.push((inb, outb));
+            }
+        }
+        for (k, (_, outb)) in outs.iter().enumerate() {
+            enc.copy_buffer_to_buffer(outb, 0, &stage, k as u64 * size, size);
+        }
+        q.submit([enc.finish()]);
+        let state = Arc::new(AtomicU8::new(MAP_PENDING));
+        let cb = Arc::clone(&state);
+        stage.map_async(wgpu::MapMode::Read, .., move |r| {
+            cb.store(
+                if r.is_ok() { MAP_OK } else { MAP_FAILED },
+                Ordering::Release,
+            );
+        });
+        Self {
+            gpu: gpu.clone(),
+            stage,
+            state,
+            basic,
+            dsin,
+            n,
+            done: false,
+        }
+    }
+
+    /// Returns `None` while the GPU work or the map is pending. Then it
+    /// returns `Some(result)`, once. Later calls return
+    /// `Some(Err(Error::Backend(..)))` ("already taken"), not `None`.
+    ///
+    /// On a native device this call also drives the map callback with a
+    /// non-blocking `device.poll`; in a browser the callback runs when the
+    /// page returns to the event loop.
+    pub fn poll(&mut self) -> Option<Result<()>> {
+        if self.done {
+            return Some(Err(Error::Backend(
+                "the self-test result was already taken".to_string(),
+            )));
+        }
+        // Not an error if the poll has nothing to do (always Ok on the web).
+        let _ = self.gpu.device().poll(wgpu::PollType::Poll);
+        match self.state.load(Ordering::Acquire) {
+            MAP_PENDING => return None,
+            MAP_FAILED => {
+                self.done = true;
+                return Some(Err(Error::Backend(
+                    "double-single self-test: the read-back of the GPU result failed".to_string(),
+                )));
+            }
+            _ => {}
+        }
+        self.done = true;
+        let n = self.n;
+        let words: Vec<f32> = {
+            let view = self.stage.get_mapped_range(..).expect("mapped range");
+            view.as_chunks::<4>()
+                .0
+                .iter()
+                .map(|c| f32::from_le_bytes(*c))
+                .collect()
+        };
+        self.stage.unmap();
+        let per = 4 * n;
+        let mut r = ProbeReport::default();
+        check_outputs(
+            n,
+            &self.basic,
+            &words[..per],
+            &words[per..2 * per],
+            &self.dsin,
+            &words[2 * per..3 * per],
+            &mut r,
+        );
+        let f = r.failures();
+        Some(if f.is_empty() {
+            Ok(())
+        } else {
+            Err(self_test_error(&self.gpu.info, &f))
+        })
     }
 }
 
 /// Runs every probe kernel on `gpu` with [`N_PROBE`] values per check and
 /// compares with exact values and the Rust twins.
+#[cfg(not(target_arch = "wasm32"))]
 pub fn run_probe(gpu: &Gpu) -> ProbeReport {
     let mut r = ProbeReport {
         adapter: format!("{} ({:?})", gpu.info.name, gpu.info.backend),
@@ -429,4 +645,20 @@ pub fn run_probe(gpu: &Gpu) -> ProbeReport {
         }
     }
     r
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn zero_outputs_fail_the_checks() {
+        let n = 64;
+        let (basic, dsin) = (inputs_f32(n), inputs_ds(n));
+        let zero = vec![0.0f32; 4 * n];
+        let mut r = ProbeReport::default();
+        check_outputs(n, &basic, &zero, &zero, &dsin, &zero, &mut r);
+        assert_eq!(r.n, n);
+        assert!(!r.failures().is_empty());
+    }
 }
