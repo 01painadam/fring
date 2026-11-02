@@ -393,8 +393,8 @@ impl ProjectionUniform {
 /// (km, relative to the eye) of a particle whose x and y are the
 /// double-single pairs `x` and `y`. The same f32 operations in the same order.
 pub fn project_twin(x: [f32; 2], y: [f32; 2], u: &ProjectionUniform) -> [f32; 2] {
-    let dx = (x[0] - u.q_hi[0]) * u.one + (x[1] - u.q_lo[0]) * u.one;
-    let dy = (y[0] - u.q_hi[1]) * u.one + (y[1] - u.q_lo[1]) * u.one;
+    let dx = (x[0] - u.q_hi[0]) + (x[1] - u.q_lo[0]);
+    let dy = (y[0] - u.q_hi[1]) + (y[1] - u.q_lo[1]);
     [u.rot[0] * dx - u.rot[1] * dy, u.rot[1] * dx + u.rot[0] * dy]
 }
 
