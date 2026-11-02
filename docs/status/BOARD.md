@@ -90,6 +90,6 @@ Rules (full text in `AGENTS.md` and `CLAUDE.md`):
 | ID | Task | Role | Status | Branch | Blocked by |
 |---|---|---|---|---|---|
 | W3 | Replay viewer with time slider, WebGL2 fallback | A7 | todo | | Gate G5 |
-| E1 | Figures and numbers for the explainer, each from a script | A8 | todo | | Gate G5 |
-| E2 | README, docs site, licence, citation file, release v1.0 | A0 | todo | | W3, E1 |
-| Gate G6 | Publish | AJ | todo | | W3, E1, E2 |
+| X1 | Figures and numbers for the explainer, each from a script (was E1) | A8 | todo | | Gate G5 |
+| E2 | README, docs site, licence, citation file, release v1.0 | A0 | todo | | W3, X1 |
+| Gate G6 | Publish | AJ | todo | | W3, X1, E2 |

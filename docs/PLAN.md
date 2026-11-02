@@ -305,7 +305,7 @@ Task format: ID, owner, description, acceptance criteria. Tasks in the same phas
 ### Phase 6: replay and showcase
 
 - **W3 (A7).** Replay viewer: streams snapshot frames (decimated, compressed) and plays them with a time slider. WebGL2 fallback for replay if WebGPU is not available. *Done when:* a 30-year run plays smoothly from a static host.
-- **E1 (A8).** Figures and numbers for the explainer, each reproducible from a script in `validation/` or `fring-analysis`.
+- **X1 (A8; was E1, renamed 2026-11-02 so that E1 means close encounters only).** Figures and numbers for the explainer, each reproducible from a script in `validation/` or `fring-analysis`.
 - **E2 (A0).** README, docs site, licence, citation file, release v1.0.
 
 **Gate G6 (AJ):** publish.
