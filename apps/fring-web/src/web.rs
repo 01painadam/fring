@@ -919,6 +919,12 @@ impl App {
     fn draw(&mut self, count: u32) -> Result<(), JsValue> {
         let size = self.size();
         let px_per_km = self.camera.px_per_km(size[1]);
+        let instance_size = (FLOATS_PER_INSTANCE * 4) as u64;
+        let ref_count = if self.ref_head_n == 0 {
+            0
+        } else {
+            (self.ref_head_n + self.stepper.as_ref().map_or(0, GpuStepper::len)) as u32
+        };
         let frame_uniform = [
             (2.0 * px_per_km / size[0]) as f32,
             (2.0 * px_per_km / size[1]) as f32,
@@ -974,6 +980,12 @@ impl App {
             if count > 0 {
                 pass.set_pipeline(&self.pipeline);
                 pass.set_bind_group(0, &self.bind_group, &[]);
+                if self.compare == CompareMode::Overlay && ref_count > 0 {
+                    // The faint reference first, so that the live dots lie on top.
+                    let from = u64::from(ref_base_slot(self.count)) * instance_size;
+                    pass.set_vertex_buffer(0, self.instances.slice(from..));
+                    pass.draw(0..6, 0..ref_count);
+                }
                 pass.set_vertex_buffer(0, self.instances.slice(..));
                 pass.draw(0..6, 0..count);
             }

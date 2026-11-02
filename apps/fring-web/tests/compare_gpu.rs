@@ -246,3 +246,51 @@ fn reference_projection_matches_the_twin_in_the_second_half_of_the_buffer() {
     );
     assert!(checked > 10, "only {checked} particles near the eye");
 }
+
+/// The render shader (with the faint ids of the overlay) is valid WGSL and
+/// makes a render pipeline like the one in `web.rs`.
+#[test]
+#[ignore = "needs a GPU"]
+fn render_shader_makes_a_pipeline() {
+    let Some(gpu) = Gpu::new() else {
+        eprintln!("no GPU: skipped");
+        return;
+    };
+    let d = gpu.device();
+    let scope = d.push_error_scope(wgpu::ErrorFilter::Validation);
+    let module = d.create_shader_module(wgpu::ShaderModuleDescriptor {
+        label: None,
+        source: wgpu::ShaderSource::Wgsl(include_str!("../shaders/points.wgsl").into()),
+    });
+    let _pipeline = d.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        label: None,
+        layout: None,
+        vertex: wgpu::VertexState {
+            module: &module,
+            entry_point: Some("vs_main"),
+            compilation_options: Default::default(),
+            buffers: &[Some(wgpu::VertexBufferLayout {
+                array_stride: 16,
+                step_mode: wgpu::VertexStepMode::Instance,
+                attributes: &wgpu::vertex_attr_array![0 => Float32x4],
+            })],
+        },
+        fragment: Some(wgpu::FragmentState {
+            module: &module,
+            entry_point: Some("fs_main"),
+            compilation_options: Default::default(),
+            targets: &[Some(wgpu::ColorTargetState {
+                format: wgpu::TextureFormat::Bgra8Unorm,
+                blend: Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
+                write_mask: wgpu::ColorWrites::ALL,
+            })],
+        }),
+        primitive: wgpu::PrimitiveState::default(),
+        depth_stencil: None,
+        multisample: wgpu::MultisampleState::default(),
+        multiview_mask: None,
+        cache: None,
+    });
+    let error = pollster::block_on(scope.pop());
+    assert!(error.is_none(), "{error:?}");
+}
