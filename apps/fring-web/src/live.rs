@@ -19,13 +19,14 @@
 use crate::view::ViewTransform;
 use fring_model::config::Distribution;
 use fring_model::params::{
-    RingParams, moons_from_toml_str, ring_from_toml_str, saturn_from_toml_str,
+    RingParams, moon_radii_from_toml_str, moons_from_toml_str, ring_from_toml_str,
+    saturn_from_toml_str,
 };
 use fring_model::physics::{
     DEFAULT_INTERVAL_S, MoonInit, SaturnField, build_ephemeris, generate_particles,
     interpolate_moons, reference_mean_motion,
 };
-use fring_model::{InitialState, MoonEphemeris, Result, SaturnParams, System};
+use fring_model::{Error, InitialState, MoonEphemeris, Result, SaturnParams, System};
 
 const SATURN_TOML: &str = include_str!("../../../params/saturn.toml");
 const MOONS_TOML: &str = include_str!("../../../params/moons.toml");
@@ -118,6 +119,33 @@ pub struct Setup {
     pub moons: Vec<MoonInit>,
     field: SaturnField<f64>,
     n0_rad_s: f64,
+}
+
+/// Mean radii (km) of the moons of `system`, in the order of its tracks, read
+/// from the text of `params/moons.toml` and matched BY NAME. The result goes to
+/// `GpuStepper::set_moon_radii_km` (ICR-006).
+///
+/// # Errors
+/// A track whose name has no radius in the text, or a bad text.
+pub fn moon_radii_for(system: &System, moons_toml: &str) -> Result<Vec<f64>> {
+    let table = moon_radii_from_toml_str(moons_toml)?;
+    system
+        .moons
+        .tracks
+        .iter()
+        .map(|t| {
+            table
+                .iter()
+                .find(|(name, _)| *name == t.name)
+                .map(|(_, r)| *r)
+                .ok_or_else(|| Error::Config(format!("no radius_km for moon {:?}", t.name)))
+        })
+        .collect()
+}
+
+/// The moon radii of `system` from the built-in `params/moons.toml`.
+pub fn builtin_moon_radii_for(system: &System) -> Result<Vec<f64>> {
+    moon_radii_for(system, MOONS_TOML)
 }
 
 impl Setup {
@@ -885,6 +913,19 @@ mod tests {
         assert_eq!(out.len(), 2 * FLOATS_PER_INSTANCE);
         // Saturn's diameter in pixels: 2 R * scale.
         assert!((f64::from(out[2]) - 2.0 * s.saturn.reference_radius_km * 1e-3).abs() < 1e-3);
+    }
+
+    #[test]
+    fn moon_radii_follow_the_tracks_by_name() {
+        let s = Setup::builtin().unwrap();
+        let full = s.build_ephemeris(5.0 * 86_400.0).unwrap();
+        let on = builtin_moon_radii_for(&s.system(&full, true)).unwrap();
+        assert_eq!(on, vec![43.09, 40.63]);
+        let off = builtin_moon_radii_for(&s.system(&full, false)).unwrap();
+        assert_eq!(off, vec![43.09]);
+        // A name without a radius is an error.
+        let text = "[[moon]]\nname = \"prometheus\"\nradius_km = 43.09\n";
+        assert!(moon_radii_for(&s.system(&full, true), text).is_err());
     }
 
     #[test]
