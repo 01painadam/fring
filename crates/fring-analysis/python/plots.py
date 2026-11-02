@@ -148,8 +148,7 @@ def profile_data(tag, label):
         value_name="fraction",
     )
     long["cls"] = long["cls"].str.replace("frac_", "")
-    long["cls"] = [f"{c} ({CLASS_RANGE[c]})" for c in long["cls"]]
-    long["fraction"] = long["fraction"].round(4)
+    long["fraction"] = long["fraction"].round(3)
     return long
 
 
@@ -158,7 +157,8 @@ def profile_chart(tags, r_lo, r_hi, title):
     lines = lines[(lines.r > r_lo) & (lines.r < r_hi)]
     panels = []
     for t, lab in tags:
-        d = profile_data(t, lab)[["r_lo_km", "r_hi_km", "cls", "fraction"]]
+        d = profile_data(t, lab)[["r_lo_km", "cls", "fraction"]]
+        d["r_lo_km"] = d["r_lo_km"].round(0).astype(int)
         bars = (
             alt.Chart(d)
             .mark_line(point=alt.OverlayMarkDef(size=14, filled=True), strokeWidth=1.2)
@@ -167,9 +167,9 @@ def profile_chart(tags, r_lo, r_hi, title):
                 y=alt.Y("fraction:Q", title="Fraction of particles", scale=alt.Scale(domain=[0, 1])),
                 color=alt.Color(
                     "cls:N",
-                    scale=alt.Scale(domain=CLASS_LABELS, range=CLASS_COLOURS),
-                    title="Class (mean MEGNO)",
-                    legend=alt.Legend(orient="bottom", columns=2),
+                    scale=alt.Scale(domain=CLASSES, range=CLASS_COLOURS),
+                    title="Class of the mean MEGNO: bounded < 1.5 <= regular <= 2.5 < uncertain < 5 <= chaotic",
+                    legend=alt.Legend(orient="bottom", columns=4),
                 ),
                 tooltip=["r_lo_km", "cls", "fraction"],
             )
@@ -187,7 +187,7 @@ def fig_chaos_map():
     save(map_chart("main10", 10, 139700, 141100), "chaos_map_10yr")
     save(map_chart("main5", 5, 139700, 141100), "chaos_map_5yr")
     if (DATA / "main30_map.csv").exists():
-        save(map_chart("main30", 30, 139700, 141100), "chaos_map_30yr")
+        save(map_chart("main30", 30, 139950, 141050), "chaos_map_30yr")
 
 
 def fig_chaos_profile():
@@ -199,7 +199,7 @@ def fig_chaos_profile():
             tags,
             139700,
             141100,
-            "Class fractions against initial radius (2 x 10^5 circular particles, 7 km bins)",
+            "Class fractions against initial radius (2 x 10^5 circular particles, 2 km bins; 30 years: 1.1 x 10^5 particles)",
         ),
         "chaos_profile",
     )
@@ -214,7 +214,7 @@ def fig_chaos_zoom():
             [("zoom10", "10 years")],
             140000,
             140450,
-            "Zoom around the core: class fractions against initial radius (5 x 10^4 particles, 10 km bins)",
+            "Zoom around the core: class fractions against initial radius (5 x 10^4 particles, 2 km bins)",
         ),
         "chaos_zoom_profile",
     )
@@ -387,6 +387,31 @@ FIGS = {
     "apse": fig_apse,
     "lyapunov": fig_lyapunov,
 }
+
+
+
+def comb_period(tag="zoom10", r_lo=140000.0, r_hi=140450.0):
+    """Dominant period (km) of the 'bounded' fraction against radius (FFT), after
+    removing the mean and a linear trend. Compared in the note with the spacing of
+    first-order resonances with Prometheus, (2/3) a / m^2 with m = 110."""
+    p = pd.read_csv(DATA / f"{tag}_profile.csv")
+    p = p[(p.r_lo_km >= r_lo) & (p.r_hi_km <= r_hi)]
+    x = p["frac_bounded"].to_numpy()
+    t = np.arange(len(x))
+    x = x - np.polyval(np.polyfit(t, x, 1), t)
+    bin_km = float(p["r_hi_km"].iloc[0] - p["r_lo_km"].iloc[0])
+    spec = np.abs(np.fft.rfft(x * np.hanning(len(x)))) ** 2
+    freq = np.fft.rfftfreq(len(x), d=bin_km)
+    ok = np.where(freq >= 1.0 / 60.0)[0]  # periods below 60 km
+    k = int(ok[np.argmax(spec[ok])])
+    period = 1.0 / freq[k]
+    spacing = (2.0 / 3.0) * 140222.43 / 110.0**2
+    print(f"{tag}: dominant period of the bounded fraction {period:.1f} km (bin {bin_km:g} km); "
+          f"first-order resonance spacing near m=110: {spacing:.1f} km")
+
+
+FIGS["comb"] = comb_period
+
 
 if __name__ == "__main__":
     which = sys.argv[1:] or list(FIGS)

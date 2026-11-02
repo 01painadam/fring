@@ -92,7 +92,7 @@ fn cmd_map(a: &[String]) -> Res<()> {
         &pts,
         r_lo,
         r_hi,
-        r_bin,
+        num(a, 7, r_bin),
     )?;
     map::write_megno_hist(
         &mut create(out, &format!("{tag}_hist.csv"))?,
@@ -465,7 +465,10 @@ fn cmd_lyapunov(a: &[String]) -> Res<()> {
         epsilon: 1e-9,
         seed: num(a, 7, 20_261_105.0) as u64,
     };
-    let tag = a.get(8).map_or(String::new(), |t| format!("_{t}"));
+    let tag = a
+        .get(8)
+        .filter(|t| !t.is_empty())
+        .map_or(String::new(), |t| format!("_{t}"));
     let t0 = std::time::Instant::now();
     let method = if a.get(9).map(String::as_str) == Some("shadow") {
         lyapunov::Method::Shadow
@@ -538,11 +541,56 @@ fn cmd_lyapunov(a: &[String]) -> Res<()> {
     let mut wp = create(out, &format!("lyapunov_pairs{tag}.csv"))?;
     writeln!(
         wp,
-        "pair,ftle_end_per_yr,slope_30_end_per_yr,megno_rate_30_end_per_yr"
+        "pair,ftle_end_per_yr,slope_30_end_per_yr,megno_rate_30_end_per_yr,slope_30_60,slope_60_end"
     )?;
+    let window = |p: &lyapunov::Pair, lo: f64, hi: f64| {
+        let ia = t.iter().position(|x| *x >= lo).unwrap_or(0);
+        let ib = t.iter().position(|x| *x >= hi).unwrap_or(nt - 1);
+        ols(&t[ia..=ib], &p.log_growth[ia..=ib]).0
+    };
+    let s1: Vec<f64> = pairs.iter().map(|p| window(p, 30.0, 60.0)).collect();
+    let s2: Vec<f64> = pairs.iter().map(|p| window(p, 60.0, years)).collect();
     for k in 0..pairs.len() {
-        writeln!(wp, "{k},{:.5},{:.5},{:.5}", ftle[k], slopes[k], mrates[k])?;
+        writeln!(
+            wp,
+            "{k},{:.5},{:.5},{:.5},{:.5},{:.5}",
+            ftle[k], slopes[k], mrates[k], s1[k], s2[k]
+        )?;
     }
+    // Two populations: Kepler shear alone gives a slope of about 1/t (0.02 to 0.03 per
+    // year at 30 to 100 years); chaotic trajectories give 0.1 or more.
+    let thr = 0.1;
+    let chaotic: Vec<f64> = slopes.iter().copied().filter(|s| *s > thr).collect();
+    let regular: Vec<f64> = slopes.iter().copied().filter(|s| *s <= thr).collect();
+    println!(
+        "threshold {thr}/yr on the slope over 30 to {years} yr: {} chaotic, {} regular",
+        chaotic.len(),
+        regular.len()
+    );
+    if chaotic.len() > 1 {
+        println!(
+            "  chaotic: mean {:.4} std {:.4} (se {:.4}) median {:.4} min {:.4} max {:.4}; Lyapunov time {:.1} yr",
+            mean(&chaotic),
+            std(&chaotic),
+            std(&chaotic) / (chaotic.len() as f64).sqrt(),
+            quantile(&chaotic, 0.5),
+            quantile(&chaotic, 0.0),
+            quantile(&chaotic, 1.0),
+            1.0 / mean(&chaotic)
+        );
+    }
+    if regular.len() > 1 {
+        println!(
+            "  regular: mean {:.4} std {:.4} (1/t at 65 yr = {:.4})",
+            mean(&regular),
+            std(&regular),
+            1.0 / 65.0
+        );
+    }
+    let switch = (0..pairs.len())
+        .filter(|&k| (s1[k] > thr) != (s2[k] > thr))
+        .count();
+    println!("  pairs that change class between years 30-60 and 60-{years}: {switch}");
     let n = pairs.len() as f64;
     println!(
         "plain FTLE at {} yr: mean {:.4} std {:.4} (se {:.4}) per yr",
