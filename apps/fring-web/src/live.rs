@@ -540,6 +540,12 @@ pub fn ref_bytes(cap: u64) -> u64 {
     2 * cap * 8
 }
 
+/// Bytes of the status buffer of the stepper (ICR-006): 8 header words and one
+/// drop-reason word for each of the `cap` particles.
+pub fn status_bytes(cap: u64) -> u64 {
+    (8 + cap) * 4
+}
+
 /// Instances in the instance buffer for `count` particles: the live picture
 /// (`HEAD_SLOTS` + `count`) and the reference picture, one after the other.
 pub fn instance_slots(count: u32) -> u64 {

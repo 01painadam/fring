@@ -13,8 +13,8 @@
 use crate::live::{
     BLOCK_STEPS, Band, COLOUR_FAINT_OFFSET, CompareMode, END_MARGIN_S, FLOATS_PER_INSTANCE,
     Governor, MAX_IN_FLIGHT, PANDORA, PARTICLE_COUNT, ProjectionUniform, SPAN_S, STEP_S, Setup,
-    StepPlanner, ViewFrame, count_fits, head_instances_styled, instance_bytes, max_hours_for,
-    ref_base_slot, ref_bytes, view_transform,
+    StepPlanner, ViewFrame, builtin_moon_radii_for, count_fits, head_instances_styled,
+    instance_bytes, max_hours_for, ref_base_slot, ref_bytes, status_bytes, view_transform,
 };
 use crate::view::{Camera, half_local_x, split_halves};
 use fring_gpu::gpu::Gpu;
@@ -77,6 +77,8 @@ pub struct App {
     project_bind: Option<wgpu::BindGroup>,
     // Reference picture: a copy of planes 0 and 1 (x, y) of the state, with its time.
     ref_buffer: Option<wgpu::Buffer>,
+    /// Copy of the status buffer (drop reasons, ICR-006) with the same time as `ref_buffer`.
+    ref_status: Option<wgpu::Buffer>,
     /// Own uniform and bind group for the projection of the reference (a
     /// second `write_buffer` to the live uniform would overwrite the first).
     ref_uniform: wgpu::Buffer,
@@ -304,6 +306,7 @@ impl App {
             project_uniform,
             project_bind: None,
             ref_buffer: None,
+            ref_status: None,
             ref_uniform,
             ref_bind: None,
             ref_head_n: 0,
@@ -646,7 +649,7 @@ impl App {
             });
             self.instances_n = self.count;
         }
-        let stepper = GpuStepper::new(
+        let mut stepper = GpuStepper::new(
             &self.gpu,
             kernels,
             &system,
@@ -656,6 +659,9 @@ impl App {
             Mode::Dp,
             None,
         )?;
+        // ICR-006: a particle that comes inside a moon is dropped. One radius
+        // for each track of the system, matched by name (params/moons.toml).
+        stepper.set_moon_radii_km(&builtin_moon_radii_for(&system)?)?;
         self.project_bind = Some(self.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("project"),
             layout: &self.project_pipeline.get_bind_group_layout(0),
@@ -672,6 +678,10 @@ impl App {
                     binding: 2,
                     resource: self.project_uniform.as_entire_binding(),
                 },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: stepper.status_buffer().as_entire_binding(),
+                },
             ],
         }));
         // The reference is the new initial state (t = 0). It holds planes 0 and 1
@@ -685,16 +695,31 @@ impl App {
                 mapped_at_creation: false,
             }));
         }
-        if let Some(reference) = &self.ref_buffer {
+        let want_status = status_bytes(stepper.capacity() as u64);
+        if self
+            .ref_status
+            .as_ref()
+            .is_none_or(|b| b.size() != want_status)
+        {
+            self.ref_status = Some(self.device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("reference status"),
+                size: want_status,
+                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            }));
+        }
+        if let (Some(reference), Some(ref_status)) = (&self.ref_buffer, &self.ref_status) {
             let mut encoder = self
                 .device
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                     label: Some("reference at t = 0"),
                 });
             encoder.copy_buffer_to_buffer(stepper.state_buffer(), 0, reference, 0, want);
+            // No particle is dropped at t = 0: the reasons are all 0.
+            encoder.copy_buffer_to_buffer(stepper.status_buffer(), 0, ref_status, 0, want_status);
             self.queue.submit([encoder.finish()]);
         }
-        if let Some(reference) = &self.ref_buffer {
+        if let (Some(reference), Some(ref_status)) = (&self.ref_buffer, &self.ref_status) {
             self.ref_bind = Some(self.device.create_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some("project reference"),
                 layout: &self.project_pipeline.get_bind_group_layout(0),
@@ -710,6 +735,10 @@ impl App {
                     wgpu::BindGroupEntry {
                         binding: 2,
                         resource: self.ref_uniform.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 3,
+                        resource: ref_status.as_entire_binding(),
                     },
                 ],
             }));
@@ -806,13 +835,22 @@ impl App {
             if self.ref_pending {
                 // Before this frame's steps: the reference is the state at the
                 // time that the page shows now.
-                if let Some(reference) = &self.ref_buffer {
+                if let (Some(reference), Some(ref_status)) = (&self.ref_buffer, &self.ref_status) {
                     encoder.copy_buffer_to_buffer(
                         stepper.state_buffer(),
                         0,
                         reference,
                         0,
                         ref_bytes(stepper.capacity() as u64),
+                    );
+                    // The drop reasons at the same time: a particle dropped
+                    // before this moment is hidden in the reference too.
+                    encoder.copy_buffer_to_buffer(
+                        stepper.status_buffer(),
+                        0,
+                        ref_status,
+                        0,
+                        status_bytes(stepper.capacity() as u64),
                     );
                     self.ref_time_s = stepper.time_s();
                     self.ref_custom = true;
