@@ -493,6 +493,11 @@ impl App {
         self.ref_pending = true;
     }
 
+    /// True if the reference was set with "Set to now" (it is not t = 0).
+    pub fn reference_is_custom(&self) -> bool {
+        self.ref_custom
+    }
+
     /// Time of the reference state in days (0 after every restart).
     pub fn reference_time_days(&self) -> f64 {
         self.ref_time_s / 86_400.0

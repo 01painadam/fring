@@ -14,9 +14,10 @@ Done when: the three modes and "Set to now" work in Chrome on the Mac mini; the 
 - Commit 5: second projection pass for the reference (own uniform and bind group, own time for the frame angle and moons, written into the second half of the instance buffer), skipped when Compare is Off; `App::set_compare`; native test `reference_projection_matches_the_twin_in_the_second_half_of_the_buffer` (26 particles within 500 km, worst error 0.151 of the tolerance, non-zero low words).
 - Commit 6: Overlay. `points.wgsl` draws colour ids >= 10 as a warm faint reference; `draw` draws the reference range first, then the live range; Compare select (Off, Overlay) on the page; native test `render_shader_makes_a_pipeline`.
 - Commit 7: Side by side. `view::split_halves` (floor(w/2) per half, odd widths) and `half_local_x` with host tests (`halves_of_even_and_odd_widths`, `pointer_maps_to_the_same_place_in_each_half`); one render pass, two viewports and scissor rects, one shared frame uniform (both halves have the same size); pan, zoom and the view width use the size of one picture.
+- Commit 8: "Set to now" button, labels over the two halves in Side by side (reference time and live time), reference time in the readout in Overlay; `App::reference_is_custom`.
 
 ## Next step (one concrete action)
-Commit 8: "Set to now" button and reference time labels (`index.html`; `reference_time_days` and `reference_is_custom` from `App`).
+Commit 9: extend `?bench` in `index.html` to run counts x modes (`counts=`, `modes=`), table plus CSV rows in the console.
 
 ## How to verify the current state
 `cargo test -p fring-web` (host tests pass); `cargo check -p fring-web --target wasm32-unknown-unknown`.

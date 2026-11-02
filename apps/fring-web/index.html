@@ -24,6 +24,8 @@
   .legend { display: flex; gap: 12px; flex-wrap: wrap; color: var(--muted); font-size: 13px; }
   .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 5px; vertical-align: -1px; }
   .note { margin: 6px 0 0; color: var(--muted); font-size: 12px; }
+  .label { position: fixed; bottom: 12px; padding: 4px 8px; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; font-variant-numeric: tabular-nums; display: none; }
+  .label.show { display: block; }
   #error { display: none; position: fixed; inset: 0; padding: 24px; place-content: center; text-align: center; background: var(--bg); }
   #error.show { display: grid; }
   #error h2 { margin: 0 0 8px; }
@@ -33,6 +35,9 @@
 </head>
 <body>
 <canvas id="view" aria-label="Particles of Saturn's F ring and its shepherd moons"></canvas>
+
+<div class="label" id="lab-ref" style="left: 12px"></div>
+<div class="label" id="lab-live" style="left: calc(50% + 12px)"></div>
 
 <div class="panel" id="panel">
   <h1>Saturn's F ring</h1>
@@ -85,6 +90,7 @@
       <option value="1">Side by side (reference left)</option>
       <option value="2">Overlay (reference faint)</option>
     </select>
+    <button id="setref" type="button" title="Store the live state as the new reference">Set to now</button>
   </div>
   <div class="row">
     <label for="speed">Speed</label>
@@ -123,6 +129,7 @@
     $("panel").style.display = "none";
   }
 
+  const fmtDays = (d) => (d > 730 ? (d / 365.25).toFixed(2) + " y" : "t = " + d.toFixed(1) + " d");
   const fmtTime = (t, span) => {
     const f = (d) => (d > 730 ? (d / 365.25).toFixed(2) + " y" : d.toFixed(1) + " d");
     return "t = " + f(t) + " of " + f(span);
@@ -201,7 +208,12 @@
     };
     $("amin").addEventListener("change", onBand);
     $("amax").addEventListener("change", onBand);
-    $("compare").addEventListener("change", (e) => tell(() => app.set_compare(parseInt(e.target.value, 10))));
+    let compareMode = 0;
+    $("compare").addEventListener("change", (e) => {
+      compareMode = parseInt(e.target.value, 10);
+      tell(() => app.set_compare(compareMode));
+    });
+    $("setref").addEventListener("click", () => app.set_reference_now());
     $("frame").addEventListener("change", (e) => app.set_view(parseInt(e.target.value, 10)));
 
     // Pointer: drag to pan, wheel to zoom. Positions in canvas pixels.
@@ -268,7 +280,14 @@
       if (n++ % 10 === 0 && phase === "running") {
         const w = app.view_width_km();
         const fps = dts.length > 1 ? (1000 * dts.length) / dts.reduce((a, b) => a + b[1], 0) : 0;
-        $("readout").textContent = fmtTime(app.time_days(), app.span_days()) + "    view " + (w >= 1000 ? Math.round(w).toLocaleString("en-GB") : w.toFixed(1)) + " km    " + fps.toFixed(0) + " fps    " + app.steps_per_frame() + " steps/frame" + (app.speed_limited() ? " (speed limited)" : "");
+        $("readout").textContent = fmtTime(app.time_days(), app.span_days()) + "    view " + (w >= 1000 ? Math.round(w).toLocaleString("en-GB") : w.toFixed(1)) + " km    " + fps.toFixed(0) + " fps    " + app.steps_per_frame() + " steps/frame" + (app.speed_limited() ? " (speed limited)" : "") + (compareMode === 2 ? "    reference " + fmtDays(app.reference_time_days()) : "");
+      }
+      if (n % 10 === 2 && phase === "running") {
+        const refText = "reference " + (app.reference_is_custom() ? "set at " : "start, ") + fmtDays(app.reference_time_days());
+        $("lab-ref").textContent = refText;
+        $("lab-live").textContent = "live " + fmtDays(app.time_days());
+        $("lab-ref").classList.toggle("show", compareMode === 1);
+        $("lab-live").classList.toggle("show", compareMode === 1);
       }
       if (phase === "running" && n % 10 === 1) {
         const m = app.message();
