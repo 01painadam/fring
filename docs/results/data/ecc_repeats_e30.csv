@@ -1,0 +1,7 @@
+kind,bin,n_a,n_b,frac_a,frac_b,dfrac,sd_counting,z,p,lam_a,lam_a_lo,lam_a_hi,lam_b,lam_b_lo,lam_b_hi,dlam,dlam_sigma,ks_d,ks_p
+repeat,0,,,,,,,,,,,,,,,,,,,
+phase120,0,,,,,,,,,,,,,,,,,,,
+repeat,2,,,,,,,,,,,,,,,,,,,
+phase120,2,,,,,,,,,,,,,,,,,,,
+repeat,21,,,,,,,,,,,,,,,,,,,
+phase120,21,,,,,,,,,,,,,,,,,,,

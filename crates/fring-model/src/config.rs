@@ -213,6 +213,23 @@ pub enum Distribution {
         /// Outer edge in km (greater than the inner edge).
         max_semi_major_axis_km: f64,
     },
+    /// Uniform band in semi-major axis with one eccentricity and one apse
+    /// longitude for all particles (`kind = "eccentric_band"`, ICR-007), for
+    /// example for chaos maps of core-like eccentric orbits. The draws of `a`
+    /// and of the mean longitude are those of [`Distribution::Band`] with the
+    /// same seed, so `eccentricity = 0` gives the same states as `band`
+    /// (equal as numbers; a zero velocity component can change sign).
+    EccentricBand {
+        /// Inner edge (guiding semi-major axis) in km.
+        min_semi_major_axis_km: f64,
+        /// Outer edge in km (greater than the inner edge).
+        max_semi_major_axis_km: f64,
+        /// Eccentricity, in [0, 1): the epicyclic amplitude, as for
+        /// [`Distribution::Core`].
+        eccentricity: f64,
+        /// Longitude of pericentre in degrees.
+        apse_longitude_deg: f64,
+    },
     /// Localised cloud (`kind = "clump"`): Gaussian offsets in position around
     /// one point on a circular orbit, for example to mimic a collision event.
     /// Every particle has the circular velocity of the centre point (no
@@ -379,6 +396,25 @@ impl RunConfig {
     }
 }
 
+/// Checks the edges of a band: both > 0 and min < max.
+fn band_edges(p: &str, min_semi_major_axis_km: f64, max_semi_major_axis_km: f64) -> Result<()> {
+    positive(
+        &format!("{p}.min_semi_major_axis_km"),
+        min_semi_major_axis_km,
+    )?;
+    positive(
+        &format!("{p}.max_semi_major_axis_km"),
+        max_semi_major_axis_km,
+    )?;
+    require(
+        min_semi_major_axis_km < max_semi_major_axis_km,
+        format!(
+            "{p}.min_semi_major_axis_km ({min_semi_major_axis_km}) must be less than \
+             max_semi_major_axis_km ({max_semi_major_axis_km})"
+        ),
+    )
+}
+
 impl Distribution {
     fn validate(&self) -> Result<()> {
         const P: &str = "particles.distribution";
@@ -403,22 +439,19 @@ impl Distribution {
             Distribution::Band {
                 min_semi_major_axis_km,
                 max_semi_major_axis_km,
+            } => band_edges(P, min_semi_major_axis_km, max_semi_major_axis_km),
+            Distribution::EccentricBand {
+                min_semi_major_axis_km,
+                max_semi_major_axis_km,
+                eccentricity,
+                apse_longitude_deg,
             } => {
-                positive(
-                    &format!("{P}.min_semi_major_axis_km"),
-                    min_semi_major_axis_km,
-                )?;
-                positive(
-                    &format!("{P}.max_semi_major_axis_km"),
-                    max_semi_major_axis_km,
-                )?;
+                band_edges(P, min_semi_major_axis_km, max_semi_major_axis_km)?;
                 require(
-                    min_semi_major_axis_km < max_semi_major_axis_km,
-                    format!(
-                        "{P}.min_semi_major_axis_km ({min_semi_major_axis_km}) must be less than \
-                         max_semi_major_axis_km ({max_semi_major_axis_km})"
-                    ),
-                )
+                    eccentricity.is_finite() && (0.0..1.0).contains(&eccentricity),
+                    format!("{P}.eccentricity must be in [0, 1), found {eccentricity}"),
+                )?;
+                finite(&format!("{P}.apse_longitude_deg"), apse_longitude_deg)
             }
             Distribution::Clump {
                 semi_major_axis_km,

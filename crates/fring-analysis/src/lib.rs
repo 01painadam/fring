@@ -8,6 +8,7 @@
 
 pub mod apse;
 pub mod closest;
+pub mod compare;
 pub mod laplace;
 pub mod lyapunov;
 pub mod map;

@@ -187,7 +187,7 @@ For a circular equatorial orbit in the potential of section 7.1 these are exact,
 
 ### 7.4 Initial conditions
 
-Configurable distributions: a narrow core (Gaussian in semi-major axis, with given eccentricity and apse), a uniform band across the moons' region (for chaos maps), and a "clump" (a localised cloud, for example to mimic a collision event). Moon initial states come from cited elements at the run epoch.
+Configurable distributions: a narrow core (Gaussian in semi-major axis, with given eccentricity and apse), a uniform band across the moons' region (for chaos maps), the same band with one eccentricity and apse for all particles (`eccentric_band`, ICR-007, for chaos maps of core-like eccentric orbits), and a "clump" (a localised cloud, for example to mimic a collision event). Moon initial states come from cited elements at the run epoch.
 
 ### 7.5 Collision models
 
@@ -275,7 +275,7 @@ Task format: ID, owner, description, acceptance criteria. Tasks in the same phas
 - **W2-DROP-GPU (A3; added by AJ, 2026-11-02; blocks gate G3).** ICR-006 in `fring-gpu`: a drop reason for each particle in the status buffer (unbound or invalid orbit, or inside moon k), an early return for a dropped particle in the step kernels, counts by reason, and an opt-in moon-radius rule (minimum distance over each drift between two kicks, linear interpolation, mean radius from `params/moons.toml`). *Done when:* the tests of ICR-006 item 4 pass natively; all existing tests pass and `GpuBackend` results are bit for bit unchanged with the rule off; `cargo check -p fring-gpu --target wasm32-unknown-unknown` passes; `fring-bench` shows no slow-down beyond its noise.
 - **W2-DROP (A7; added by AJ, 2026-11-02; blocks gate G3).** The web run goes on when particles are dropped: the radius rule is on (radii from `params/moons.toml`); dropped particles are hidden in the live picture and in a "Set to now" reference (none at t = 0); the readout shows the counts (unbound, inside Prometheus, inside Pandora). End of the run (AJ, 2026-11-02): at the end of the moon ephemeris the run pauses and does not restart; Reset starts again at t = 0. *Done when:* in Chrome on the Mac mini, a full run at 10⁵ particles (with the default band, and with a band close to Prometheus) goes to the end with no stop, shows the counts, and pauses at the end; `?bench` at 10⁵ still gives mean 30 fps or more in each compare mode; the host and native tests pass.
 
-- **A2-ANALYSIS (A8; added at gate G2, does not block gate G3).** (a) Closest-approach distribution to Pandora for the particles of the 10-year chaos map (A1-ANALYSIS harness). (b) Chaos map of core-like eccentric orbits (e = 0.0024, apse aligned with the core) across the quiet zone, at 10 and 30 years, against the circular map. *Done when:* a note in `docs/results/` says whether the outer edge of the map needs sub-stepping, and whether eccentric core orbits are more or less chaotic than circular ones.
+- **A2-ANALYSIS (A8; added at gate G2, does not block gate G3).** (a) Closest-approach distribution to Pandora for the particles of the 10-year chaos map (A1-ANALYSIS harness). (b) Chaos map of core-like eccentric orbits (e = 0.0024, apse aligned with the core) across the quiet zone, at 10 and 30 years, against the circular map. *Done when:* a note in `docs/results/` says whether the outer edge of the map needs sub-stepping, and whether eccentric core orbits are more or less chaotic than circular ones. AJ decisions (2026-11-02): the eccentric orbits use `kind = "eccentric_band"` (ICR-007), with the same config at e = 0 and the same seed as the circular control; a rerun of the outer window (140,850 to 141,100 km) with a step of h/4 decides "sub-stepping needed" (a change of the chaotic fraction or the median Lyapunov rate by more than 3 sigma of the noise floor); the closest-approach distribution is the reason, not the test.
 - **L3 (A1; added at gate G2, does not block gate G3).** Compare the masses and orbital elements of Prometheus and Pandora in `params/` with those that GR03a and GR03b used. *Done when:* a short note in `docs/literature/` says whether the difference explains the factor of 1.4 in the moons' Lyapunov rate (A1-ANALYSIS: 0.22 per year in the chaotic runs; GR03: 0.30 to 0.35).
 
 **Gate G3 (AJ):** first public demo. The evidence includes the Safari 26 check of the web page (`?bench` fps, and the M24 zoom check: no jitter at a few km in each view).
@@ -305,7 +305,7 @@ Task format: ID, owner, description, acceptance criteria. Tasks in the same phas
 ### Phase 6: replay and showcase
 
 - **W3 (A7).** Replay viewer: streams snapshot frames (decimated, compressed) and plays them with a time slider. WebGL2 fallback for replay if WebGPU is not available. *Done when:* a 30-year run plays smoothly from a static host.
-- **E1 (A8).** Figures and numbers for the explainer, each reproducible from a script in `validation/` or `fring-analysis`.
+- **X1 (A8; was E1, renamed 2026-11-02 so that E1 means close encounters only).** Figures and numbers for the explainer, each reproducible from a script in `validation/` or `fring-analysis`.
 - **E2 (A0).** README, docs site, licence, citation file, release v1.0.
 
 **Gate G6 (AJ):** publish.

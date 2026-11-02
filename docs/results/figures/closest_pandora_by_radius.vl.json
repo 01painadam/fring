@@ -1,0 +1,266 @@
+{
+  "$schema": "https://vega.github.io/schema/vega-lite/v5.20.1.json",
+  "config": {
+    "view": {
+      "continuousHeight": 300,
+      "continuousWidth": 300,
+      "strokeWidth": 0
+    }
+  },
+  "data": {
+    "name": "data-41556966c0dc65ffe85f2a9cef03b6ab"
+  },
+  "datasets": {
+    "data-41556966c0dc65ffe85f2a9cef03b6ab": [
+      {
+        "fraction": 0.0,
+        "limit": "hit (< 40.63 km)",
+        "r": 140862.0
+      },
+      {
+        "fraction": 0.0,
+        "limit": "hit (< 40.63 km)",
+        "r": 140888.0
+      },
+      {
+        "fraction": 0.0,
+        "limit": "hit (< 40.63 km)",
+        "r": 140912.0
+      },
+      {
+        "fraction": 0.0,
+        "limit": "hit (< 40.63 km)",
+        "r": 140938.0
+      },
+      {
+        "fraction": 0.0,
+        "limit": "hit (< 40.63 km)",
+        "r": 140962.0
+      },
+      {
+        "fraction": 0.0005,
+        "limit": "hit (< 40.63 km)",
+        "r": 140988.0
+      },
+      {
+        "fraction": 0.002,
+        "limit": "hit (< 40.63 km)",
+        "r": 141012.0
+      },
+      {
+        "fraction": 0.011,
+        "limit": "hit (< 40.63 km)",
+        "r": 141038.0
+      },
+      {
+        "fraction": 0.0431,
+        "limit": "hit (< 40.63 km)",
+        "r": 141062.0
+      },
+      {
+        "fraction": 0.1334,
+        "limit": "hit (< 40.63 km)",
+        "r": 141088.0
+      },
+      {
+        "fraction": 0.0,
+        "limit": "closer than 1 R_H",
+        "r": 140862.0
+      },
+      {
+        "fraction": 0.0,
+        "limit": "closer than 1 R_H",
+        "r": 140888.0
+      },
+      {
+        "fraction": 0.0,
+        "limit": "closer than 1 R_H",
+        "r": 140912.0
+      },
+      {
+        "fraction": 0.0,
+        "limit": "closer than 1 R_H",
+        "r": 140938.0
+      },
+      {
+        "fraction": 0.0005,
+        "limit": "closer than 1 R_H",
+        "r": 140962.0
+      },
+      {
+        "fraction": 0.002,
+        "limit": "closer than 1 R_H",
+        "r": 140988.0
+      },
+      {
+        "fraction": 0.0074,
+        "limit": "closer than 1 R_H",
+        "r": 141012.0
+      },
+      {
+        "fraction": 0.03,
+        "limit": "closer than 1 R_H",
+        "r": 141038.0
+      },
+      {
+        "fraction": 0.1417,
+        "limit": "closer than 1 R_H",
+        "r": 141062.0
+      },
+      {
+        "fraction": 0.2839,
+        "limit": "closer than 1 R_H",
+        "r": 141088.0
+      },
+      {
+        "fraction": 0.0782,
+        "limit": "closer than 4.1 R_H",
+        "r": 140862.0
+      },
+      {
+        "fraction": 0.4121,
+        "limit": "closer than 4.1 R_H",
+        "r": 140888.0
+      },
+      {
+        "fraction": 0.5911,
+        "limit": "closer than 4.1 R_H",
+        "r": 140912.0
+      },
+      {
+        "fraction": 0.6806,
+        "limit": "closer than 4.1 R_H",
+        "r": 140938.0
+      },
+      {
+        "fraction": 0.7599,
+        "limit": "closer than 4.1 R_H",
+        "r": 140962.0
+      },
+      {
+        "fraction": 0.7714,
+        "limit": "closer than 4.1 R_H",
+        "r": 140988.0
+      },
+      {
+        "fraction": 0.8194,
+        "limit": "closer than 4.1 R_H",
+        "r": 141012.0
+      },
+      {
+        "fraction": 0.8213,
+        "limit": "closer than 4.1 R_H",
+        "r": 141038.0
+      },
+      {
+        "fraction": 0.8184,
+        "limit": "closer than 4.1 R_H",
+        "r": 141062.0
+      },
+      {
+        "fraction": 0.8736,
+        "limit": "closer than 4.1 R_H",
+        "r": 141088.0
+      },
+      {
+        "fraction": 0.7366,
+        "limit": "closer than 6.3 R_H",
+        "r": 140862.0
+      },
+      {
+        "fraction": 0.8148,
+        "limit": "closer than 6.3 R_H",
+        "r": 140888.0
+      },
+      {
+        "fraction": 0.7195,
+        "limit": "closer than 6.3 R_H",
+        "r": 140912.0
+      },
+      {
+        "fraction": 0.7612,
+        "limit": "closer than 6.3 R_H",
+        "r": 140938.0
+      },
+      {
+        "fraction": 0.8101,
+        "limit": "closer than 6.3 R_H",
+        "r": 140962.0
+      },
+      {
+        "fraction": 0.81,
+        "limit": "closer than 6.3 R_H",
+        "r": 140988.0
+      },
+      {
+        "fraction": 0.8452,
+        "limit": "closer than 6.3 R_H",
+        "r": 141012.0
+      },
+      {
+        "fraction": 0.8418,
+        "limit": "closer than 6.3 R_H",
+        "r": 141038.0
+      },
+      {
+        "fraction": 0.8355,
+        "limit": "closer than 6.3 R_H",
+        "r": 141062.0
+      },
+      {
+        "fraction": 0.8987,
+        "limit": "closer than 6.3 R_H",
+        "r": 141088.0
+      }
+    ]
+  },
+  "encoding": {
+    "color": {
+      "field": "limit",
+      "legend": {
+        "columns": 4,
+        "orient": "bottom"
+      },
+      "title": null,
+      "type": "nominal"
+    },
+    "tooltip": [
+      {
+        "field": "r",
+        "type": "quantitative"
+      },
+      {
+        "field": "limit",
+        "type": "nominal"
+      },
+      {
+        "field": "fraction",
+        "type": "quantitative"
+      }
+    ],
+    "x": {
+      "field": "r",
+      "scale": {
+        "domain": [
+          140850,
+          141100
+        ],
+        "nice": false
+      },
+      "title": "Initial orbital radius (km)",
+      "type": "quantitative"
+    },
+    "y": {
+      "field": "fraction",
+      "title": "Fraction of particles",
+      "type": "quantitative"
+    }
+  },
+  "height": 240,
+  "mark": {
+    "point": true,
+    "type": "line"
+  },
+  "title": "Fraction of particles that come close to Pandora in 10 years (25 km bins)",
+  "width": 620
+}

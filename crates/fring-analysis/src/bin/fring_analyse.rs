@@ -4,7 +4,7 @@
 //! ```text
 //! fring-analyse map <run> <out_dir> <tag> [r_lo r_hi r_bin lon_bin]
 //! fring-analyse compare <run_a> <run_b>
-//! fring-analyse closest <config.toml> <out.csv> [<chaos_run>]
+//! fring-analyse closest <config.toml> <out.csv> [moons r_lo r_hi n_max chaos_run]
 //! fring-analyse apse <out_dir> <run>...
 //! fring-analyse moons <run>
 //! fring-analyse laplace <run_with_both_moons>
@@ -15,7 +15,7 @@ use fring_analysis::apse::{self, DAY_S};
 use fring_analysis::laplace::{radius_from_mean_motion, secular_apse_rate_rad_s};
 use fring_analysis::lyapunov::{self, LyapunovConfig};
 use fring_analysis::map::{self, Class};
-use fring_analysis::stats::{mean, ols, quantile, std};
+use fring_analysis::stats::{self, mean, ols, quantile, std};
 use fring_analysis::{closest, setup};
 use fring_io::RunDir;
 use fring_model::physics::{SaturnField, frequencies};
@@ -35,6 +35,10 @@ fn main() {
         Some("moons") => cmd_moons(&args[1..]),
         Some("laplace") => cmd_laplace(&args[1..]),
         Some("lyapunov") => cmd_lyapunov(&args[1..]),
+        Some("closest-join") => cmd_closest_join(&args[1..]),
+        Some("ecc-compare") => cmd_ecc_compare(&args[1..]),
+        Some("edge-compare") => cmd_edge_compare(&args[1..]),
+        Some("ecc-configs") => cmd_ecc_configs(&args[1..]),
         Some("closest-bins") => cmd_closest_bins(&args[1..]),
         _ => Err("usage: fring-analyse map|compare|closest|apse|moons|laplace|lyapunov ...".into()),
     };
@@ -126,133 +130,424 @@ fn cmd_compare(a: &[String]) -> Res<()> {
     Ok(())
 }
 
+/// `closest <config> <out.csv> [moons=prometheus] [r_lo r_hi n_max] [chaos_run]`
+/// (`-` keeps a default). `moons` is a comma list. With `r_lo r_hi n_max` only
+/// the first `n_max` particles with an initial radius in the window are
+/// followed. Writes `<out>.csv` (one `min_<moon>_km` column per moon) and, per
+/// moon, `<out>_<moon>_cum.csv` and `<out>_<moon>_hist.csv`.
 fn cmd_closest(a: &[String]) -> Res<()> {
     let s = setup::load(Path::new(&a[0]))?;
-    let res = closest::run(&s, "prometheus", |l| eprintln!("{l}"))?;
-    // Hill radius of Prometheus from the mean radius of its track.
-    let track = s
-        .system
-        .moons
-        .tracks
-        .iter()
-        .find(|t| t.name == "prometheus")
-        .ok_or("no prometheus")?;
-    let rm = mean(
-        &track
-            .samples
-            .iter()
-            .map(|b| b.position_km.norm())
-            .collect::<Vec<_>>(),
+    let moons: Vec<&str> = a
+        .get(2)
+        .filter(|m| m.as_str() != "-")
+        .map_or("prometheus", String::as_str)
+        .split(',')
+        .collect();
+    let init = if a.len() > 5 && a[3] != "-" {
+        closest::select_window(
+            &s.init,
+            num(a, 3, 0.0),
+            num(a, 4, f64::MAX),
+            num(a, 5, 1e9) as usize,
+        )
+    } else {
+        s.init.clone()
+    };
+    eprintln!(
+        "closest: {} particles, moons {moons:?}",
+        init.particles.len()
     );
-    let hill = rm * (track.gm_km3_s2 / (3.0 * s.saturn.gm_km3_s2)).cbrt();
-    println!("prometheus mean radius {rm:.1} km, Hill radius {hill:.2} km");
-    let classes = if let Some(dir) = a.get(2) {
-        Some(map::read_points(Path::new(dir))?)
+    let res = closest::run(&s, &init, &moons, |l| eprintln!("{l}"))?;
+    let moons_toml =
+        std::fs::read_to_string(Path::new(&s.config.run.params_dir).join("moons.toml"))?;
+    let classes = if let Some(dir) = a.get(6).filter(|d| d.as_str() != "-") {
+        let pts = map::read_points(Path::new(dir))?;
+        Some(
+            pts.iter()
+                .map(|p| (p.id, *p))
+                .collect::<std::collections::HashMap<_, _>>(),
+        )
     } else {
         None
     };
+    let n = res.id.len() as f64;
     let mut w = BufWriter::new(File::create(&a[1])?);
-    writeln!(w, "id,r0_km,min_km,min_half_km,class")?;
+    write!(w, "id,r0_km")?;
+    for m in &moons {
+        write!(w, ",min_{m}_km,min_half_{m}_km")?;
+    }
+    writeln!(w, ",class")?;
     let mut matched = 0usize;
     for i in 0..res.id.len() {
-        let cl = classes.as_ref().and_then(|c| c.get(i)).map_or("", |p| {
-            if (p.r_km - res.r0_km[i]).abs() < 1e-6 {
+        write!(w, "{},{:.4}", res.id[i], res.r0_km[i])?;
+        for q in 0..moons.len() {
+            write!(w, ",{:.3},{:.3}", res.min_km[q][i], res.min_half_km[q][i])?;
+        }
+        let cl = classes
+            .as_ref()
+            .and_then(|c| c.get(&res.id[i]))
+            .filter(|p| (p.r_km - res.r0_km[i]).abs() < 1e-6)
+            .map_or("", |p| {
                 matched += 1;
                 p.class.name()
-            } else {
-                ""
-            }
-        });
-        writeln!(
-            w,
-            "{},{:.4},{:.3},{:.3},{}",
-            res.id[i], res.r0_km[i], res.min_km[i], res.min_half_km[i], cl
-        )?;
+            });
+        writeln!(w, ",{cl}")?;
     }
     w.flush()?;
-    let n = res.id.len() as f64;
-    for k in [1.0, 2.0, 3.0, 5.0, 7.3, 10.0] {
-        let c = res.min_km.iter().filter(|d| **d < k * hill).count();
-        println!(
-            "closer than {k:>4} Hill radii ({:>6.1} km): {c} ({:.3} %)",
-            k * hill,
-            100.0 * c as f64 / n
+    let stem = Path::new(&a[1]).with_extension("");
+    for (q, m) in moons.iter().enumerate() {
+        let track = s
+            .system
+            .moons
+            .tracks
+            .iter()
+            .find(|t| t.name == *m)
+            .ok_or("moon not found")?;
+        let rm = mean(
+            &track
+                .samples
+                .iter()
+                .map(|b| b.position_km.norm())
+                .collect::<Vec<_>>(),
         );
-    }
-    // Cumulative table by class.
-    let tpath = Path::new(&a[1]).with_extension("cum.csv");
-    let mut tw = BufWriter::new(File::create(&tpath)?);
-    writeln!(
-        tw,
-        "hill_radii,km,n_below,frac_below,n_bounded,n_regular,n_uncertain,n_chaotic,n_unmatched"
-    )?;
-    for k in [0.5, 1.0, 2.0, 3.0, 5.0, 7.3, 10.0, 20.0, 50.0, 100.0] {
-        let mut by = [0usize; 5];
-        let mut tot = 0usize;
-        for i in 0..res.id.len() {
-            if res.min_km[i] < k * hill {
-                tot += 1;
-                let cl = classes
-                    .as_ref()
-                    .and_then(|c| c.get(i))
-                    .filter(|p| (p.r_km - res.r0_km[i]).abs() < 1e-6)
-                    .map_or(4, |p| p.class.index());
-                by[cl] += 1;
-            }
-        }
+        let hill = rm * (track.gm_km3_s2 / (3.0 * s.saturn.gm_km3_s2)).cbrt();
+        let rad = closest::moon_radius_km(&moons_toml, m).ok_or("no radius in params")?;
+        println!("{m}: mean radius {rm:.1} km, Hill radius {hill:.2} km, body radius {rad} km");
+        let min = &res.min_km[q];
+        let mut tw = BufWriter::new(File::create(format!("{}_{m}_cum.csv", stem.display()))?);
         writeln!(
             tw,
-            "{k},{:.1},{tot},{:.5},{},{},{},{},{}",
-            k * hill,
-            tot as f64 / n,
-            by[0],
-            by[1],
-            by[2],
-            by[3],
-            by[4]
+            "hill_radii,km,n_below,frac_below,n_bounded,n_regular,n_uncertain,n_chaotic,n_unmatched"
         )?;
+        let mut ks = vec![rad / hill];
+        ks.extend([
+            0.5, 1.0, 2.0, 3.0, 4.1, 5.0, 6.3, 7.3, 10.0, 20.0, 50.0, 100.0,
+        ]);
+        for k in ks {
+            let mut by = [0usize; 5];
+            let mut tot = 0usize;
+            for (i, d) in min.iter().enumerate() {
+                if *d < k * hill {
+                    tot += 1;
+                    let cl = classes
+                        .as_ref()
+                        .and_then(|c| c.get(&res.id[i]))
+                        .filter(|p| (p.r_km - res.r0_km[i]).abs() < 1e-6)
+                        .map_or(4, |p| p.class.index());
+                    by[cl] += 1;
+                }
+            }
+            writeln!(
+                tw,
+                "{k:.4},{:.1},{tot},{:.5},{},{},{},{},{}",
+                k * hill,
+                tot as f64 / n,
+                by[0],
+                by[1],
+                by[2],
+                by[3],
+                by[4]
+            )?;
+        }
+        tw.flush()?;
+        let mut hw = BufWriter::new(File::create(format!("{}_{m}_hist.csv", stem.display()))?);
+        writeln!(hw, "hill_lo,hill_hi,count")?;
+        let edges: Vec<f64> = (0..=40)
+            .map(|k| 0.5 * 10f64.powf(k as f64 * 0.075))
+            .collect();
+        for w2 in edges.windows(2) {
+            let c = min
+                .iter()
+                .filter(|d| **d / hill >= w2[0] && **d / hill < w2[1])
+                .count();
+            writeln!(hw, "{:.4},{:.4},{c}", w2[0], w2[1])?;
+        }
+        hw.flush()?;
+        println!(
+            "{m}: hits (< {rad} km) {}; min distance quantiles 0/1/5/50 %: {:.1} {:.1} {:.1} {:.1} km; classes matched {matched}",
+            min.iter().filter(|d| **d < rad).count(),
+            quantile(min, 0.0),
+            quantile(min, 0.01),
+            quantile(min, 0.05),
+            quantile(min, 0.5)
+        );
     }
-    tw.flush()?;
-    // Histogram of the minimum distance in Hill radii (log bins), for the figure.
-    let mut hw = BufWriter::new(File::create(Path::new(&a[1]).with_extension("hist.csv"))?);
-    writeln!(hw, "hill_lo,hill_hi,count")?;
-    let edges: Vec<f64> = (0..=40)
-        .map(|k| 0.5 * 10f64.powf(k as f64 * 0.075))
-        .collect();
-    for w2 in edges.windows(2) {
-        let c = res
-            .min_km
-            .iter()
-            .filter(|d| **d / hill >= w2[0] && **d / hill < w2[1])
-            .count();
-        writeln!(hw, "{:.4},{:.4},{c}", w2[0], w2[1])?;
-    }
-    hw.flush()?;
-    let c = res.min_km.iter().filter(|d| **d < track_radius(&s)).count();
-    println!("closer than the moon radius: {c}");
-    println!(
-        "min distance quantiles 0/1/5/50 %: {:.1} {:.1} {:.1} {:.1} km; classes matched {matched}",
-        quantile(&res.min_km, 0.0),
-        quantile(&res.min_km, 0.01),
-        quantile(&res.min_km, 0.05),
-        quantile(&res.min_km, 0.5)
-    );
     Ok(())
 }
 
-fn track_radius(_s: &setup::Setup) -> f64 {
-    43.09 // params/moons.toml radius_km of Prometheus
+/// `closest-bins <closest.csv> <out.csv> [bin_km hill_km min_column body_km]`: closest approach against the initial radius.
+/// `ecc-configs <out_dir> <years> <tag> [count=5000]`: writes the configs of the
+/// eccentric map (22 bins of 25 km from 140,150 to 140,700 km), each as an
+/// `ecc` file (e and apse from `params/ring.toml`) and a `circ` control (e = 0)
+/// with the same seed. For 10 years it also writes the apse + 120 deg variants
+/// (ecc only; the control has no apse) and the seed repeats of three bins (inner 0, core 2, outer 21).
+/// `<out_dir>/list_<tag>.txt` names them all, one per line.
+fn cmd_ecc_configs(a: &[String]) -> Res<()> {
+    let (dir, years, tag) = (&a[0], num(a, 1, 10.0), &a[2]);
+    let count = num(a, 3, 5000.0) as u32;
+    let ring = std::fs::read_to_string("params/ring.toml")?;
+    let e = setup::toml_number(&ring, "eccentricity").ok_or("no eccentricity")?;
+    let w = setup::toml_number(&ring, "apse_longitude_deg").ok_or("no apse")?;
+    std::fs::create_dir_all(dir)?;
+    let mut list = Vec::new();
+    let mut put = |name: String, seed: u64, bin: usize, ecc: f64, apse: f64| -> Res<()> {
+        let lo = 140_150.0 + 25.0 * bin as f64;
+        let text = setup::ecc_config(
+            &name,
+            seed,
+            356.2537,
+            100,
+            years,
+            (lo, lo + 25.0),
+            count,
+            ecc,
+            apse,
+        );
+        std::fs::write(Path::new(dir).join(format!("{name}.toml")), text)?;
+        list.push(name);
+        Ok(())
+    };
+    for bin in 0..22usize {
+        let seed = 20_261_200 + bin as u64;
+        put(format!("{tag}-ecc-b{bin:02}"), seed, bin, e, w)?;
+        put(format!("{tag}-circ-b{bin:02}"), seed, bin, 0.0, w)?;
+    }
+    if years <= 10.0 {
+        for bin in [0usize, 2, 21] {
+            let seed = 20_261_200 + bin as u64;
+            put(
+                format!("{tag}-ecc-phase120-b{bin:02}"),
+                seed,
+                bin,
+                e,
+                (w + 120.0) % 360.0,
+            )?;
+            put(
+                format!("{tag}-ecc-repeat-b{bin:02}"),
+                seed + 1000,
+                bin,
+                e,
+                w,
+            )?;
+        }
+    }
+    std::fs::write(
+        Path::new(dir).join(format!("list_{tag}.txt")),
+        list.join("\n") + "\n",
+    )?;
+    println!("{} configs in {dir}", list.len());
+    Ok(())
 }
 
-/// `closest-bins <closest.csv> <out.csv> [bin_km]`: closest approach against the initial radius.
+fn window(p: &[map::Point], lo: f64, hi: f64) -> Vec<map::Point> {
+    p.iter()
+        .filter(|q| q.a_km >= lo && q.a_km < hi)
+        .copied()
+        .collect()
+}
+
+/// `ecc-compare <runs_dir> <tag> <years> <out_dir>`: per bin the eccentric run
+/// `<tag>-ecc-bNN` against its e = 0 control `<tag>-circ-bNN` (same particles
+/// by id), with Holm-adjusted p over the bins that completed; pooled windows;
+/// and the seed repeat and apse + 120 deg runs against the base run. A bin
+/// whose run directory has no `chaos.csv` is written with status `missing`.
+fn cmd_ecc_compare(a: &[String]) -> Res<()> {
+    use fring_analysis::compare::{MIN_COUNT, header};
+    let (runs, tag, years, out) = (&a[0], &a[1], num(a, 2, 10.0), &a[3]);
+    let read = |name: &str| map::read_points(&Path::new(runs).join(name)).ok();
+    let mut w = create(out, &format!("ecc_bins_{tag}.csv"))?;
+    writeln!(w, "{},holm_p,status", header("a_lo_km,a_hi_km,"))?;
+    let mut rows = Vec::new();
+    let (mut all_e, mut all_c) = (Vec::new(), Vec::new());
+    for bin in 0..22usize {
+        let (lo, hi) = (140_150.0 + 25.0 * bin as f64, 140_175.0 + 25.0 * bin as f64);
+        let e = read(&format!("{tag}-ecc-b{bin:02}"));
+        let c = read(&format!("{tag}-circ-b{bin:02}"));
+        let row = match (&e, &c) {
+            (Some(e), Some(c)) => map_compare(e, c, years, 100 + bin as u64),
+            _ => None,
+        };
+        if let (Some(e), Some(c)) = (e, c) {
+            all_e.extend(e);
+            all_c.extend(c);
+        }
+        rows.push((lo, hi, row));
+    }
+    let ps: Vec<f64> = rows
+        .iter()
+        .filter_map(|r| r.2.as_ref().map(|x| x.dfrac.3))
+        .collect();
+    let adj = stats::holm(&ps);
+    let mut k = 0;
+    for (lo, hi, row) in &rows {
+        match row {
+            Some(r) => {
+                writeln!(w, "{lo:.0},{hi:.0},{},{:.3e},ok", r.csv(), adj[k])?;
+                k += 1;
+            }
+            None => writeln!(w, "{lo:.0},{hi:.0},{},,missing", ",".repeat(17))?,
+        }
+    }
+    w.flush()?;
+    let mut ww = create(out, &format!("ecc_windows_{tag}.csv"))?;
+    writeln!(ww, "{}", header("window,a_lo_km,a_hi_km,"))?;
+    for (name, lo, hi) in [
+        ("core", 140_197.0, 140_247.0),
+        ("inner", 140_150.0, 140_425.0),
+        ("outer", 140_425.0, 140_700.0),
+        ("quiet_zone", 140_150.0, 140_700.0),
+    ] {
+        match map_compare(&window(&all_e, lo, hi), &window(&all_c, lo, hi), years, 7) {
+            Some(r) => writeln!(ww, "{name},{lo:.0},{hi:.0},{}", r.csv())?,
+            None => writeln!(ww, "{name},{lo:.0},{hi:.0},{},", ",".repeat(17))?,
+        }
+    }
+    ww.flush()?;
+    let mut rw = create(out, &format!("ecc_repeats_{tag}.csv"))?;
+    writeln!(rw, "{}", header("kind,bin,"))?;
+    for bin in [0usize, 2, 21] {
+        let base = read(&format!("{tag}-ecc-b{bin:02}"));
+        for kind in ["repeat", "phase120"] {
+            let other = read(&format!("{tag}-ecc-{kind}-b{bin:02}"));
+            let row = match (&other, &base) {
+                (Some(o), Some(b)) => fring_analysis::compare::compare(o, b, years, MIN_COUNT, 9),
+                _ => None,
+            };
+            match row {
+                Some(r) => writeln!(rw, "{kind},{bin},{}", r.csv())?,
+                None => writeln!(rw, "{kind},{bin},{},", ",".repeat(17))?,
+            }
+        }
+    }
+    rw.flush()?;
+    println!("wrote ecc_bins/windows/repeats_{tag}.csv in {out}");
+    Ok(())
+}
+
+/// Compares two sets of the same ids in order: ecc against its control.
+fn map_compare(
+    e: &[map::Point],
+    c: &[map::Point],
+    years: f64,
+    seed: u64,
+) -> Option<fring_analysis::compare::Row> {
+    fring_analysis::compare::compare(e, c, years, fring_analysis::compare::MIN_COUNT, seed)
+}
+
+/// `edge-compare <run_h> <run_h4> <years> <out.csv>`: the outer-edge window at
+/// the step h against the step h/4 (same particles). A = h4, B = h.
+fn cmd_edge_compare(a: &[String]) -> Res<()> {
+    use fring_analysis::compare::header;
+    let h = map::read_points(Path::new(&a[0]))?;
+    let h4 = map::read_points(Path::new(&a[1]))?;
+    let years = num(a, 2, 10.0);
+    let mut w = BufWriter::new(File::create(&a[3])?);
+    writeln!(w, "{}", header("window,a_lo_km,a_hi_km,"))?;
+    for (name, lo, hi) in [
+        ("whole", 140_850.0, 141_100.0),
+        ("w1", 140_850.0, 140_900.0),
+        ("w2", 140_900.0, 141_000.0),
+        ("w3", 141_000.0, 141_100.0),
+    ] {
+        let r = map_compare(&window(&h4, lo, hi), &window(&h, lo, hi), years, 11)
+            .ok_or("too few particles in a window")?;
+        writeln!(w, "{name},{lo:.0},{hi:.0},{}", r.csv())?;
+    }
+    w.flush()?;
+    Ok(())
+}
+
+/// `closest-join <closest.csv> <chaos_run> <moon> <hill_km> <body_km> <out_dir>`:
+/// joins the classes of a chaos run to an existing `closest` CSV by particle id
+/// (the CPU and GPU trajectories differ after a Lyapunov time, so this is a
+/// statistical relation, not a trajectory match). Fails if fewer than all rows
+/// match or if `|r0|` disagrees. Writes `<out_dir>/closest_<moon>_classes.csv`:
+/// for each limit, the particles below it by class.
+fn cmd_closest_join(a: &[String]) -> Res<()> {
+    let text = std::fs::read_to_string(&a[0])?;
+    let mut lines = text.lines();
+    let head: Vec<&str> = lines.next().ok_or("empty csv")?.split(',').collect();
+    let col = head
+        .iter()
+        .position(|h| *h == format!("min_{}_km", a[2]))
+        .ok_or("no such moon column")?;
+    let (hill, body): (f64, f64) = (a[3].parse()?, a[4].parse()?);
+    let by_id: std::collections::HashMap<u32, map::Point> = map::read_points(Path::new(&a[1]))?
+        .into_iter()
+        .map(|p| (p.id, p))
+        .collect();
+    let rows: Vec<(u32, f64, f64)> = lines
+        .map(|l| {
+            let f: Vec<&str> = l.split(',').collect();
+            Ok((f[0].parse()?, f[1].parse()?, f[col].parse()?))
+        })
+        .collect::<Res<_>>()?;
+    let mut matched = 0usize;
+    let limits = [
+        ("hit".to_string(), body),
+        ("1_hill".to_string(), hill),
+        ("4.1_hill".to_string(), 4.1 * hill),
+        ("6.3_hill".to_string(), 6.3 * hill),
+        ("all".to_string(), f64::INFINITY),
+    ];
+    let mut counts = vec![[0usize; 5]; limits.len()];
+    for (id, r0, d) in &rows {
+        let p = by_id
+            .get(id)
+            .ok_or(format!("id {id} is not in the chaos run"))?;
+        if (p.r_km - r0).abs() > 1e-3 {
+            return Err(format!("id {id}: r0 {r0} differs from the chaos run {}", p.r_km).into());
+        }
+        matched += 1;
+        for (k, (_, lim)) in limits.iter().enumerate() {
+            if d < lim {
+                counts[k][p.class.index()] += 1;
+            }
+        }
+    }
+    assert_eq!(
+        matched,
+        rows.len(),
+        "classes matched {matched} of {}",
+        rows.len()
+    );
+    if matched == 0 {
+        return Err("no particle matched".into());
+    }
+    let mut w = create(&a[5], &format!("closest_{}_classes.csv", a[2]))?;
+    writeln!(
+        w,
+        "limit,km,n_bounded,n_regular,n_uncertain,n_chaotic,n_invalid,n_below"
+    )?;
+    for (k, (name, lim)) in limits.iter().enumerate() {
+        let c = counts[k];
+        writeln!(
+            w,
+            "{name},{lim:.2},{},{},{},{},{},{}",
+            c[0],
+            c[1],
+            c[2],
+            c[3],
+            c[4],
+            c.iter().sum::<usize>()
+        )?;
+    }
+    w.flush()?;
+    println!("classes matched {matched} of {}", rows.len());
+    Ok(())
+}
+
 fn cmd_closest_bins(a: &[String]) -> Res<()> {
     let text = std::fs::read_to_string(&a[0])?;
     let bin = num(a, 2, 50.0);
-    let hill = 63.4; // km, from the `closest` run (mean radius 139,378 km)
+    // Hill radius and body radius in km come from the `closest` printout.
+    let hill = num(a, 3, 63.4);
+    let col = num(a, 4, 2.0) as usize;
+    let body = num(a, 5, 43.09);
     let mut rows: Vec<(f64, f64)> = Vec::new();
     for line in text.lines().skip(1) {
         let f: Vec<&str> = line.split(',').collect();
-        rows.push((f[1].parse()?, f[2].parse()?));
+        rows.push((f[1].parse()?, f[col].parse()?));
     }
     let r0 = rows.iter().map(|r| r.0).fold(f64::INFINITY, f64::min);
     let r1 = rows.iter().map(|r| r.0).fold(0.0, f64::max);
@@ -264,21 +559,24 @@ fn cmd_closest_bins(a: &[String]) -> Res<()> {
     let mut w = BufWriter::new(File::create(&a[1])?);
     writeln!(
         w,
-        "r_lo_km,r_hi_km,n,frac_below_1_hill,frac_below_3_hill,frac_below_7p3_hill,median_min_km"
+        "r_lo_km,r_hi_km,n,frac_hit,frac_below_1_hill,frac_below_3_hill,frac_below_4p1_hill,frac_below_6p3_hill,frac_below_7p3_hill,median_min_km"
     )?;
     for (i, b) in bins.iter().enumerate() {
         if b.is_empty() {
             continue;
         }
         let f = |k: f64| b.iter().filter(|d| **d < k * hill).count() as f64 / b.len() as f64;
+        let hit = b.iter().filter(|d| **d < body).count() as f64 / b.len() as f64;
         writeln!(
             w,
-            "{:.1},{:.1},{},{:.4},{:.4},{:.4},{:.1}",
+            "{:.1},{:.1},{},{hit:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{:.1}",
             r0 + i as f64 * bin,
             r0 + (i + 1) as f64 * bin,
             b.len(),
             f(1.0),
             f(3.0),
+            f(4.1),
+            f(6.3),
             f(7.3),
             quantile(b, 0.5)
         )?;

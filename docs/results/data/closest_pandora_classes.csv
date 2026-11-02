@@ -1,0 +1,6 @@
+limit,km,n_bounded,n_regular,n_uncertain,n_chaotic,n_invalid,n_below
+hit,40.63,1,0,0,375,0,376
+1_hill,61.41,1,0,3,915,0,919
+4.1_hill,251.78,9,6,96,13096,0,13207
+6.3_hill,386.88,16,17,189,15920,0,16142
+all,inf,2493,663,593,16251,0,20000

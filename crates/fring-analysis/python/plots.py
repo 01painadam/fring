@@ -470,12 +470,95 @@ def window_summary():
     print(t.to_string(index=False))
 
 
+def fig_closest_pandora():
+    """A2-ANALYSIS (a): closest approach to Pandora (and Prometheus) of the
+    outer-edge particles; lines at 1, 4.1 and 6.3 Hill radii."""
+    f = DATA / "closest_pandora_pandora_hist.csv"
+    if not f.exists():
+        return
+    h = pd.read_csv(f)
+    bars = (
+        alt.Chart(h)
+        .mark_bar(color="#0072B2")
+        .encode(
+            x=alt.X("hill_lo:Q", title="Closest approach to Pandora (Hill radii; 1 R_H = 61.4 km)", scale=alt.Scale(type="log", domain=[0.5, 100])),
+            x2="hill_hi:Q",
+            y=alt.Y("count:Q", title="Particles"),
+            tooltip=["hill_lo", "hill_hi", "count"],
+        )
+    )
+    rules = alt.Chart(pd.DataFrame({"x": [1.0, 4.1, 6.3]})).mark_rule(strokeDash=[4, 3], color="#D55E00").encode(x="x:Q")
+    save(
+        (bars + rules)
+        .properties(width=620, height=240, title="Closest approach to Pandora in 10 years, 20,000 particles from 140,850 to 141,100 km (dashed: 1, 4.1 and 6.3 R_H)")
+        .configure_view(strokeWidth=0),
+        "closest_pandora",
+    )
+    f = DATA / "closest_pandora_rbins.csv"
+    if not f.exists():
+        return
+    r = pd.read_csv(f)
+    r["r"] = (0.5 * (r.r_lo_km + r.r_hi_km)).round(0)
+    cols = {"frac_hit": "hit (< 40.63 km)", "frac_below_1_hill": "closer than 1 R_H", "frac_below_4p1_hill": "closer than 4.1 R_H", "frac_below_6p3_hill": "closer than 6.3 R_H"}
+    long = r.melt(id_vars="r", value_vars=list(cols), var_name="limit", value_name="fraction")
+    long["limit"] = long["limit"].map(cols)
+    long["fraction"] = long["fraction"].round(4)
+    c = (
+        alt.Chart(long)
+        .mark_line(point=True)
+        .encode(
+            x=alt.X("r:Q", title="Initial orbital radius (km)", scale=alt.Scale(domain=[140850, 141100], nice=False)),
+            y=alt.Y("fraction:Q", title="Fraction of particles"),
+            color=alt.Color("limit:N", title=None, legend=alt.Legend(orient="bottom", columns=4)),
+            tooltip=["r", "limit", "fraction"],
+        )
+        .properties(width=620, height=240, title="Fraction of particles that come close to Pandora in 10 years (25 km bins)")
+        .configure_view(strokeWidth=0)
+    )
+    save(c, "closest_pandora_by_radius")
+
+
+def fig_ecc():
+    """A2-ANALYSIS (b): eccentric orbits against the e = 0 control, per 25 km bin."""
+    for tag, yrs in (("e10", 10), ("e30", 30)):
+        f = DATA / f"ecc_bins_{tag}.csv"
+        if not f.exists():
+            continue
+        b = pd.read_csv(f)
+        b = b[b.status == "ok"].copy()
+        b["a"] = 0.5 * (b.a_lo_km + b.a_hi_km)
+        frac = pd.concat(
+            [
+                pd.DataFrame({"a": b.a, "orbits": "e = 0.00235", "value": b.frac_a, "lo": b.frac_a - b.sd_counting, "hi": b.frac_a + b.sd_counting}),
+                pd.DataFrame({"a": b.a, "orbits": "e = 0 (control)", "value": b.frac_b, "lo": b.frac_b - b.sd_counting, "hi": b.frac_b + b.sd_counting}),
+            ]
+        )
+        lam = pd.concat(
+            [
+                pd.DataFrame({"a": b.a, "orbits": "e = 0.00235", "value": b.lam_a, "lo": b.lam_a_lo, "hi": b.lam_a_hi}),
+                pd.DataFrame({"a": b.a, "orbits": "e = 0 (control)", "value": b.lam_b, "lo": b.lam_b_lo, "hi": b.lam_b_hi}),
+            ]
+        )
+        colours = alt.Scale(domain=["e = 0.00235", "e = 0 (control)"], range=["#D55E00", "#0072B2"])
+        panels = []
+        for df, ytitle in ((frac, f"Fraction chaotic (mean Y >= 5), {yrs} yr"), (lam, f"Median lambda = 2 Y / t (1/yr), {yrs} yr")):
+            df = df.round(4)
+            base = alt.Chart(df).encode(x=alt.X("a:Q", title="Guiding semi-major axis a (km)", scale=alt.Scale(domain=[140150, 140700], nice=False)), color=alt.Color("orbits:N", scale=colours, title=None))
+            panels.append(
+                (base.mark_errorband(opacity=0.25).encode(y=alt.Y("lo:Q", title=ytitle), y2="hi:Q") + base.mark_line(point=True).encode(y="value:Q", tooltip=["a", "orbits", "value"]))
+                .properties(width=620, height=200)
+            )
+        save(alt.vconcat(*panels).configure_view(strokeWidth=0), f"ecc_profile_{tag}")
+
+
 FIGS = {
     "map": fig_chaos_map,
     "profile": fig_chaos_profile,
     "zoom": fig_chaos_zoom,
     "hist": fig_megno_hist,
     "closest": fig_closest,
+    "closest_pandora": fig_closest_pandora,
+    "ecc": fig_ecc,
     "apse": fig_apse,
     "lyapunov": fig_lyapunov,
     "lyapunov_pairs": fig_lyapunov_pairs,

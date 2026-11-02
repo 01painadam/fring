@@ -145,6 +145,29 @@ pub fn initial_particle(
                 },
             )
         }
+        Distribution::EccentricBand {
+            min_semi_major_axis_km,
+            max_semi_major_axis_km,
+            eccentricity,
+            apse_longitude_deg,
+        } => {
+            // The same draws as `Band` (ICR-007), so the circular control with
+            // the same seed has the same a and mean longitude.
+            let [u_a, u_lambda] = rng.uniform_f64(counter(id, 0));
+            let lambda = two_pi * u_lambda;
+            epicycle_state(
+                field,
+                &EpicycleElements {
+                    a_km: min_semi_major_axis_km
+                        + (max_semi_major_axis_km - min_semi_major_axis_km) * u_a,
+                    e: eccentricity,
+                    i_rad: 0.0,
+                    mean_anomaly_rad: lambda - apse_longitude_deg.to_radians(),
+                    z_phase_rad: 0.0,
+                    mean_longitude_rad: lambda,
+                },
+            )
+        }
         Distribution::Clump {
             semi_major_axis_km,
             longitude_deg,
@@ -282,6 +305,58 @@ mod tests {
         }
         assert!(ks_uniform(ua) < ks_limit());
         assert!(ks_uniform(ul) < ks_limit());
+    }
+
+    #[test]
+    fn eccentric_band_shares_the_band_draws_and_has_the_apse() {
+        // ICR-007: same a and mean longitude as `band` with the same seed;
+        // e = 0 gives the band states; e > 0 gives r = a (1 - e cos M) with
+        // M = lambda - apse, and radial speed a e kappa sin M.
+        let f = field();
+        let (lo, hi, e, apse_deg) = (140_150.0, 140_700.0, 0.0024, 353.78_f64);
+        let ecc = |e: f64| Distribution::EccentricBand {
+            min_semi_major_axis_km: lo,
+            max_semi_major_axis_km: hi,
+            eccentricity: e,
+            apse_longitude_deg: apse_deg,
+        };
+        let band = Distribution::Band {
+            min_semi_major_axis_km: lo,
+            max_semi_major_axis_km: hi,
+        };
+        let n = 5_000;
+        let pb = generate_particles(&f, &band, n, SEED).unwrap();
+        let p0 = generate_particles(&f, &ecc(0.0), n, SEED).unwrap();
+        let pe = generate_particles(&f, &ecc(e), n, SEED).unwrap();
+        let apse = apse_deg.to_radians();
+        let (mut outward, mut checked) = (0, 0);
+        for i in 0..n as usize {
+            assert_eq!(p0.position_km(i), pb.position_km(i), "e = 0 position {i}");
+            assert_eq!(
+                p0.velocity_km_s(i),
+                pb.velocity_km_s(i),
+                "e = 0 velocity {i}"
+            );
+            let pc = pb.position_km(i);
+            let (a, lambda) = (pc.norm(), pc.y.atan2(pc.x));
+            let m = lambda - apse;
+            let (pos, vel) = (pe.position_km(i), pe.velocity_km_s(i));
+            let x = (pos.norm() - a) / (a * e);
+            assert!(
+                (x + m.cos()).abs() < 1e-9,
+                "radius of {i}: {x} vs {}",
+                -m.cos()
+            );
+            if m.sin().abs() > 0.1 {
+                checked += 1;
+                let vr = pos.dot(vel) / pos.norm();
+                if (vr > 0.0) == (m.sin() > 0.0) {
+                    outward += 1;
+                }
+            }
+        }
+        assert!(checked > 4_000, "only {checked} particles checked");
+        assert_eq!(outward, checked, "radial speed has the sign of sin M");
     }
 
     #[test]

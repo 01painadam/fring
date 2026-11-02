@@ -8,6 +8,7 @@
 //! (counter-based RNG, so the particles are the same).
 
 use fring_io::{ChaosRow, RunDir};
+use fring_model::config::Distribution;
 use fring_model::params::saturn_from_toml_str;
 use fring_model::physics::{SaturnField, initial_particle};
 use fring_model::{Error, Result, RunConfig};
@@ -68,8 +69,13 @@ pub fn classify(megno_mean: f64, flags: u32) -> Class {
 pub struct Point {
     /// Particle id.
     pub id: u32,
-    /// Initial radius, km.
+    /// Initial radius `|r|`, km.
     pub r_km: f64,
+    /// Guiding semi-major axis, km. For `band` it is `|r|`; for
+    /// `eccentric_band` it is `|r|` of the e = 0 twin (same edges and seed),
+    /// which is the guiding radius to about 1e-11 km (ICR-007). The maps use
+    /// this axis (M22).
+    pub a_km: f64,
     /// Initial longitude minus the longitude of Prometheus, degrees in [-180, 180).
     pub lon_deg: f64,
     /// Mean MEGNO.
@@ -78,6 +84,31 @@ pub struct Point {
     pub ftle_per_yr: f64,
     /// Class.
     pub class: Class,
+}
+
+/// Guiding semi-major axis of particle `id` in km (see [`Point::a_km`]);
+/// `r_km` is its initial `|r|`.
+pub fn guiding_radius_km(
+    field: &SaturnField<f64>,
+    dist: &Distribution,
+    seed: u64,
+    id: u32,
+    r_km: f64,
+) -> f64 {
+    match *dist {
+        Distribution::EccentricBand {
+            min_semi_major_axis_km,
+            max_semi_major_axis_km,
+            ..
+        } => {
+            let twin = Distribution::Band {
+                min_semi_major_axis_km,
+                max_semi_major_axis_km,
+            };
+            initial_particle(field, &twin, seed, id).0.norm()
+        }
+        _ => r_km,
+    }
 }
 
 /// Reads a run directory into points.
@@ -94,10 +125,13 @@ pub fn read_points(run: &Path) -> Result<Vec<Point>> {
     Ok(rows
         .iter()
         .map(|r| {
-            let (p, _) = initial_particle(&field, &cfg.particles.distribution, cfg.run.seed, r.id);
+            let dist = &cfg.particles.distribution;
+            let (p, _) = initial_particle(&field, dist, cfg.run.seed, r.id);
+            let a_km = guiding_radius_km(&field, dist, cfg.run.seed, r.id, p.norm());
             Point {
                 id: r.id,
                 r_km: p.norm(),
+                a_km,
                 lon_deg: r.lambda_rel_prometheus_deg,
                 megno: r.megno_mean,
                 ftle_per_yr: r.ftle_per_day * 365.25,
@@ -120,10 +154,10 @@ pub fn write_map_csv(
     let nl = (360.0 / lon_bin).ceil() as usize;
     let mut cells: Vec<Vec<usize>> = vec![Vec::new(); nr * nl];
     for (k, p) in pts.iter().enumerate() {
-        if p.class == Class::Invalid || p.r_km < r_lo || p.r_km >= r_hi {
+        if p.class == Class::Invalid || p.a_km < r_lo || p.r_km >= r_hi {
             continue;
         }
-        let ir = ((p.r_km - r_lo) / r_bin) as usize;
+        let ir = ((p.a_km - r_lo) / r_bin) as usize;
         let il = (((p.lon_deg + 180.0) / lon_bin) as usize).min(nl - 1);
         cells[ir * nl + il].push(k);
     }
@@ -174,10 +208,10 @@ pub fn write_profile_csv(
     let mut counts = vec![[0usize; 5]; nr];
     let mut ys: Vec<Vec<f64>> = vec![Vec::new(); nr];
     for p in pts {
-        if p.r_km < r_lo || p.r_km >= r_hi {
+        if p.a_km < r_lo || p.r_km >= r_hi {
             continue;
         }
-        let ir = ((p.r_km - r_lo) / r_bin) as usize;
+        let ir = ((p.a_km - r_lo) / r_bin) as usize;
         counts[ir][p.class.index()] += 1;
         if p.class != Class::Invalid {
             ys[ir].push(p.megno);
@@ -265,6 +299,7 @@ mod tests {
         Point {
             id,
             r_km: r,
+            a_km: r,
             lon_deg: lon,
             megno: y,
             ftle_per_yr: 0.1,
@@ -288,5 +323,38 @@ mod tests {
         assert!(lines[1].contains(",0.0000,0.5000,0.0000,0.5000,"));
         let tab = cross_tab(&pts, &pts);
         assert_eq!(tab[0][0] + tab[1][1] + tab[3][3], 3);
+    }
+}
+
+#[cfg(test)]
+mod guiding_tests {
+    use super::*;
+    use fring_model::params::saturn_from_toml_str;
+
+    #[test]
+    fn eccentric_band_axis_is_the_circular_twin() {
+        let s = saturn_from_toml_str(include_str!("../../../params/saturn.toml")).unwrap();
+        let field = SaturnField::<f64>::from_params(&s);
+        let ecc = Distribution::EccentricBand {
+            min_semi_major_axis_km: 140_150.0,
+            max_semi_major_axis_km: 140_175.0,
+            eccentricity: 0.00235,
+            apse_longitude_deg: 353.78,
+        };
+        let circ = Distribution::Band {
+            min_semi_major_axis_km: 140_150.0,
+            max_semi_major_axis_km: 140_175.0,
+        };
+        let mut spread = 0.0f64;
+        for id in 0..500 {
+            let (p, _) = initial_particle(&field, &ecc, 7, id);
+            let a = guiding_radius_km(&field, &ecc, 7, id, p.norm());
+            let (q, _) = initial_particle(&field, &circ, 7, id);
+            assert!((a - q.norm()).abs() < 1e-9);
+            assert!((140_150.0..140_175.0).contains(&a));
+            spread = spread.max((p.norm() - a).abs());
+        }
+        // |r| differs from a by up to a e = 330 km, so |r| is the wrong axis.
+        assert!(spread > 300.0, "{spread}");
     }
 }
