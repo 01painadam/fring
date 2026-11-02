@@ -1,6 +1,6 @@
 # Task board
 
-Current phase: **2 (GPU backend)**. Gates G0 and G1 were approved on 2026-11-01 (`docs/gates/`).
+Current phase: **3 (first web toy)**. Gates G0 and G1 were approved on 2026-11-01, gate G2 on 2026-11-02 (`docs/gates/`).
 
 Rules (full text in `AGENTS.md` and `CLAUDE.md`):
 
@@ -46,7 +46,7 @@ Rules (full text in `AGENTS.md` and `CLAUDE.md`):
 | G3 | Chaos indicator on GPU and CPU: shadow particle + MEGNO (ADR 0008, ICR-003) | A3 | done | ws/a3-g3 | G2 |
 | B1 | `fring-bench`: particle-steps per second, CPU and GPU, N = 10⁴ to 10⁷ (`docs/benchmarks.md`) | A5 | done | ws/a5-b1 | G2 |
 | A1-ANALYSIS | First chaos map of the region between the moons; measure the moons' share of ϖ̇ at the core (G0); converged Lyapunov time of the moons (G1) | A8 | done | ws/a8-a1-analysis | G3 |
-| Gate G2 | GPU agrees with CPU; first chaos map reviewed | AJ | todo | | G1, G2, G3, B1, A1-ANALYSIS |
+| Gate G2 | GPU agrees with CPU; first chaos map reviewed | AJ | done | ws/a0-gate-g2 | G1, G2, G3, B1, A1-ANALYSIS |
 
 ## Phase 3: first web toy
 
@@ -54,6 +54,8 @@ Rules (full text in `AGENTS.md` and `CLAUDE.md`):
 |---|---|---|---|---|---|
 | W1 | `fring-web` scaffold: wasm32 + WebGPU, particles in the rotating frame | A7 | todo | | Gate G2 |
 | W2 | Live test-particle mode, about 10⁵ particles, controls, static deploy | A7 | todo | | W1 |
+| A2-ANALYSIS | Pandora close approaches; chaos map of core-like eccentric orbits (gate G2 follow-up; does not block gate G3) | A8 | todo | | Gate G2 |
+| L3 | Moon masses and elements in `params/` against GR03: do they explain the factor 1.4 in the Lyapunov rate? (gate G2 follow-up; does not block gate G3) | A1 | todo | | Gate G2 |
 | Gate G3 | First public demo | AJ | todo | | W1, W2 |
 
 ## Phase 4: collisions
@@ -67,7 +69,9 @@ Rules (full text in `AGENTS.md` and `CLAUDE.md`):
 | K5 | GPU binning and stochastic collisions in WGSL | A4 + A3 | todo | | K2 |
 | D1 | Co-moving arc domain with azimuthal wrapping | A3 | todo | | Gate G3 |
 | D2 | Arc error test, full ring versus arc, Δθ in {5°, 10°, 30°} | A6 | todo | | D1 |
-| Gate G4 | Collision models validated; arc size chosen | AJ | todo | | K1, K2, K3, K4, K5, D1, D2 |
+| E1 | Close encounters: per-particle sub-stepping near Prometheus (CPU and GPU); ICR-004 flag and freeze of unbound or invalid particles | A2 + A3 | todo | | Gate G3 |
+| A3-ANALYSIS | 30-year chaos map over the full band with sub-stepping | A8 | todo | | E1 |
+| Gate G4 | Collision models validated; arc size chosen; close encounters handled | AJ | todo | | K1, K2, K3, K4, K5, D1, D2, E1 |
 
 ## Phase 5: science runs
 
