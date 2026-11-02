@@ -7,6 +7,7 @@
 //! - [`view`]: camera pan and zoom (host-testable).
 //! - `web` (wasm32 only): canvas, wgpu render pipeline, page controls.
 
+pub mod live;
 pub mod scene;
 pub mod view;
 
