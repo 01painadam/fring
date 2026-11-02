@@ -360,24 +360,39 @@ fn kick_dir_plus(k: u32, p: V3, v: V3) -> V3 {
 
 // ---- Entry points: one block of prm_n_steps() steps per particle ----
 
+// ICR-006: a particle with a reason other than 0 is frozen. Its thread
+// returns at once (one u32 load per particle per block).
+fn is_dropped(i: u32) -> bool { return atomicLoad(&status[8u + i]) != 0u; }
+
+// Sets the reason of particle i (1 unbound or invalid orbit, 2 + k inside
+// moon k), counts it in word `reason`, and lowers word 0. Each thread calls
+// it once for its own particle, so the counts are exact.
+fn drop_particle(i: u32, reason: u32) {
+    atomicStore(&status[8u + i], reason);
+    atomicAdd(&status[reason], 1u);
+    atomicMin(&status[0], i);
+}
+
 @compute @workgroup_size(WG_SIZE)
 fn step_d(@builtin(global_invocation_id) id: vec3<u32>, @builtin(num_workgroups) nw: vec3<u32>) {
     ds_one = prm_one();
     let i = id.y * nw.x * u32(WG_SIZE) + id.x;
     if (i >= prm_n_particles()) { return; }
+    if (is_dropped(i)) { return; }
     let n = prm_n_steps();
     let h = prm_h();
     let half = prm_half();
     var o = drift_d(load_p(i), load_v(i), half);
     var ok = o.ok;
     for (var k = 0u; k < n; k++) {
+        if (!ok) { break; }
         let v = kick_dir(k, o.p, o.v);
         var dt = h;
         if (k + 1u == n) { dt = half; }
         o = drift_d(o.p, v, dt);
         ok = ok && o.ok;
     }
-    if (ok) { store(i, o.p, o.v); } else { atomicMin(&status[0], i); }
+    if (ok) { store(i, o.p, o.v); } else { drop_particle(i, 1u); }
 }
 
 @compute @workgroup_size(WG_SIZE)
@@ -385,19 +400,21 @@ fn step_dp(@builtin(global_invocation_id) id: vec3<u32>, @builtin(num_workgroups
     ds_one = prm_one();
     let i = id.y * nw.x * u32(WG_SIZE) + id.x;
     if (i >= prm_n_particles()) { return; }
+    if (is_dropped(i)) { return; }
     let n = prm_n_steps();
     let h = prm_h();
     let half = prm_half();
     var o = drift_d(load_p(i), load_v(i), half);
     var ok = o.ok;
     for (var k = 0u; k < n; k++) {
+        if (!ok) { break; }
         let v = kick_dir_plus(k, o.p, o.v);
         var dt = h;
         if (k + 1u == n) { dt = half; }
         o = drift_d(o.p, v, dt);
         ok = ok && o.ok;
     }
-    if (ok) { store(i, o.p, o.v); } else { atomicMin(&status[0], i); }
+    if (ok) { store(i, o.p, o.v); } else { drop_particle(i, 1u); }
 }
 
 @compute @workgroup_size(WG_SIZE)
