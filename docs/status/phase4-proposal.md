@@ -1,6 +1,6 @@
 # Phase 4 planning: proposal
 
-Written 2026-11-03 by A0. Status: **proposal**. No row on the board changes until AJ writes "Approved" in `docs/gates/G3.md` and accepts this plan. Then A0 copies the accepted parts into `docs/PLAN.md` section 9 and `docs/status/BOARD.md`.
+Written 2026-11-03 by A0. Status: **accepted**. AJ (2026-11-03, with the gate G3 approval): "yes to your recommendations", so all six decisions of section 5 are "yes". A0 copied the plan into `docs/PLAN.md` section 9 and `docs/status/BOARD.md`; those files are now the reference, and this file is the record of the reasons. One addition while copying: decision 2 needs a file in `params/`, which A1 owns, so the board has a small A1 row L3-PARAMS, and A4-ANALYSIS is blocked by it.
 
 ## Summary
 
