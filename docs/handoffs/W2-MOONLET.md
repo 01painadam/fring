@@ -1,6 +1,6 @@
 # W2-MOONLET: moonlet scenario and moonlet view in the web page
-Role: A7 (done by the A0 session)  Branch: ws/a7-w2-moonlet  Status: review
-Updated: 2026-11-03 09:30
+Role: A7 (done by the A0 session)  Branch: ws/a7-w2-moonlet  Status: done
+Updated: 2026-11-03 10:00
 
 ## Goal and acceptance criteria
 From `docs/PLAN.md` section 9 (added by AJ, 2026-11-03): a "Moonlet" scenario in the web page: all particles start in a loosely packed moonlet (`moonlet` distribution, ICR-008) at a selected orbital radius, uniform in a selected packing radius, 180° from Prometheus at t = 0. A "Velocity" control selects the start velocities: synchronous, centre or circular. A view "On the moonlet" is centred on the moonlet centre's circular orbit from t = 0 and turns with it. *Done when:* host tests pass (the view keeps the centre at the origin; a synchronous particle has zero view velocity at t = 0); in Chrome on the Mac mini the scenario runs in each velocity mode and the view works with Compare; `?bench` at 10⁵ still gives mean 30 fps or more.
@@ -12,10 +12,10 @@ From `docs/PLAN.md` section 9 (added by AJ, 2026-11-03): a "Moonlet" scenario in
 - `web.rs`: `set_moonlet(a_km, radius_km, velocity)`, `moonlet_defaults_km()`, view 4 in `set_view` (an error unless the band is a moonlet). A new orbit or radius resets the camera of the moonlet view; a new velocity mode keeps it, to compare the modes at one zoom.
 - `index.html`: Band option "Moonlet (loosely packed)" with the rows Orbit, packing radius and Velocity (the "a from / to" row hides); View option "On the moonlet (turns with its centre)", greyed unless the band is the moonlet. Choosing the moonlet band switches to the moonlet view; leaving it while in that view goes back to Inertial. A note paragraph explains the scenario.
 - Checks: `cargo test -p fring-web` 34 passed (2 new, and 1 new camera test in `view.rs`); `cargo test -p fring-web -- --ignored` 7 GPU tests passed; `cargo clippy -p fring-web --target wasm32-unknown-unknown -- -D warnings` clean; `build.sh`: wasm 925,605 bytes (main: 916,934).
-- Not done: the browser check. The Chrome extension was not connected in this session.
+- Browser check: the Chrome extension was not connected in this session, so A0 did not run M1 to M6. AJ (2026-11-03): "ok, merge and delete". The results of M1 to M6 and a `?bench` row were not reported in detail.
 
 ## Next step (one concrete action)
-AJ: the Chrome check M1 to M6 below. Then A0 merges the PR (the merge deploys the public page).
+None for W2-MOONLET (merged on AJ's "ok, merge"). If the public page shows a problem, run M1 to M6 below on `https://01painadam.github.io/fring/`.
 
 ## How to verify the current state
 Build and serve: `apps/fring-web/scripts/build.sh` then `python3 -m http.server 8080 -d apps/fring-web/dist`, open `http://localhost:8080` in Chrome.
