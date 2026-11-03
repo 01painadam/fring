@@ -66,16 +66,24 @@ Rules (full text in `AGENTS.md` and `CLAUDE.md`):
 
 | ID | Task | Role | Status | Branch | Blocked by |
 |---|---|---|---|---|---|
-| K1 | `fring-collide/SPEC.md` and the shared statistical tests | A4 | todo | | Gate G3 |
+| K1 | `fring-collide/SPEC.md` and the shared statistical tests (A0 approves, AJ confirms; Opus) | A4 | todo | | Gate G3 |
+| A5-ANALYSIS | A2-ANALYSIS follow-ups: h/4 test for `eccentric_band`, `closest` on `eccentric_band`, second apse phase at 30 years | A8 | todo | | Gate G3 |
+| E1-ICR | Write ICR-004: flag and freeze on the CPU, radius rule twin to `fring-model/src/physics/`, sub-stepping trigger and scheme, REBOUND comparison set | A2 | todo | | Gate G3, A5-ANALYSIS |
+| L3-PARAMS | GR03b moon masses as a variant file in `params/` (nominal values unchanged) | A1 | todo | | Gate G3 |
+| A4-ANALYSIS | L3 deciding run: moon Lyapunov rate with the GR03b masses; GR03 method on our masses | A8 | todo | | L3-PARAMS |
 | K2 | Stochastic collision model on CPU | A4 | todo | | K1 |
+| E1-REF | REBOUND (IAS15) reference for particles within 1 R_H of Prometheus (from the spec only) | A6 | todo | | E1-ICR |
+| E1-CPU | ICR-004 and per-particle sub-stepping in the CPU backend | A2 | todo | | E1-ICR |
 | K3 | Hard-sphere collision model on CPU (cell list) | A4 | todo | | K1 |
-| K4 | Cross-check stochastic and hard-sphere models in a small arc | A4 + A6 | todo | | K2, K3 |
-| K5 | GPU binning and stochastic collisions in WGSL | A4 + A3 | todo | | K2 |
 | D1 | Co-moving arc domain with azimuthal wrapping | A3 | todo | | Gate G3 |
+| K5-BIN | GPU binning: counting sort by cell at each step, with a Rust twin | A3 | todo | | K1 |
+| E1-GPU | ICR-004 and per-particle sub-stepping in WGSL, with Rust twins | A3 | todo | | E1-CPU |
+| K5 | Stochastic collisions in WGSL (`shaders/collide/`) | A4 | todo | | K2, K5-BIN |
+| K4 | Cross-check stochastic and hard-sphere models in a small arc (A6 reviews the report) | A4 | todo | | K2, K3 |
 | D2 | Arc error test, full ring versus arc, Δθ in {5°, 10°, 30°} | A6 | todo | | D1 |
-| E1 | Close encounters: per-particle sub-stepping near Prometheus (CPU and GPU); ICR-004 flag and freeze of unbound or invalid particles | A2 + A3 | todo | | Gate G3 |
-| A3-ANALYSIS | 30-year chaos map over the full band with sub-stepping | A8 | todo | | E1 |
-| Gate G4 | Collision models validated; arc size chosen; close encounters handled | AJ | todo | | K1, K2, K3, K4, K5, D1, D2, E1 |
+| A3-ANALYSIS | 30-year chaos map over the full band with sub-stepping (the run must complete) | A8 | todo | | E1-GPU |
+| B2 | `fring-bench` again with collisions and sub-stepping on; budget check for S1 | A5 | todo | | K5, E1-GPU |
+| Gate G4 | Collision models validated; arc size chosen; close encounters handled; cost measured | AJ | todo | | K1, K2, K3, K4, K5, K5-BIN, D1, D2, E1-CPU, E1-GPU, A3-ANALYSIS, B2 |
 
 ## Phase 5: science runs
 
