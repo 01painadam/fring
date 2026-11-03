@@ -1,7 +1,9 @@
 //! Tests of the run config schema (`fring_model::config`).
 
 use fring_model::Error;
-use fring_model::config::{BackendKind, Collisions, Distribution, Domain, Restitution, RunConfig};
+use fring_model::config::{
+    BackendKind, Collisions, Distribution, Domain, MoonletVelocity, Restitution, RunConfig,
+};
 
 const EXAMPLE: &str = include_str!("data/example-run.toml");
 
@@ -284,4 +286,51 @@ fn seed_above_i64_max_is_rejected_by_validate() {
     let mut c = example();
     c.run.seed = u64::MAX;
     assert_config_error(c.validate(), "run.seed");
+}
+
+#[test]
+fn moonlet_parses_round_trips_and_is_checked() {
+    const CORE: &str = "kind = \"core\"\nsemi_major_axis_km = 140220.0\nsigma_semi_major_axis_km = 5.0\n\
+                        eccentricity = 0.0024\napse_longitude_deg = 0.0";
+    assert!(
+        EXAMPLE.contains(CORE),
+        "test setup: core block not in example"
+    );
+    let with = |radius: &str, velocity: &str| {
+        EXAMPLE.replacen(
+            CORE,
+            &format!(
+                "kind = \"moonlet\"\nsemi_major_axis_km = 140222.43\nlongitude_deg = 180.0\n\
+                 packing_radius_km = {radius}\nvelocity = \"{velocity}\""
+            ),
+            1,
+        )
+    };
+    for (name, mode) in [
+        ("synchronous", MoonletVelocity::Synchronous),
+        ("centre", MoonletVelocity::Centre),
+        ("circular", MoonletVelocity::Circular),
+    ] {
+        let c = RunConfig::from_toml_str(&with("20.0", name)).unwrap();
+        assert_eq!(
+            c.particles.distribution,
+            Distribution::Moonlet {
+                semi_major_axis_km: 140_222.43,
+                longitude_deg: 180.0,
+                packing_radius_km: 20.0,
+                velocity: mode,
+            }
+        );
+        let again = RunConfig::from_toml_str(&c.to_toml_string().unwrap()).unwrap();
+        assert_eq!(again, c);
+    }
+    assert_config_error(
+        RunConfig::from_toml_str(&with("0.0", "centre")),
+        "packing_radius_km",
+    );
+    assert_config_error(
+        RunConfig::from_toml_str(&with("140222.43", "centre")),
+        "must be less than",
+    );
+    assert!(RunConfig::from_toml_str(&with("20.0", "spin")).is_err());
 }
