@@ -60,7 +60,7 @@ Rules (full text in `AGENTS.md` and `CLAUDE.md`):
 | W2-DROP | Web: the run goes on when particles are dropped (hidden, counts shown); pause at the end of the run, no restart | A7 | done | ws/a7-w2-drop | W2-DROP-GPU |
 | A2-ANALYSIS | Pandora close approaches; chaos map of core-like eccentric orbits (gate G2 follow-up; does not block gate G3) | A8 | done | ws/a8-a2-analysis | Gate G2 |
 | L3 | Moon masses and elements in `params/` against GR03: do they explain the factor 1.4 in the Lyapunov rate? (gate G2 follow-up; does not block gate G3) | A1 | todo | | Gate G2 |
-| Gate G3 | First public demo | AJ | todo | | W1, W2, W2-COMPARE, W2-DROP-GPU, W2-DROP |
+| Gate G3 | First public demo | AJ | review | ws/a0-gate-g3 | W1, W2, W2-COMPARE, W2-DROP-GPU, W2-DROP |
 
 ## Phase 4: collisions
 
