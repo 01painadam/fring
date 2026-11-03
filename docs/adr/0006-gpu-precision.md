@@ -196,3 +196,10 @@ The workgroup size (32, 64, 128, 256) changes the speed by less than 0.3 %; the 
 5. The step h is handled as in ADR 0007 (the f32 constants of the D and D+ kick are scaled by h / f32(h)); the tests use a step that is not exact in f32.
 
 Code: `crates/fring-gpu/{shaders/wh.wgsl,src/wh.rs,src/backend.rs}`; tests `tests/{gpu_wh,gpu_backend,done_when}.rs`; benchmark `examples/g2_bench.rs`.
+
+## Addendum (G3, 2026-11-03): the web toy uses D+ (Dp), not A
+
+- Decision 3 above says that the web toy (W2) uses option A. W2 uses **D+** (`Mode::Dp`) through `GpuStepper` (A0 decision of 2026-11-02, `docs/handoffs/W2.md`). AJ accepted this at gate G3 on 2026-11-03.
+- Why: `GpuStepper` (ICR-005) has only the modes D, Dp and C (`crates/fring-gpu/src/wh.rs`). Option A exists only in the G1 spike (`src/spike.rs`, `shaders/spike.wgsl`). With D+ the web shows the precision of the science runs, and it still gives 60 fps at 10⁵ particles in Chrome on the M4 (W2-COMPARE).
+- Consequence: the web depends on the double-single guard. A browser or GPU whose shader compiler breaks the guard fails the start-up self-test (`SelfTest`). The page then shows "The GPU arithmetic check failed" and does not run (fail closed). The self-test covers only the probe kernels of `fring-gpu`. The web-only projection shader is checked natively (M24) and by eye at maximum zoom in each browser (gate G3, step S3).
+- Fallback, not planned now: if a browser fails the self-test, add a plain f32 mode (option A) to `GpuStepper`. This needs an ICR and a task for A3.
