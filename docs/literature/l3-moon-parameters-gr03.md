@@ -40,17 +40,17 @@ What GR03b gives:
 - The resonance argument obeys eq. 18: the acceleration of psi is 3 (121 n')^2 (m/M) [1 + alpha m'/m] sum of C_k sin(psi + delta_k).
 - Half widths 1.5, 3.7, 5.1, 4.1 rad/yr against a splitting of about 1.0 rad/yr [GR03b, sec 4]. The widths exceed the splitting, so the components overlap.
 - With masses reduced by 10, the surface of section is regular [GR03b, Fig. 7 caption].
-- Eq. 18 has a notation inconsistency (footnote 2 and the text about the "lighter body m'"). The scaling below only needs the sum m + alpha m', so it does not depend on this.
+- Notation. [GR03b, sec 2.1, footnote 2] says "Primed and unprimed symbols refer to Prometheus and Pandora, respectively". The rest of the paper uses the opposite: the argument 121λ′ − 118λ is slow only if the primed moon is the slower one, Pandora (Table 1: 6.629506e-3 against 6.797331e-3 deg/s, and Ω′/Ω ≈ 118/121 in sec 2.3, after eq. 18); α = a/a′ must be below 1; and the same text calls m′ "the lighter body", which is Pandora (Table 1). So footnote 2 is the error. Below, unprimed is Prometheus and primed is Pandora (A0 review).
 
 GR03b gives no equation for the Lyapunov rate against mass or e.
 
 Estimate by A1 (not from GR03). For overlapping resonances, the Lyapunov rate is of the order of the libration frequency. The libration frequency goes like the half width, which goes like sqrt((m + alpha m') C_k) by eq. 18. Steps, with alpha = a_Prometheus / a_Pandora = 139,400 / 141,700 = 0.98 [SSD_ELEM]; I use 0.98:
-1. Effective mass GR03b (Table 1): 3.43e-10 + 0.98 x 5.80e-10 = 9.16e-10.
-2. Effective mass ours: 2.44e-10 + 0.98 x 2.82e-10 = 5.23e-10.
-3. Ratio 5.23 / 9.16 = 0.57. Half width ratio from mass: sqrt(0.57) = 0.76.
-4. Largest term e e'^2 (Table 3). With our e: (4.24 / 4.37) x (2.23 / 2.29)^2 = 0.97 x 0.95 = 0.92. Half width ratio from e: sqrt(0.92) = 0.96.
-5. Total: 0.76 x 0.96 = 0.73. For GR03b masses scaled to 0.3 g/cm3 (factor 0.48): sqrt(0.48) = 0.69.
-6. If lambda scales like the half width, GR's 0.30 per year becomes 0.30 x 0.73 = 0.22 per year. The inverse, 1/0.73 = 1.37, lies in the range 0.30/0.22 = 1.36 to 0.35/0.22 = 1.59.
+1. Effective mass GR03b (Table 1), m = Prometheus, m′ = Pandora: 5.80e-10 + 0.98 x 3.43e-10 = 9.16e-10.
+2. Effective mass ours: 2.824e-10 + 0.98 x 2.441e-10 = 5.22e-10.
+3. Ratio 5.22 / 9.16 = 0.569. Half width ratio from mass: sqrt(0.569) = 0.754.
+4. Largest term e e′^2 (Table 3), e = Prometheus, e′ = Pandora. With our e: (2.23 / 2.29) x (4.24 / 4.37)^2 = 0.974 x 0.941 = 0.917. Half width ratio from e: sqrt(0.917) = 0.958.
+5. Total: 0.754 x 0.958 = 0.72. For comparison, the mass factor alone for GR03b masses scaled to 0.3 g/cm3 (factor 0.48): sqrt(0.48) = 0.69.
+6. If lambda scales like the half width, GR's 0.30 per year becomes 0.30 x 0.72 = 0.22 per year. The inverse, 1/0.72 = 1.38, lies in the range 0.30/0.22 = 1.36 to 0.35/0.22 = 1.59.
 
 ## 4. Two readings
 
@@ -71,7 +71,7 @@ Estimate by A1 (not from GR03). For overlapping resonances, the Lyapunov rate is
 Verdict. The literature alone cannot decide. Candidate 1: the mass difference (reading a). Candidate 2: the method and window difference. A run by A8 decides. A1 does not run it. No value in `params/` changes (that needs an AJ decision).
 
 Follow-ups for A8 (`fring-analyse lyapunov`, tangent method):
-1. Baseline of 100 runs of 100 years (same seed, 2 km kick, rate over years 30 to 100), with GM(Prometheus) x 2.05 = 0.02196 and GM(Pandora) x 1.40 = 0.01296 km3/s2. Both factors are the ratios in section 1 (5.80 / 2.824 and 3.43 / 2.441, rounded). Predicted outcome: about 0.30 per year for the chaotic group if reading (a) is right; about 0.22 if reading (b) is right. Compare also the fraction of chaotic runs (26 % at present).
+1. Baseline of 100 runs of 100 years (same seed, 2 km kick, rate over years 30 to 100), with the GR03b masses: GM(Prometheus) = 5.80e-10 x 37931206.234 = 0.02200 and GM(Pandora) = 3.43e-10 x 37931206.234 = 0.01301 km3/s2. These are our values times 2.054 and 1.405 (5.80 / 2.824 and 3.43 / 2.441). Predicted outcome: about 0.30 per year for the chaotic group if reading (a) is right; about 0.22 if reading (b) is right. Compare also the fraction of chaotic runs (26 % at present).
 2. Re-analysis of the existing 100 runs, no new integration: rate over years 0 to 100 (shear subtracted as GR do with the (log t)/t curve), and the mean over all 100 runs. This tests the definition difference.
 3. Optional: one 3000-year run of the two moons with the nominal parameters, the shadow-free tangent method, to compare with GR's single trajectory.
 
