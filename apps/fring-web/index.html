@@ -13,6 +13,7 @@
   .panel { position: fixed; top: 12px; left: 12px; max-width: min(320px, calc(100vw - 24px)); padding: 12px 14px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; backdrop-filter: blur(6px); }
   h1 { margin: 0 0 6px; font-size: 16px; font-weight: 600; }
   .row { display: flex; align-items: center; gap: 8px; margin: 8px 0; flex-wrap: wrap; }
+  .row[hidden] { display: none; }
   label { color: var(--muted); }
   button, select { font: inherit; color: var(--fg); background: #1a2236; border: 1px solid var(--line); border-radius: 6px; padding: 5px 10px; min-height: 32px; }
   button:hover, select:hover { border-color: var(--accent); }
@@ -64,14 +65,30 @@
       <option value="1">Band (circular, a0 +- a0 e)</option>
       <option value="2">Between the moons (circular)</option>
       <option value="3">Custom band (circular)</option>
+      <option value="4">Moonlet (loosely packed)</option>
     </select>
   </div>
-  <div class="row">
+  <div class="row" id="band-row">
     <label for="amin">a from</label>
     <input id="amin" type="number" step="1" autocomplete="off">
     <label for="amax">to</label>
     <input id="amax" type="number" step="1" autocomplete="off">
     <span class="readout">km</span>
+  </div>
+  <div class="row" id="moonlet-row" hidden>
+    <label for="ma">Orbit</label>
+    <input id="ma" type="number" step="1" autocomplete="off">
+    <label for="mr">packing radius</label>
+    <input id="mr" type="number" step="any" min="0" autocomplete="off">
+    <span class="readout">km</span>
+  </div>
+  <div class="row" id="velocity-row" hidden>
+    <label for="mvel">Velocity</label>
+    <select id="mvel" autocomplete="off">
+      <option value="0" selected>Synchronous (spins once per orbit)</option>
+      <option value="1">Centre's velocity (no spin)</option>
+      <option value="2">Own circular orbit (pure shear)</option>
+    </select>
   </div>
   <div class="row">
     <label><input id="pandora" type="checkbox" checked autocomplete="off"> Pandora pulls on the particles</label>
@@ -83,6 +100,7 @@
       <option value="1">Rotating (camera turns with the core)</option>
       <option value="2">On Prometheus</option>
       <option value="3">On Pandora</option>
+      <option value="4" id="frame-moonlet" disabled>On the moonlet (turns with its centre)</option>
     </select>
   </div>
   <div class="row">
@@ -108,7 +126,7 @@
     <span><span class="dot" style="background:#ff9e33"></span>Prometheus</span>
     <span><span class="dot" style="background:#73f28c"></span>Pandora</span>
   </div>
-  <p class="note">Test particles (10 000 to 1 000 000, your choice) run live on your GPU (Wisdom-Holman, double-single arithmetic), pulled by Saturn (J2 to J6) and by the moons from a 10-year integration of the real moon orbits. Time starts at 1 January 2008. Seen from the north: orbits go anticlockwise. Inertial: fixed camera; the core goes round once in 14.85 h. Rotating: the camera turns with the core (mean motion n0), so the core stays still and the outer material falls behind. Moon views: the moon stays at the centre, Saturn is straight down. "Pandora pulls" switches off only Pandora's pull on the particles; Prometheus keeps its real path and Pandora's dot is hidden. Changing the number of particles, the band or Pandora starts again from t = 0. At more than 100 000 particles the top speed is lower (the readout shows the limit). Below about 6 h/s the motion is stepwise (one 360 s step every few frames). Drag to move, scroll to zoom.</p>
+  <p class="note">Test particles (10 000 to 1 000 000, your choice) run live on your GPU (Wisdom-Holman, double-single arithmetic), pulled by Saturn (J2 to J6) and by the moons from a 10-year integration of the real moon orbits. Time starts at 1 January 2008. Seen from the north: orbits go anticlockwise. Inertial: fixed camera; the core goes round once in 14.85 h. Rotating: the camera turns with the core (mean motion n0), so the core stays still and the outer material falls behind. Moon views: the moon stays at the centre, Saturn is straight down. Moonlet: all particles start uniform in a sphere of the packing radius on a circular orbit, 180° from Prometheus. They have no self-gravity and no collisions, so the moonlet comes apart at once and shears into a strand. Velocity: synchronous (at rest in the frame that turns with the moonlet's orbit), the centre's velocity for every particle (no spin), or each particle on its own circular orbit. The moonlet view turns with the circular orbit of the moonlet centre from t = 0; Saturn is straight down. "Pandora pulls" switches off only Pandora's pull on the particles; Prometheus keeps its real path and Pandora's dot is hidden. Changing the number of particles, the band or Pandora starts again from t = 0. At more than 100 000 particles the top speed is lower (the readout shows the limit). Below about 6 h/s the motion is stepwise (one 360 s step every few frames). Drag to move, scroll to zoom.</p>
   <p class="note" id="adapter"></p>
   <p class="note">Source code and method: <a href="https://github.com/01painadam/fring">github.com/01painadam/fring</a> (MIT licence).</p>
 </div>
@@ -185,7 +203,7 @@
         setSpeed();
       }, 0));
     });
-    const tell = (f) => { try { f(); $("message").textContent = ""; } catch (e) { $("message").textContent = String(e); } };
+    const tell = (f) => { try { f(); $("message").textContent = ""; return true; } catch (e) { $("message").textContent = String(e); return false; } };
     let paused = false;
     let endShown = false;
     $("pause").addEventListener("click", () => {
@@ -202,13 +220,34 @@
       $("amax").value = r[1].toFixed(0);
     };
     showRange(0);
+    // Moonlet (preset 4): its own inputs, and the view "On the moonlet".
+    const md = app.moonlet_defaults_km();
+    $("ma").value = md[0].toFixed(0);
+    $("mr").value = String(md[1]);
+    const showRows = () => {
+      const m = $("preset").value === "4";
+      $("band-row").hidden = m;
+      $("moonlet-row").hidden = !m;
+      $("velocity-row").hidden = !m;
+      $("frame-moonlet").disabled = !m;
+    };
+    const setFrame = (i) => { $("frame").value = String(i); tell(() => app.set_view(i)); };
+    const setMoonlet = () => tell(() => app.set_moonlet(
+      parseFloat($("ma").value), parseFloat($("mr").value), parseInt($("mvel").value, 10)));
     $("preset").addEventListener("change", (e) => {
       const i = parseInt(e.target.value, 10);
+      showRows();
+      if (i === 4) { if (setMoonlet()) setFrame(4); return; }
+      if ($("frame").value === "4") setFrame(0);
       if (i < 3) { showRange(i); tell(() => app.set_preset(i)); }
       else tell(() => app.set_band_km(parseFloat($("amin").value), parseFloat($("amax").value)));
     });
+    $("ma").addEventListener("change", setMoonlet);
+    $("mr").addEventListener("change", setMoonlet);
+    $("mvel").addEventListener("change", setMoonlet);
     const onBand = () => {
       $("preset").value = "3";
+      showRows();
       tell(() => app.set_band_km(parseFloat($("amin").value), parseFloat($("amax").value)));
     };
     $("amin").addEventListener("change", onBand);
@@ -219,7 +258,7 @@
       tell(() => app.set_compare(compareMode));
     });
     $("setref").addEventListener("click", () => app.set_reference_now());
-    $("frame").addEventListener("change", (e) => app.set_view(parseInt(e.target.value, 10)));
+    $("frame").addEventListener("change", (e) => tell(() => app.set_view(parseInt(e.target.value, 10))));
 
     // Pointer: drag to pan, wheel to zoom. Positions in canvas pixels.
     let drag = null;

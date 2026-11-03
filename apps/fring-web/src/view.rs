@@ -140,6 +140,15 @@ impl Camera {
         }
     }
 
+    /// A camera on the moonlet centre at the view origin. The half-height is
+    /// ten packing radii, so the moonlet fills a tenth of it at t = 0.
+    pub fn moonlet_view(radius_km: f64) -> Self {
+        Self {
+            centre_km: [0.0, 0.0],
+            half_height_km: (10.0 * radius_km).clamp(MIN_HALF_HEIGHT_KM, MAX_HALF_HEIGHT_KM),
+        }
+    }
+
     /// Pixels per km for a window of `height_px`.
     pub fn px_per_km(&self, height_px: f64) -> f64 {
         0.5 * height_px / self.half_height_km
@@ -199,6 +208,13 @@ mod tests {
         assert_eq!(c.centre_km, [0.0, 0.0]);
         assert_eq!(c.half_height_km, 2000.0);
         assert_eq!(Camera::moon_view(0.0).half_height_km, MIN_HALF_HEIGHT_KM);
+    }
+
+    #[test]
+    fn moonlet_view_is_ten_radii_and_clamped() {
+        assert_eq!(Camera::moonlet_view(20.0).half_height_km, 200.0);
+        assert_eq!(Camera::moonlet_view(0.1).half_height_km, MIN_HALF_HEIGHT_KM);
+        assert_eq!(Camera::moonlet_view(20.0).centre_km, [0.0, 0.0]);
     }
 
     #[test]
