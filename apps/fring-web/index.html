@@ -25,6 +25,7 @@
   .legend { display: flex; gap: 12px; flex-wrap: wrap; color: var(--muted); font-size: 13px; }
   .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 5px; vertical-align: -1px; }
   .note { margin: 6px 0 0; color: var(--muted); font-size: 12px; }
+  .note a { color: var(--accent); }
   .label { position: fixed; bottom: 12px; padding: 4px 8px; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; font-variant-numeric: tabular-nums; display: none; }
   .label.show { display: block; }
   #error { display: none; position: fixed; inset: 0; padding: 24px; place-content: center; text-align: center; background: var(--bg); }
@@ -109,6 +110,7 @@
   </div>
   <p class="note">Test particles (10 000 to 1 000 000, your choice) run live on your GPU (Wisdom-Holman, double-single arithmetic), pulled by Saturn (J2 to J6) and by the moons from a 10-year integration of the real moon orbits. Time starts at 1 January 2008. Seen from the north: orbits go anticlockwise. Inertial: fixed camera; the core goes round once in 14.85 h. Rotating: the camera turns with the core (mean motion n0), so the core stays still and the outer material falls behind. Moon views: the moon stays at the centre, Saturn is straight down. "Pandora pulls" switches off only Pandora's pull on the particles; Prometheus keeps its real path and Pandora's dot is hidden. Changing the number of particles, the band or Pandora starts again from t = 0. At more than 100 000 particles the top speed is lower (the readout shows the limit). Below about 6 h/s the motion is stepwise (one 360 s step every few frames). Drag to move, scroll to zoom.</p>
   <p class="note" id="adapter"></p>
+  <p class="note">Source code and method: <a href="https://github.com/01painadam/fring">github.com/01painadam/fring</a> (MIT licence).</p>
 </div>
 
 <div id="error" role="alert">
