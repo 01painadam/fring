@@ -2,6 +2,13 @@
 
 Read this file at the start of a session. When a mistake costs time, add an entry so that no agent makes it twice. Newest first. Each entry: what happened, why, and the rule now.
 
+## 2026-11-02 (phase 3, A2-ANALYSIS)
+
+### M26. A job read the output of a run that was still going
+
+- **What:** in A2-ANALYSIS, the CPU `closest` run (20,000 particles, 628 s) joined its closest approaches with the chaos classes in `runs/chaos-map-main10`, while the GPU rerun that writes those classes (388 s) was still going. The class output was not complete, so it printed "classes matched 0" for both moons, and `closest_pandora_pandora_cum.csv` was written with empty class columns. A separate `closest-join` run after the class run had finished matched 20,000 of 20,000. The note now says that the class columns of that file are empty.
+- **Rule:** before a job reads another run's output, check that the run has finished (its process has exited and its last file exists), or chain the two in one script. A join that matches 0 rows is an error, not a result: stop and find the cause.
+
 ## 2026-11-02 (phase 3, W2-COMPARE)
 
 ### M25. A0's check loop in zsh ran no checks
