@@ -66,7 +66,7 @@ Rules (full text in `AGENTS.md` and `CLAUDE.md`):
 
 | ID | Task | Role | Status | Branch | Blocked by |
 |---|---|---|---|---|---|
-| W2-MOONLET | Web: moonlet scenario (orbital radius, packing radius, velocity mode; 180° from Prometheus) and a view that turns with the moonlet centre (ICR-008; added by AJ) | A7 | todo | | Gate G3 |
+| W2-MOONLET | Web: moonlet scenario (orbital radius, packing radius, velocity mode; 180° from Prometheus) and a view that turns with the moonlet centre (ICR-008; added by AJ) | A7 | review | ws/a7-w2-moonlet | Gate G3 |
 | K1 | `fring-collide/SPEC.md` and the shared statistical tests (A0 approves, AJ confirms; Opus) | A4 | todo | | Gate G3 |
 | A5-ANALYSIS | A2-ANALYSIS follow-ups: h/4 test for `eccentric_band`, `closest` on `eccentric_band`, second apse phase at 30 years | A8 | todo | | Gate G3 |
 | E1-ICR | Write ICR-004: flag and freeze on the CPU, radius rule twin to `fring-model/src/physics/`, sub-stepping trigger and scheme, REBOUND comparison set | A2 | todo | | Gate G3, A5-ANALYSIS |
