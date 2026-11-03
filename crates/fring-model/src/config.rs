@@ -243,6 +243,46 @@ pub enum Distribution {
         /// Standard deviation of each position component in km (> 0).
         sigma_km: f64,
     },
+    /// Loosely packed moonlet (`kind = "moonlet"`, ICR-008): particles
+    /// uniform in a sphere of radius `packing_radius_km` about one point on a
+    /// circular orbit. The particles have no self-gravity, so the moonlet is
+    /// not bound and comes apart at once; `velocity` selects how it moves at
+    /// time 0 ([`MoonletVelocity`]).
+    Moonlet {
+        /// Radius of the circular orbit of the centre in km.
+        semi_major_axis_km: f64,
+        /// Inertial longitude of the centre at time 0, in degrees.
+        longitude_deg: f64,
+        /// Radius of the sphere that holds the particles in km (> 0 and less
+        /// than `semi_major_axis_km`).
+        packing_radius_km: f64,
+        /// Start velocities.
+        velocity: MoonletVelocity,
+    },
+}
+
+/// Start velocities of a [`Distribution::Moonlet`] (ICR-008).
+///
+/// In the frame that turns with the circular orbit of the centre (x radial,
+/// y along the orbit), Hill's equations put the guiding centre of a particle
+/// that starts at radial offset `x0` with velocity `vy0` at
+/// `4 x0 + 2 vy0 / n`. With the exact n and kappa of Saturn's field the
+/// factors below get a factor `(n / kappa)^2`, about 1.009 at the F ring.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MoonletVelocity {
+    /// At rest in the frame that turns about Saturn at the mean motion n of
+    /// the centre: `v = n z x r` (`velocity = "synchronous"`), like a moonlet
+    /// that spins once per orbit. Guiding centres at about `4 x0`.
+    Synchronous,
+    /// Every particle has the circular velocity of the centre point, with no
+    /// spin, as in [`Distribution::Clump`] (`velocity = "centre"`). Guiding
+    /// centres at about `2 x0`.
+    Centre,
+    /// Every particle has the circular velocity at its own cylindrical radius
+    /// (`velocity = "circular"`): pure Keplerian shear, guiding centres at
+    /// `x0`.
+    Circular,
 }
 
 /// `[collisions]` section, selected by `model` (`docs/PLAN.md` section 7.5).
@@ -461,6 +501,23 @@ impl Distribution {
                 positive(&format!("{P}.semi_major_axis_km"), semi_major_axis_km)?;
                 finite(&format!("{P}.longitude_deg"), longitude_deg)?;
                 positive(&format!("{P}.sigma_km"), sigma_km)
+            }
+            Distribution::Moonlet {
+                semi_major_axis_km,
+                longitude_deg,
+                packing_radius_km,
+                velocity: _,
+            } => {
+                positive(&format!("{P}.semi_major_axis_km"), semi_major_axis_km)?;
+                finite(&format!("{P}.longitude_deg"), longitude_deg)?;
+                positive(&format!("{P}.packing_radius_km"), packing_radius_km)?;
+                require(
+                    packing_radius_km < semi_major_axis_km,
+                    format!(
+                        "{P}.packing_radius_km ({packing_radius_km}) must be less than \
+                         semi_major_axis_km ({semi_major_axis_km})"
+                    ),
+                )
             }
         }
     }

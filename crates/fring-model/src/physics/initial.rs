@@ -13,14 +13,16 @@
 //! excursion `a e`). Time is 0 and the frame is inertial; the rotating frame
 //! coincides with it at time 0.
 //!
-//! All particles have `z = 0` and `vz = 0`, except the clump, which has a
-//! Gaussian z offset: the distributions have no inclination field yet.
+//! All particles have `z = 0` and `vz = 0`, except the clump and the
+//! moonlet, which have a z offset (and `vz = 0`): the distributions have no
+//! inclination field yet.
 //!
 //! | Distribution | a | e, apse | mean longitude |
 //! |---|---|---|---|
 //! | `Core` | Gaussian (mean, sigma) | config e, config apse | uniform |
 //! | `Band` | uniform in [min, max] | 0 | uniform |
 //! | `Clump` | see below | | |
+//! | `Moonlet` | see below | | |
 //!
 //! `Core`: the epicycle phase is `M = lambda - apse` (the pericentre is where
 //! the guiding centre is at the apse longitude).
@@ -29,10 +31,19 @@
 //! the inertial x, y, z directions) about the point on the circle of radius
 //! `a` at the given inertial longitude. Every particle gets the circular
 //! velocity of that centre point (no velocity dispersion).
+//!
+//! `Moonlet` (ICR-008): uniform in the sphere of radius `packing_radius_km`
+//! about the point on the circle of radius `a` at the given inertial
+//! longitude (`r = R u^(1/3)`, `cos(theta) = 1 - 2u`, `phi = 2 pi u`). The
+//! velocity is one of three ([`MoonletVelocity`]): `synchronous`,
+//! `v = n z x r` with the exact n at `a` (at rest in the frame that turns
+//! with the centre); `centre`, the circular velocity of the centre point (as
+//! `Clump`); `circular`, the circular velocity at the cylindrical radius of
+//! the particle.
 
 use super::circular::{circular_speed, frequencies};
 use super::gravity::SaturnField;
-use crate::config::Distribution;
+use crate::config::{Distribution, MoonletVelocity};
 use crate::rng::{Counter, Philox, Stream, box_muller};
 use crate::{Particles, Real, Result, Vec3};
 
@@ -187,6 +198,41 @@ pub fn initial_particle(
                 ),
                 Vec3::new(-v * s, v * c, 0.0),
             )
+        }
+        Distribution::Moonlet {
+            semi_major_axis_km,
+            longitude_deg,
+            packing_radius_km,
+            velocity,
+        } => {
+            let [u_r, u_mu] = rng.uniform_f64(counter(id, 0));
+            let [u_phi, _] = rng.uniform_f64(counter(id, 1));
+            let r = packing_radius_km * u_r.cbrt();
+            let mu = 1.0 - 2.0 * u_mu;
+            let rho = (1.0 - mu * mu).max(0.0).sqrt();
+            let (sp, cp) = (two_pi * u_phi).sin_cos();
+            let (s, c) = longitude_deg.to_radians().sin_cos();
+            let pos = Vec3::new(
+                semi_major_axis_km * c + r * rho * cp,
+                semi_major_axis_km * s + r * rho * sp,
+                r * mu,
+            );
+            let vel = match velocity {
+                MoonletVelocity::Synchronous => {
+                    let n = frequencies(field, semi_major_axis_km).n_rad_s;
+                    Vec3::new(-n * pos.y, n * pos.x, 0.0)
+                }
+                MoonletVelocity::Centre => {
+                    let v = circular_speed(field, semi_major_axis_km);
+                    Vec3::new(-v * s, v * c, 0.0)
+                }
+                MoonletVelocity::Circular => {
+                    let r_cyl = pos.x.hypot(pos.y);
+                    let v = circular_speed(field, r_cyl) / r_cyl;
+                    Vec3::new(-v * pos.y, v * pos.x, 0.0)
+                }
+            };
+            (pos, vel)
         }
     }
 }
@@ -439,6 +485,124 @@ mod tests {
         }
         for i in 0..p.len() {
             assert_eq!(p.velocity_km_s(i), Vec3::new(-v * s, v * c, 0.0));
+        }
+    }
+
+    fn moonlet(velocity: MoonletVelocity) -> Distribution {
+        Distribution::Moonlet {
+            semi_major_axis_km: 140_222.43,
+            longitude_deg: 200.0,
+            packing_radius_km: 20.0,
+            velocity,
+        }
+    }
+
+    const MOONLET_VELOCITIES: [MoonletVelocity; 3] = [
+        MoonletVelocity::Synchronous,
+        MoonletVelocity::Centre,
+        MoonletVelocity::Circular,
+    ];
+
+    #[test]
+    fn moonlet_is_uniform_in_its_sphere() {
+        let f = field();
+        let (a, r_max) = (140_222.43, 20.0);
+        let (s, c) = 200.0_f64.to_radians().sin_cos();
+        let p = generate_particles(&f, &moonlet(MoonletVelocity::Synchronous), N, SEED).unwrap();
+        let n = f64::from(N);
+        let d: Vec<[f64; 3]> = (0..p.len())
+            .map(|i| [p.x_km[i] - a * c, p.y_km[i] - a * s, p.z_km[i]])
+            .collect();
+        let r: Vec<f64> = d
+            .iter()
+            .map(|v| (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]).sqrt())
+            .collect();
+        assert!(r.iter().all(|&x| x <= r_max * (1.0 + 1e-12)));
+        // Uniform in volume: (r / R)^3 is uniform in [0, 1].
+        let u: Vec<f64> = r.iter().map(|x| (x / r_max).powi(3)).collect();
+        assert!(ks_uniform(u) < ks_limit());
+        // Isotropic: each component has mean 0 and sd R / sqrt(5).
+        for k in 0..3 {
+            let comp: Vec<f64> = d.iter().map(|v| v[k]).collect();
+            let sd = r_max / 5.0_f64.sqrt();
+            assert!(mean(&comp).abs() < 5.0 * sd / n.sqrt(), "axis {k}");
+            assert!((std(&comp) / sd - 1.0).abs() < 0.03, "axis {k}");
+        }
+        // The same draws for every velocity mode: same positions.
+        for v in MOONLET_VELOCITIES {
+            let q = generate_particles(&f, &moonlet(v), 100, SEED).unwrap();
+            for i in 0..100 {
+                assert_eq!(q.position_km(i), p.position_km(i));
+            }
+        }
+    }
+
+    #[test]
+    fn moonlet_velocities_follow_their_mode() {
+        let f = field();
+        let a = 140_222.43;
+        let (s, c) = 200.0_f64.to_radians().sin_cos();
+        let n_c = frequencies(&f, a).n_rad_s;
+        let v_c = circular_speed(&f, a);
+        for mode in MOONLET_VELOCITIES {
+            let p = generate_particles(&f, &moonlet(mode), 1000, SEED).unwrap();
+            for i in 0..p.len() {
+                let (x, v) = (p.position_km(i), p.velocity_km_s(i));
+                assert_eq!(v.z, 0.0);
+                match mode {
+                    MoonletVelocity::Synchronous => {
+                        assert_eq!(v, Vec3::new(-n_c * x.y, n_c * x.x, 0.0));
+                    }
+                    MoonletVelocity::Centre => {
+                        assert_eq!(v, Vec3::new(-v_c * s, v_c * c, 0.0));
+                    }
+                    MoonletVelocity::Circular => {
+                        let r_cyl = x.x.hypot(x.y);
+                        let speed = v.x.hypot(v.y);
+                        assert!((speed / circular_speed(&f, r_cyl) - 1.0).abs() < 1e-14);
+                        assert!((x.x * v.x + x.y * v.y).abs() < 1e-12 * r_cyl * speed);
+                    }
+                }
+            }
+        }
+        // The centre point of the synchronous mode has the circular speed.
+        assert!((n_c * a / v_c - 1.0).abs() < 1e-14);
+    }
+
+    /// The guiding-centre offsets of ICR-008 (Hill's equations with the exact
+    /// n and kappa): `a_g - a = k (n / kappa)^2 x0` with k = 4, 2 for the
+    /// synchronous and centre modes, and `a_g - a = x0` for the circular mode.
+    /// The guiding centre comes from the angular momentum h = x vy - y vx,
+    /// linearised: `dh/da = a kappa^2 / (2 n)` for circular orbits.
+    #[test]
+    fn moonlet_guiding_centres_spread_as_hill_predicts() {
+        let f = field();
+        let a = 140_222.43;
+        let fr = frequencies(&f, a);
+        let (n, kappa) = (fr.n_rad_s, fr.kappa_rad_s);
+        let h_c = a * circular_speed(&f, a);
+        let dh_da = a * kappa * kappa / (2.0 * n);
+        let q = (n / kappa).powi(2);
+        assert!((q - 1.009).abs() < 0.001, "(n/kappa)^2 = {q}");
+        for (mode, want) in [
+            (MoonletVelocity::Synchronous, 4.0 * q),
+            (MoonletVelocity::Centre, 2.0 * q),
+            (MoonletVelocity::Circular, 1.0),
+        ] {
+            let p = generate_particles(&f, &moonlet(mode), N, SEED).unwrap();
+            let (mut sxy, mut sxx) = (0.0, 0.0);
+            for i in 0..p.len() {
+                let (x, v) = (p.position_km(i), p.velocity_km_s(i));
+                let x0 = x.x.hypot(x.y) - a;
+                let da_g = (x.x * v.y - x.y * v.x - h_c) / dh_da;
+                sxy += x0 * da_g;
+                sxx += x0 * x0;
+            }
+            let slope = sxy / sxx;
+            assert!(
+                (slope / want - 1.0).abs() < 1e-3,
+                "{mode:?}: slope {slope}, want {want}"
+            );
         }
     }
 
