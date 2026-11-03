@@ -1,0 +1,58 @@
+name: Pages
+
+# Builds the web app (apps/fring-web) and publishes it on GitHub Pages at
+# https://01painadam.github.io/fring/ (gate G3, AJ decision 2026-11-03).
+# The repository setting Pages > Source must be "GitHub Actions".
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deploy at a time. A new push waits for the deploy that is running; it does not cancel it.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: build the web app
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install toolchain from rust-toolchain.toml
+        run: rustup toolchain install
+
+      - uses: Swatinem/rust-cache@v2
+
+      # wasm-bindgen-cli must equal the wasm-bindgen crate version (Cargo.toml), as in ci.yml.
+      - name: Build (wasm32 and wasm-bindgen)
+        run: |
+          cargo install wasm-bindgen-cli --version 0.2.130 --locked
+          apps/fring-web/scripts/build.sh
+
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: apps/fring-web/dist
+
+  deploy:
+    name: deploy to GitHub Pages
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5
