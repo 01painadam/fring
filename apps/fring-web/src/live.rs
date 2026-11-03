@@ -17,7 +17,7 @@
 //! `params/` (2008-01-01 TDB).
 
 use crate::view::ViewTransform;
-use fring_model::config::Distribution;
+use fring_model::config::{Distribution, MoonletVelocity};
 use fring_model::params::{
     RingParams, moon_radii_from_toml_str, moons_from_toml_str, ring_from_toml_str,
     saturn_from_toml_str,
@@ -95,10 +95,55 @@ pub enum Band {
         /// Largest semi-major axis, km.
         max_km: f64,
     },
+    /// Loosely packed moonlet (ICR-008): uniform in a sphere of `radius_km`
+    /// about a point on the circle of radius `a_km`, 180° from Prometheus at
+    /// t = 0 ([`Setup::moonlet_longitude_deg`]).
+    Moonlet {
+        /// Orbital radius of the centre, km.
+        a_km: f64,
+        /// Packing radius, km.
+        radius_km: f64,
+        /// Start velocities.
+        velocity: MoonletVelocity,
+    },
+}
+
+/// Packing radius of the moonlet when the page opens, km.
+pub const MOONLET_RADIUS_KM: f64 = 20.0;
+
+/// The moonlet velocity mode of the page control: 0 synchronous, 1 centre,
+/// 2 circular.
+pub fn moonlet_velocity(index: u32) -> Option<MoonletVelocity> {
+    match index {
+        0 => Some(MoonletVelocity::Synchronous),
+        1 => Some(MoonletVelocity::Centre),
+        2 => Some(MoonletVelocity::Circular),
+        _ => None,
+    }
+}
+
+/// The circular orbit that the moonlet view follows: radius `a_km`, longitude
+/// `lon0_rad + n_rad_s t`.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Guide {
+    /// Orbital radius, km.
+    pub a_km: f64,
+    /// Inertial longitude at t = 0, rad.
+    pub lon0_rad: f64,
+    /// Mean motion (exact, Saturn's field), rad/s.
+    pub n_rad_s: f64,
+}
+
+impl Guide {
+    /// Inertial (x, y) of the guide point at time `t_s`, km.
+    pub fn position_km(&self, t_s: f64) -> [f64; 2] {
+        let th = self.lon0_rad + self.n_rad_s * t_s;
+        [self.a_km * th.cos(), self.a_km * th.sin()]
+    }
 }
 
 /// What the view follows.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum ViewFrame {
     /// Fixed camera, centred on Saturn: everything orbits anticlockwise.
     Inertial,
@@ -107,6 +152,10 @@ pub enum ViewFrame {
     /// Centred on moon `k` (index in the full ephemeris) and turning with it:
     /// Saturn is straight down and the orbital motion goes to the left.
     Moon(usize),
+    /// Centred on the circular orbit of the moonlet centre from t = 0 and
+    /// turning with it (Hill's frame), oriented as `Moon`: Saturn straight
+    /// down, orbital motion to the left.
+    Moonlet(Guide),
 }
 
 /// The `params/` files, parsed. Cheap to build; the ephemeris is separate.
@@ -191,6 +240,26 @@ impl Setup {
         (self.moon_radius_km(k) - self.a0_km()).abs()
     }
 
+    /// Inertial longitude of the moonlet centre at t = 0: 180° from
+    /// Prometheus (AJ, 2026-11-03), in [0°, 360°). 180° if there is no
+    /// Prometheus.
+    pub fn moonlet_longitude_deg(&self) -> f64 {
+        let lon = self.moon_index("prometheus").map_or(0.0, |k| {
+            let p = self.moons[k].state.position_km;
+            p.y.atan2(p.x).to_degrees()
+        });
+        (lon + 180.0).rem_euclid(360.0)
+    }
+
+    /// The circular orbit of a moonlet centre at radius `a_km`.
+    pub fn moonlet_guide(&self, a_km: f64) -> Guide {
+        Guide {
+            a_km,
+            lon0_rad: self.moonlet_longitude_deg().to_radians(),
+            n_rad_s: reference_mean_motion(&self.field, a_km),
+        }
+    }
+
     /// Index of the moon called `name`, if there is one.
     pub fn moon_index(&self, name: &str) -> Option<usize> {
         self.moons.iter().position(|m| m.name == name)
@@ -256,13 +325,24 @@ impl Setup {
                 min_semi_major_axis_km: min_km,
                 max_semi_major_axis_km: max_km,
             },
+            Band::Moonlet {
+                a_km,
+                radius_km,
+                velocity,
+            } => Distribution::Moonlet {
+                semi_major_axis_km: a_km,
+                longitude_deg: self.moonlet_longitude_deg(),
+                packing_radius_km: radius_km,
+                velocity,
+            },
         }
     }
 
     /// The initial particles (inertial, t = 0) of `count` particles in `band`.
     ///
     /// # Errors
-    /// [`fring_model::Error::Input`] if the band is empty or not finite, or a
+    /// [`fring_model::Error::Input`] if the band is empty or not finite, if a
+    /// moonlet does not have 0 < packing radius < orbital radius, or if a
     /// particle state is not valid.
     pub fn initial(&self, band: Band, count: u32) -> Result<InitialState> {
         if let Band::Circular { min_km, max_km } = band
@@ -270,6 +350,15 @@ impl Setup {
         {
             return Err(fring_model::Error::Input(format!(
                 "the band {min_km} to {max_km} km is empty or not finite"
+            )));
+        }
+        if let Band::Moonlet {
+            a_km, radius_km, ..
+        } = band
+            && !(a_km.is_finite() && radius_km.is_finite() && 0.0 < radius_km && radius_km < a_km)
+        {
+            return Err(fring_model::Error::Input(format!(
+                "a moonlet needs 0 < packing radius ({radius_km} km) < orbital radius ({a_km} km)"
             )));
         }
         let particles = generate_particles(&self.field, &self.distribution(band), count, SEED)?;
@@ -312,6 +401,10 @@ pub fn view_transform(
             let m = moons[k];
             ViewTransform::new(m, std::f64::consts::FRAC_PI_2 - m[1].atan2(m[0]))
         }
+        ViewFrame::Moonlet(g) => ViewTransform::new(
+            g.position_km(t_s),
+            std::f64::consts::FRAC_PI_2 - (g.lon0_rad + g.n_rad_s * t_s),
+        ),
     }
 }
 
@@ -921,6 +1014,82 @@ mod tests {
             let v = view.apply([r * lon.cos(), r * lon.sin()]);
             assert!((v[0] + r * 1e-3_f64.sin()).abs() < 1e-6, "{v:?}");
             assert!((v[1] + r * (1.0 - 1e-3_f64.cos())).abs() < 1e-6, "{v:?}");
+        }
+    }
+
+    fn moonlet_band(velocity: MoonletVelocity) -> Band {
+        Band::Moonlet {
+            a_km: 140_222.43,
+            radius_km: MOONLET_RADIUS_KM,
+            velocity,
+        }
+    }
+
+    /// The moonlet starts 180° from Prometheus, inside its packing radius.
+    #[test]
+    fn moonlet_starts_opposite_prometheus_inside_its_radius() {
+        let s = Setup::builtin().unwrap();
+        let k = s.moon_index("prometheus").unwrap();
+        let pr = s.moons[k].state.position_km;
+        let g = s.moonlet_guide(140_222.43);
+        let c = g.position_km(0.0);
+        // Opposite: the unit vectors add to zero.
+        let (rp, rc) = (pr.x.hypot(pr.y), c[0].hypot(c[1]));
+        assert!((pr.x / rp + c[0] / rc).abs() < 1e-12 && (pr.y / rp + c[1] / rc).abs() < 1e-12);
+        let init = s
+            .initial(moonlet_band(MoonletVelocity::Synchronous), 2000)
+            .unwrap();
+        let p = &init.particles;
+        for i in 0..p.len() {
+            let d = (p.x_km[i] - c[0]).hypot(p.y_km[i] - c[1]).hypot(p.z_km[i]);
+            assert!(d <= MOONLET_RADIUS_KM * (1.0 + 1e-12), "{d}");
+        }
+        for (a_km, radius_km) in [(140_222.43, 0.0), (100.0, 100.0), (f64::NAN, 20.0)] {
+            let band = Band::Moonlet {
+                a_km,
+                radius_km,
+                velocity: MoonletVelocity::Centre,
+            };
+            assert!(s.initial(band, 1).is_err(), "{a_km} {radius_km}");
+        }
+        assert_eq!(moonlet_velocity(2), Some(MoonletVelocity::Circular));
+        assert_eq!(moonlet_velocity(3), None);
+    }
+
+    /// The moonlet view holds the guide point at the origin, puts Saturn
+    /// straight down, and holds still any point that turns rigidly with the
+    /// guide: so a synchronous moonlet starts at rest in this view.
+    /// Tolerance 1e-6 km, as in the moon view test.
+    #[test]
+    fn moonlet_view_turns_with_the_moonlet_centre() {
+        let s = Setup::builtin().unwrap();
+        let g = s.moonlet_guide(140_222.43);
+        let init = s
+            .initial(moonlet_band(MoonletVelocity::Synchronous), 200)
+            .unwrap();
+        let p = &init.particles;
+        let frame = ViewFrame::Moonlet(g);
+        let v0 = view_transform(frame, s.n0_rad_s(), 0.0, &[]);
+        for t in [0.0, 3.6e3, 5.0e4, 1.0e6] {
+            let view = view_transform(frame, s.n0_rad_s(), t, &[]);
+            let c = view.apply(g.position_km(t));
+            assert!(c[0].abs() < 1e-6 && c[1].abs() < 1e-6, "{t}: {c:?}");
+            let sat = view.apply([0.0, 0.0]);
+            assert!(
+                sat[0].abs() < 1e-6 && (sat[1] + g.a_km).abs() < 1e-6,
+                "{sat:?}"
+            );
+            let (sn, cs) = (g.n_rad_s * t).sin_cos();
+            for i in 0..p.len() {
+                // Rigid turn by n t about Saturn: the motion of v = n z x r.
+                let (x, y) = (p.x_km[i], p.y_km[i]);
+                let moved = view.apply([cs * x - sn * y, sn * x + cs * y]);
+                let start = v0.apply([x, y]);
+                assert!((moved[0] - start[0]).hypot(moved[1] - start[1]) < 1e-6);
+                // The start velocity is that rigid turn.
+                let v = p.velocity_km_s(i);
+                assert!((v.x + g.n_rad_s * y).abs() < 1e-15 && (v.y - g.n_rad_s * x).abs() < 1e-15);
+            }
         }
     }
 

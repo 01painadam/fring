@@ -12,10 +12,10 @@
 
 use crate::live::{
     BLOCK_STEPS, Band, COLOUR_FAINT_OFFSET, CompareMode, END_MARGIN_S, FLOATS_PER_INSTANCE,
-    Governor, MAX_IN_FLIGHT, PANDORA, PARTICLE_COUNT, ProjectionUniform, SPAN_S, STEP_S, Setup,
-    StepPlanner, ViewFrame, builtin_moon_radii_for, count_fits, drop_text, head_instances_styled,
-    instance_bytes, limit_to_end, max_hours_for, ref_base_slot, ref_bytes, status_bytes,
-    view_transform,
+    Governor, MAX_IN_FLIGHT, MOONLET_RADIUS_KM, PANDORA, PARTICLE_COUNT, ProjectionUniform, SPAN_S,
+    STEP_S, Setup, StepPlanner, ViewFrame, builtin_moon_radii_for, count_fits, drop_text,
+    head_instances_styled, instance_bytes, limit_to_end, max_hours_for, moonlet_velocity,
+    ref_base_slot, ref_bytes, status_bytes, view_transform,
 };
 use crate::view::{Camera, half_local_x, split_halves};
 use fring_gpu::gpu::Gpu;
@@ -138,10 +138,15 @@ fn err(e: impl std::fmt::Display) -> JsValue {
 }
 
 /// The camera that a view starts with (and goes back to on "Reset view").
-fn initial_camera(setup: &Setup, view: ViewFrame) -> Camera {
+/// The moonlet view scales with the packing radius of `band`.
+fn initial_camera(setup: &Setup, view: ViewFrame, band: Band) -> Camera {
     match view {
         ViewFrame::Inertial | ViewFrame::Rotating => Camera::whole_ring(setup.a0_km()),
         ViewFrame::Moon(k) => Camera::moon_view(setup.moon_gap_km(k)),
+        ViewFrame::Moonlet(_) => Camera::moonlet_view(match band {
+            Band::Moonlet { radius_km, .. } => radius_km,
+            _ => MOONLET_RADIUS_KM,
+        }),
     }
 }
 
@@ -303,7 +308,7 @@ impl App {
         let setup = Setup::builtin().map_err(err)?;
         let band = setup.preset_band(0);
         let view = ViewFrame::Inertial;
-        let camera = initial_camera(&setup, view);
+        let camera = initial_camera(&setup, view, band);
         Ok(App {
             surface,
             device,
@@ -429,6 +434,9 @@ impl App {
     pub fn preset_range_km(&self, index: u32) -> Vec<f64> {
         match self.setup.preset_band(index) {
             Band::Circular { min_km, max_km } => vec![min_km, max_km],
+            Band::Moonlet {
+                a_km, radius_km, ..
+            } => vec![a_km - radius_km, a_km + radius_km],
             Band::Core => {
                 let w = 3.0 * self.setup.ring.dust_strand_width_min_km;
                 vec![self.setup.a0_km() - w, self.setup.a0_km() + w]
@@ -445,6 +453,40 @@ impl App {
         self.restart()
     }
 
+    /// Moonlet band (ICR-008): orbital radius `a_km`, packing radius
+    /// `radius_km`, start velocities `velocity` (0 synchronous, 1 centre,
+    /// 2 circular). The centre starts 180° from Prometheus. Time goes back to
+    /// 0. A bad moonlet is an error and changes nothing. In the moonlet view,
+    /// the view follows the new orbit; a new radius also resets the camera.
+    pub fn set_moonlet(&mut self, a_km: f64, radius_km: f64, velocity: u32) -> Result<(), JsValue> {
+        let mode = moonlet_velocity(velocity)
+            .ok_or_else(|| err(format!("no moonlet velocity mode {velocity}")))?;
+        let band = Band::Moonlet {
+            a_km,
+            radius_km,
+            velocity: mode,
+        };
+        self.setup.initial(band, 1).map_err(err)?;
+        let same_shape = matches!(
+            self.band,
+            Band::Moonlet { a_km: a, radius_km: r, .. } if a == a_km && r == radius_km
+        );
+        self.band = band;
+        if matches!(self.view, ViewFrame::Moonlet(_)) {
+            self.view = ViewFrame::Moonlet(self.setup.moonlet_guide(a_km));
+            if !same_shape {
+                self.camera = initial_camera(&self.setup, self.view, self.band);
+            }
+        }
+        self.restart()
+    }
+
+    /// Orbital radius (a0) and packing radius of the moonlet when the page
+    /// opens, km, as a pair `[a, radius]`.
+    pub fn moonlet_defaults_km(&self) -> Vec<f64> {
+        vec![self.setup.a0_km(), MOONLET_RADIUS_KM]
+    }
+
     /// Starts the run again from t = 0 with the same settings (also clears a
     /// failed particle).
     pub fn restart(&mut self) -> Result<(), JsValue> {
@@ -455,7 +497,8 @@ impl App {
     }
 
     /// 0 = inertial (fixed camera, the start view); 1 = rotating (the camera
-    /// turns with the core); 2 = centred on Prometheus; 3 = centred on Pandora.
+    /// turns with the core); 2 = centred on Prometheus; 3 = centred on Pandora;
+    /// 4 = on the moonlet (turns with its centre; needs the moonlet band).
     /// The camera goes to the start position of that view.
     pub fn set_view(&mut self, index: u32) -> Result<(), JsValue> {
         let view = match index {
@@ -469,16 +512,20 @@ impl App {
                     .ok_or_else(|| err(format!("no moon {name}")))?;
                 ViewFrame::Moon(k)
             }
+            4 => match self.band {
+                Band::Moonlet { a_km, .. } => ViewFrame::Moonlet(self.setup.moonlet_guide(a_km)),
+                _ => return Err(err("the moonlet view needs the Moonlet band")),
+            },
             _ => return Err(err(format!("no view {index}"))),
         };
         self.view = view;
-        self.camera = initial_camera(&self.setup, view);
+        self.camera = initial_camera(&self.setup, view, self.band);
         Ok(())
     }
 
     /// Puts the camera back to the start position of the current view.
     pub fn reset_view(&mut self) {
-        self.camera = initial_camera(&self.setup, self.view);
+        self.camera = initial_camera(&self.setup, self.view, self.band);
     }
 
     /// A mouse drag of `(dx, dy)` canvas pixels.
