@@ -6,9 +6,11 @@
 //! against f64 only for a particle within `DELTA` of a cell edge (the edges of
 //! the arc included).
 //!
-//! Choice made: a particle outside an edge by at most `ARC_SLACK_RAD` goes into
-//! the edge cell (clamp), not into its periodic image. That is the simpler
-//! rule: the two ends of the arc are not neighbours in the cell grid.
+//! Choice made (A0 decision): a particle outside an edge by at most
+//! `ARC_SLACK_RAD` goes into the cell of its periodic image (the arc is
+//! periodic): outside the start edge it is in the last cell, outside the end
+//! edge in the first cell. A particle exactly on an edge is in either of the
+//! two cells, because f64 and DS round it to either side.
 
 mod common;
 
@@ -68,6 +70,8 @@ fn at_angle(g: &BinGeometry, alpha: f64, s: f64, x: f64, z: f64) -> [f64; 3] {
 enum Want {
     First,
     Last,
+    /// Exactly on an edge: the first or the last cell.
+    Either,
     Inside,
     Out,
 }
@@ -81,24 +85,30 @@ fn edge_cases(g: &BinGeometry) -> Vec<(f64, Want, &'static str)> {
     let mut v = Vec::new();
     for (sign, name) in [(-1.0, "start"), (1.0, "end")] {
         let mk = |off: f64| sign * (h + off);
+        // The image of a particle outside the start edge is at the end.
+        let image = if sign < 0.0 { Want::Last } else { Want::First };
         v.push((mk(-1.0e-4), Want::Inside, name)); // inside
-        v.push((mk(0.0), edge_of(sign), name)); // exactly at the edge
-        v.push((mk(0.5 * wrap_slack), edge_of(sign), name));
-        v.push((mk(wrap_slack), edge_of(sign), name)); // the largest the wrap leaves
+        v.push((mk(0.0), Want::Either, name)); // exactly at the edge
+        v.push((mk(0.5 * wrap_slack), image_of(&image), name));
+        v.push((mk(wrap_slack), image, name)); // the largest the wrap leaves
         v.push((mk(2.0 * ARC_SLACK_RAD), Want::Out, name)); // beyond the slack
         v.push((mk(1.0e-3), Want::Out, name));
     }
     v
 }
 
-fn edge_of(sign: f64) -> Want {
-    if sign < 0.0 { Want::First } else { Want::Last }
+fn image_of(w: &Want) -> Want {
+    match w {
+        Want::First => Want::First,
+        _ => Want::Last,
+    }
 }
 
 fn check_cell(g: &BinGeometry, b: Binned, want: &Want, what: &str) {
     let ok = match (want, b) {
         (Want::First, Binned::Cell(c)) => c.iy == 0,
         (Want::Last, Binned::Cell(c)) => c.iy == g.ny - 1,
+        (Want::Either, Binned::Cell(c)) => c.iy == 0 || c.iy == g.ny - 1,
         (Want::Inside, Binned::Cell(c)) => c.iy < g.ny,
         (Want::Out, Binned::OutOfRange) => true,
         _ => false,

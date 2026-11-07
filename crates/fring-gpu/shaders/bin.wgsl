@@ -154,7 +154,18 @@ fn cell_of(i: u32) -> Binned {
         if (over_pi.x > 0.0 || (over_pi.x == 0.0 && over_pi.y > 0.0)) { psi = ds_sub(psi, twopi); }
     }
     var y = ds_mul(a0, psi);
-    if (arc) { y = ds_add(y, prm[4].xy); }
+    if (arc) {
+        // y runs 0..D (D = 2 (D/2) is exact). Within the slack outside an edge
+        // the particle is taken at its periodic image (y -/+ D).
+        let half = prm[4].xy;
+        let d = ds_add(half, half);
+        y = ds_add(y, half);
+        if (y.x < 0.0 && y.x > -prm[4].z) {
+            y = ds_add(y, d);
+        } else if (y.x >= 0.0 && !ds_negp(ds_sub(y, d)) && ds_sub(y, d).x < prm[4].z) {
+            y = ds_sub(y, d);
+        }
+    }
     let x = ds_sub(rho, a0);
     let qx = ds_div(x, prm[1].zw);
     let qy = ds_div(y, prm[2].xy);
@@ -163,14 +174,10 @@ fn cell_of(i: u32) -> Binned {
     var fy = ds_floor(qy);
     let fz = ds_floor(qz);
     let ny = f32(n_y());
-    let slack = select(0.0, prm[4].z, arc); // arc edge slack, km (see ARC_SLACK_RAD)
     if (fy >= ny) {
-        // Rounding at the end of the domain: y - D below 1e-6 km (arc: the
-        // slack) is the last cell.
+        // Rounding at the end of the domain: y - D below 1e-6 km is the last cell.
         let over = ds_sub(y, prm[3].zw);
-        if (over.x < max(1.0e-6, slack)) { fy = ny - 1.0; }
-    } else if (fy < 0.0 && arc && y.x > -slack) {
-        fy = 0.0; // outside the start edge by at most the slack: the first cell
+        if (over.x < 1.0e-6) { fy = ny - 1.0; }
     }
     if (!(abs(fx) <= IX_MAX && abs(fz) <= IZ_MAX && fy >= 0.0 && fy < ny)) {
         return Binned(2u, vec2<u32>(NONE, NONE));

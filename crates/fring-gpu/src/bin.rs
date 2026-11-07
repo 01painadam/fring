@@ -90,7 +90,9 @@ const END_TOLERANCE_KM: f32 = 1.0e-6;
 /// after the D1 wrap: `EDGE_TOL (cos(Δθ/2) + sin(Δθ/2))`, at most √2 EDGE_TOL
 /// (1.4e-6 rad, 0.2 km at the core), plus 1 % for the rounding of the f32
 /// edge test of the wrap. A particle outside an edge by at most this much is
-/// put in the edge cell (clamp). One outside by more stays `OutOfRange`.
+/// put in the cell of its periodic image (y + D below the start edge, y - D
+/// beyond the end edge: the last or the first cell). One outside by more stays
+/// `OutOfRange`.
 pub const ARC_SLACK_RAD: f64 = 1.01 * std::f64::consts::SQRT_2 * EDGE_TOL;
 
 /// The cell grid: sizes, domain and frame (km, rad, s).
@@ -115,7 +117,7 @@ pub struct BinGeometry {
     /// The domain is an arc kept by the D1 wrap ([`Self::from_config`] sets it
     /// for `Domain::Arc`). The azimuth is then the signed angle from the arc
     /// centre (in (−π, π]) plus Δθ/2, and a particle outside an edge by at most
-    /// [`ARC_SLACK_RAD`] goes into the edge cell. `false`: the angle from φ₀
+    /// [`ARC_SLACK_RAD`] is taken at its periodic image. `false`: the angle from φ₀
     /// in [0, 2π) and the old end tolerance (the full ring, and any plain
     /// domain made with [`Self::new`]).
     pub arc: bool,
@@ -416,7 +418,17 @@ pub fn cell_ds(prm: &[f32], ny: u32, alpha: Dsm, p: [Dsm; 3]) -> (Binned, [f64; 
     }
     let mut y = a0 * psi;
     if arc {
-        y += ds_at(prm, 4, 0);
+        // y runs 0..D; D = 2 (D/2) is exact. Within the slack outside an edge
+        // the particle is taken at its periodic image (y -/+ D).
+        let half = ds_at(prm, 4, 0);
+        let slack = prm[4 * 4 + 2];
+        let d = half + half;
+        y += half;
+        if y.hi < 0.0 && y.hi > -slack {
+            y += d;
+        } else if !(y.hi < 0.0) && !negp(y - d) && (y - d).hi < slack {
+            y -= d;
+        }
     }
     let x = rho - a0;
     let local = [x.to_f64(), y.to_f64(), pz.to_f64()];
@@ -424,14 +436,11 @@ pub fn cell_ds(prm: &[f32], ny: u32, alpha: Dsm, p: [Dsm; 3]) -> (Binned, [f64; 
     let mut fy = ds_floor(y / ds_at(prm, 2, 0));
     let fz = ds_floor(pz / ds_at(prm, 2, 2));
     let nyf = ny as f32;
-    let slack = if arc { prm[4 * 4 + 2] } else { 0.0 };
     if fy >= nyf {
         let over = y - ds_at(prm, 3, 2);
-        if over.hi < END_TOLERANCE_KM.max(slack) {
+        if over.hi < END_TOLERANCE_KM {
             fy = nyf - 1.0;
         }
-    } else if fy < 0.0 && arc && y.hi > -slack {
-        fy = 0.0;
     }
     if !(fx.abs() <= MAX_IX as f32 && fz.abs() <= MAX_IZ as f32 && fy >= 0.0 && fy < nyf) {
         return (Binned::OutOfRange, local);
@@ -459,18 +468,26 @@ pub fn cell_f64(g: &BinGeometry, alpha: f64, p: [f64; 3]) -> (Binned, [f64; 3]) 
     if g.arc && psi > PI {
         psi -= TAU; // s in (-pi, pi]
     }
-    let arc_y = if g.arc { 0.5 * g.domain_km } else { 0.0 };
-    let (x, y, z) = (rho - g.a0_km, g.a0_km * psi + arc_y, p[2]);
+    let mut y = g.a0_km * psi;
+    if g.arc {
+        // y runs 0..D; within the slack outside an edge the particle is taken
+        // at its periodic image (y -/+ D).
+        let (d, slack) = (g.domain_km, g.slack_km());
+        y += 0.5 * d;
+        if y < 0.0 && y > -slack {
+            y += d;
+        } else if y >= d && y - d < slack {
+            y -= d;
+        }
+    }
+    let (x, z) = (rho - g.a0_km, p[2]);
     let local = [x, y, z];
     let fx = (x / g.lx_km).floor();
     let mut fy = (y / g.ly_km).floor();
     let fz = (z / g.lz_km).floor();
     let nyf = f64::from(g.ny);
-    let slack = g.slack_km();
-    if fy >= nyf && y - g.domain_km < f64::from(END_TOLERANCE_KM).max(slack) {
+    if fy >= nyf && y - g.domain_km < f64::from(END_TOLERANCE_KM) {
         fy = nyf - 1.0;
-    } else if fy < 0.0 && g.arc && y > -slack {
-        fy = 0.0;
     }
     if !(fx.abs() <= f64::from(MAX_IX) && fz.abs() <= f64::from(MAX_IZ) && fy >= 0.0 && fy < nyf) {
         return (Binned::OutOfRange, local);
