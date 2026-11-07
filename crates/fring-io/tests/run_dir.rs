@@ -3,7 +3,7 @@
 use fring_io::{
     Frame, MoonRecord, MoonsFile, RunDir, RunMeta, frame_file_name, parse_frame_file_name,
 };
-use fring_model::{BodyState, StepStats, Vec3};
+use fring_model::{BodyState, CollisionStats, StepStats, Vec3};
 use std::path::PathBuf;
 
 struct TempDir(PathBuf);
@@ -80,7 +80,17 @@ fn disk_run_dir_roundtrip() {
         steps_total: 2,
         collisions_since_last: 3,
         max_rel_energy_error: Some(1e-12),
-        ..StepStats::default()
+        collision: CollisionStats {
+            energy_loss_km2_s2: 2.5e-9,
+            candidates: 4,
+            occupied_cells: 5,
+            occupancy_sum: 6,
+            occupancy_sq_sum: 7,
+            lonely_particles: 8,
+            overfull_cells: 9,
+            gmax_exceeded: 10,
+            deep_collisions: 11,
+        },
     }];
     dir.write_stats_file(&rows).unwrap();
     assert_eq!(dir.read_stats_file().unwrap(), rows);

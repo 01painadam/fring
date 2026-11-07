@@ -2,19 +2,86 @@
 //!
 //! Layout: `docs/snapshot-format.md` section 8.
 
-use fring_model::{Error, Result, StepStats};
+use fring_model::{CollisionStats, Error, Result, StepStats};
 use std::io::{Read, Write};
 
 /// Version of `stats.csv` written by this crate (recorded in `meta.json`).
 pub const STATS_VERSION: u32 = 1;
 
-/// Column names written by this version, in order.
-pub const STATS_COLUMNS: [&str; 4] = [
+/// Column names written by this version, in order. The last nine are the
+/// collision columns (ICR-009): the fields of [`CollisionStats`] in struct
+/// order, with column name = field name.
+pub const STATS_COLUMNS: [&str; 13] = [
     "time_s",
     "steps_total",
     "collisions_since_last",
     "max_rel_energy_error",
+    "energy_loss_km2_s2",
+    "candidates",
+    "occupied_cells",
+    "occupancy_sum",
+    "occupancy_sq_sum",
+    "lonely_particles",
+    "overfull_cells",
+    "gmax_exceeded",
+    "deep_collisions",
 ];
+
+/// Index in [`STATS_COLUMNS`] of the first integer collision counter
+/// (`candidates`). The counters fill the columns from here to the end.
+const FIRST_COUNTER: usize = 5;
+
+/// The integer collision counters, in column order.
+fn counters(c: &CollisionStats) -> [u64; STATS_COLUMNS.len() - FIRST_COUNTER] {
+    // No `..` in the pattern: a new field in `CollisionStats` stops the build
+    // here, so the columns cannot drift away from the struct.
+    let CollisionStats {
+        energy_loss_km2_s2: _,
+        candidates,
+        occupied_cells,
+        occupancy_sum,
+        occupancy_sq_sum,
+        lonely_particles,
+        overfull_cells,
+        gmax_exceeded,
+        deep_collisions,
+    } = *c;
+    [
+        candidates,
+        occupied_cells,
+        occupancy_sum,
+        occupancy_sq_sum,
+        lonely_particles,
+        overfull_cells,
+        gmax_exceeded,
+        deep_collisions,
+    ]
+}
+
+/// As [`counters`], but references to fill in when a row is read.
+fn counters_mut(c: &mut CollisionStats) -> [&mut u64; STATS_COLUMNS.len() - FIRST_COUNTER] {
+    let CollisionStats {
+        energy_loss_km2_s2: _,
+        candidates,
+        occupied_cells,
+        occupancy_sum,
+        occupancy_sq_sum,
+        lonely_particles,
+        overfull_cells,
+        gmax_exceeded,
+        deep_collisions,
+    } = c;
+    [
+        candidates,
+        occupied_cells,
+        occupancy_sum,
+        occupancy_sq_sum,
+        lonely_particles,
+        overfull_cells,
+        gmax_exceeded,
+        deep_collisions,
+    ]
+}
 
 fn bad(line: usize, msg: impl std::fmt::Display) -> Error {
     Error::Io(format!("stats.csv line {line}: {msg}"))
@@ -27,15 +94,24 @@ pub fn write_stats_header<W: Write>(w: &mut W) -> Result<()> {
 }
 
 /// Writes one row. Floats use the shortest text that parses back exactly.
+///
+/// The row is built in memory first and then written with one call, so the
+/// newline that completes it (crash rule R1) is always its last byte.
 pub fn write_stats_row<W: Write>(w: &mut W, s: &StepStats) -> Result<()> {
+    use std::fmt::Write as _;
     let energy = s
         .max_rel_energy_error
         .map_or(String::new(), |v| format!("{v:?}"));
-    writeln!(
-        w,
-        "{:?},{},{},{}",
-        s.time_s, s.steps_total, s.collisions_since_last, energy
-    )?;
+    let mut line = format!(
+        "{:?},{},{},{},{:?}",
+        s.time_s, s.steps_total, s.collisions_since_last, energy, s.collision.energy_loss_km2_s2
+    );
+    for v in counters(&s.collision) {
+        // Writing to a String cannot fail.
+        let _ = write!(line, ",{v}");
+    }
+    line.push('\n');
+    w.write_all(line.as_bytes())?;
     Ok(())
 }
 
@@ -60,7 +136,8 @@ pub struct StatsRead {
 
 /// Reads `stats.csv`. Columns are found by name; unknown columns are ignored;
 /// an empty field is `None` (or the default for non-optional fields that are
-/// missing as a whole column).
+/// missing as a whole column). A file from before ICR-009-IO has no collision
+/// columns, so its `collision` fields read as zero.
 ///
 /// Crash rule: a row is complete only when its newline has been written, so
 /// a last line without a newline is dropped, even if it would parse (a
@@ -87,6 +164,11 @@ pub fn read_stats_csv_report<R: Read>(r: &mut R) -> Result<StatsRead> {
     let c_steps = col("steps_total");
     let c_coll = col("collisions_since_last");
     let c_energy = col("max_rel_energy_error");
+    let c_loss = col("energy_loss_km2_s2");
+    let c_counters: Vec<Option<usize>> = STATS_COLUMNS[FIRST_COUNTER..]
+        .iter()
+        .map(|name| col(name))
+        .collect();
 
     let mut out = Vec::new();
     for (i, line) in lines {
@@ -121,6 +203,19 @@ pub fn read_stats_csv_report<R: Read>(r: &mut R) -> Result<StatsRead> {
         }
         if let Some(c) = c_energy.filter(|&c| !f[c].is_empty()) {
             s.max_rel_energy_error = Some(parse_f64(f[c], "max_rel_energy_error")?);
+        }
+        if let Some(c) = c_loss.filter(|&c| !f[c].is_empty()) {
+            s.collision.energy_loss_km2_s2 = parse_f64(f[c], "energy_loss_km2_s2")?;
+        }
+        let names_counters = &STATS_COLUMNS[FIRST_COUNTER..];
+        for ((slot, name), c) in counters_mut(&mut s.collision)
+            .into_iter()
+            .zip(names_counters)
+            .zip(&c_counters)
+        {
+            if let Some(c) = c.filter(|&c| !f[c].is_empty()) {
+                *slot = parse_u64(f[c], name)?;
+            }
         }
         out.push(s);
     }

@@ -1,5 +1,5 @@
 use fring_io::{read_stats_csv, write_stats_csv};
-use fring_model::StepStats;
+use fring_model::{CollisionStats, StepStats};
 
 fn rows() -> Vec<StepStats> {
     vec![
@@ -15,30 +15,55 @@ fn rows() -> Vec<StepStats> {
             steps_total: u64::MAX,
             collisions_since_last: 12345,
             max_rel_energy_error: Some(1.2345678901234567e-13),
-            ..StepStats::default()
+            collision: CollisionStats {
+                energy_loss_km2_s2: 0.1 + 0.2,
+                candidates: u64::MAX,
+                occupied_cells: 1,
+                occupancy_sum: 2,
+                occupancy_sq_sum: 3,
+                lonely_particles: 4,
+                overfull_cells: 5,
+                gmax_exceeded: 6,
+                deep_collisions: 7,
+            },
         },
         StepStats {
             time_s: 1e300,
             steps_total: 5,
             collisions_since_last: 1,
             max_rel_energy_error: Some(f64::NAN),
-            ..StepStats::default()
+            collision: CollisionStats {
+                energy_loss_km2_s2: 5e-324,
+                occupancy_sq_sum: 99,
+                ..CollisionStats::default()
+            },
         },
         StepStats {
             time_s: -5e-324,
             steps_total: 6,
             collisions_since_last: 2,
             max_rel_energy_error: Some(f64::INFINITY),
-            ..StepStats::default()
+            collision: CollisionStats {
+                energy_loss_km2_s2: 1.2345678901234567e300,
+                deep_collisions: u64::MAX,
+                ..CollisionStats::default()
+            },
         },
     ]
 }
 
+/// Bit-exact for the floats; the counters of `CollisionStats` by `==`.
 fn same(a: &StepStats, b: &StepStats) -> bool {
+    let counters = |c: &CollisionStats| CollisionStats {
+        energy_loss_km2_s2: 0.0,
+        ..*c
+    };
     a.time_s.to_bits() == b.time_s.to_bits()
         && a.steps_total == b.steps_total
         && a.collisions_since_last == b.collisions_since_last
         && a.max_rel_energy_error.map(f64::to_bits) == b.max_rel_energy_error.map(f64::to_bits)
+        && a.collision.energy_loss_km2_s2.to_bits() == b.collision.energy_loss_km2_s2.to_bits()
+        && counters(&a.collision) == counters(&b.collision)
 }
 
 #[test]
@@ -49,10 +74,15 @@ fn stats_roundtrip_exact_f64() {
     let g = read_stats_csv(&mut b.as_slice()).unwrap();
     assert_eq!(g.len(), r.len());
     for (x, y) in r.iter().zip(&g) {
-        // NaN: the text round trip keeps NaN but not its payload; compare class.
+        // NaN: the text round trip keeps NaN but not its payload; compare
+        // class, and all the other fields exactly.
         if x.max_rel_energy_error.is_some_and(f64::is_nan) {
             assert!(y.max_rel_energy_error.unwrap().is_nan());
-            assert_eq!(x.time_s.to_bits(), y.time_s.to_bits());
+            let no_energy = |s: &StepStats| StepStats {
+                max_rel_energy_error: None,
+                ..s.clone()
+            };
+            assert!(same(&no_energy(x), &no_energy(y)), "{x:?} vs {y:?}");
         } else {
             assert!(same(x, y), "{x:?} vs {y:?}");
         }
@@ -66,13 +96,74 @@ fn stats_plain_csv_header() {
     let text = String::from_utf8(b).unwrap();
     assert_eq!(
         text.lines().next().unwrap(),
-        "time_s,steps_total,collisions_since_last,max_rel_energy_error"
+        "time_s,steps_total,collisions_since_last,max_rel_energy_error,\
+         energy_loss_km2_s2,candidates,occupied_cells,occupancy_sum,occupancy_sq_sum,\
+         lonely_particles,overfull_cells,gmax_exceeded,deep_collisions"
     );
     assert!(!text.contains('#'));
-    assert!(
-        text.lines().nth(1).unwrap().ends_with(','),
+    assert_eq!(
+        text.lines().nth(1).unwrap().split(',').nth(3),
+        Some(""),
         "empty field = None"
     );
+}
+
+/// Each collision value goes under the column with its field name.
+#[test]
+fn stats_collision_columns_in_struct_order() {
+    let row = StepStats {
+        time_s: 2.0,
+        steps_total: 3,
+        collisions_since_last: 4,
+        max_rel_energy_error: None,
+        collision: CollisionStats {
+            energy_loss_km2_s2: 0.5,
+            candidates: 11,
+            occupied_cells: 12,
+            occupancy_sum: 13,
+            occupancy_sq_sum: 14,
+            lonely_particles: 15,
+            overfull_cells: 16,
+            gmax_exceeded: 17,
+            deep_collisions: 18,
+        },
+    };
+    let mut b = Vec::new();
+    write_stats_csv(&mut b, std::slice::from_ref(&row)).unwrap();
+    let text = String::from_utf8(b).unwrap();
+    assert_eq!(
+        text.lines().nth(1).unwrap(),
+        "2.0,3,4,,0.5,11,12,13,14,15,16,17,18"
+    );
+    // A reader that takes only some columns, in another order, by name.
+    let text = "deep_collisions,time_s,energy_loss_km2_s2,candidates\n18,2.0,0.5,11\n";
+    let g = read_stats_csv(&mut text.as_bytes()).unwrap();
+    assert_eq!(
+        g[0].collision,
+        CollisionStats {
+            energy_loss_km2_s2: 0.5,
+            candidates: 11,
+            deep_collisions: 18,
+            ..CollisionStats::default()
+        }
+    );
+}
+
+/// A version 1 file from before ICR-009-IO has no collision columns. It reads
+/// as zero (A5 review of PR #39, note 2).
+#[test]
+fn stats_file_without_collision_columns_reads_as_zero() {
+    let text = "time_s,steps_total,collisions_since_last,max_rel_energy_error\n\
+                0.0,0,0,\n\
+                86400.0,1440,7,3.5e-13\n";
+    let g = read_stats_csv(&mut text.as_bytes()).unwrap();
+    assert_eq!(g.len(), 2);
+    assert_eq!(g[1].steps_total, 1440);
+    assert_eq!(g[1].collisions_since_last, 7);
+    assert_eq!(g[1].max_rel_energy_error, Some(3.5e-13));
+    for r in &g {
+        assert_eq!(r.collision, CollisionStats::default());
+    }
 }
 
 #[test]
@@ -101,6 +192,9 @@ fn stats_rejects_bad_input() {
         ("time_s,steps_total\n1.0\n", "fields"),
         ("time_s\nabc\n", "not a number"),
         ("time_s,steps_total\n1.0,-3\n", "not an integer"),
+        ("time_s,energy_loss_km2_s2\n1.0,x\n", "energy_loss_km2_s2"),
+        ("time_s,candidates\n1.0,-1\n", "candidates"),
+        ("time_s,gmax_exceeded\n1.0,1.5\n", "gmax_exceeded"),
     ] {
         let e = read_stats_csv(&mut text.as_bytes())
             .unwrap_err()
