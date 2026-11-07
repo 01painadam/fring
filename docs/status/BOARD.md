@@ -78,12 +78,12 @@ Rules (full text in `AGENTS.md` and `CLAUDE.md`):
 | K2 | Stochastic collision model on CPU | A4 | done | ws/a4-k2 | K1, ICR-009-IMPL |
 | E1-REF | REBOUND (IAS15) reference for particles within 1 R_H of Prometheus (from the spec only) | A6 | todo | | E1-ICR |
 | E1-CPU | ICR-004 and per-particle sub-stepping in the CPU backend | A2 | todo | | E1-ICR |
-| K3 | Hard-sphere collision model on CPU (cell list) | A4 | doing | ws/a4-k3 | K1, ICR-009-IMPL |
+| K3 | Hard-sphere collision model on CPU (cell list) | A4 | done | ws/a4-k3 | K1, ICR-009-IMPL |
 | K2-CPU | CPU backend runs the stochastic model (K2) every `every_steps` steps and reports `CollisionStats`; `fring-run` accepts `model = "stochastic"` (A5 part) | A2 + A5 | todo | | K2 |
 | K3-CPU | CPU backend runs the hard-sphere model (K3) at every step and reports `CollisionStats`; `fring-run` accepts `model = "hard_sphere"` (A5 part) | A2 + A5 | todo | | K3 |
-| D1 | Co-moving arc domain with azimuthal wrapping | A3 | review | ws/a3-d1 | Gate G3 |
+| D1 | Co-moving arc domain with azimuthal wrapping | A3 | done | ws/a3-d1 | Gate G3 |
 | D1-CPU | CPU backend wraps particles into the arc after each step (D1 `physics::arc`), with an energy test; `fring-run` accepts `domain.kind = "arc"` (A5 part) | A2 + A5 | todo | | D1 |
-| ARC-CELLS | Cell index in the arc from the signed longitude to the arc centre, clamped to the first and last cell (D1 finding 1): K2 `cell_key` and K3 pairs across the arc seam (A4); K5-BIN `cell_f64` and `cell_of` with the twin (A3) | A3 + A4 | todo | | D1 |
+| ARC-CELLS | Cell index in the arc from the signed longitude to the arc centre, clamped to the first and last cell (D1 finding 1): K2 `cell_key` and K3 pairs across the arc seam (A4); K5-BIN `cell_f64` and `cell_of` with the twin (A3) | A3 + A4 | doing | ws/a3-arc-cells, ws/a4-arc-cells | D1 |
 | K5-BIN | GPU binning: counting sort by cell at each step, with a Rust twin | A3 | done | ws/a3-k5-bin | K1, ICR-009-IMPL |
 | E1-GPU | ICR-004 and per-particle sub-stepping in WGSL, with Rust twins | A3 | todo | | E1-CPU |
 | K5 | Stochastic collisions in WGSL (`shaders/collide/`) | A4 | todo | | K2, K5-BIN, ARC-CELLS |
