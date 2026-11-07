@@ -227,6 +227,7 @@ dependencies = [
 name = "fring-collide"
 version = "0.1.0"
 dependencies = [
+ "fring-collide",
  "fring-model",
 ]
 

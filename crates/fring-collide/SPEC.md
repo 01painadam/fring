@@ -67,7 +67,7 @@ Rust reference: `fring_collide::pair::collide` (K1). The WGSL twin (K5) must agr
 
 The cell of a particle comes from its local coordinates (PLAN 4.2; `physics::frames`): x = ρ − a₀ (radial), y = a₀ φ (along the reference circle, φ the longitude in the rotating frame), z (vertical).
 
-- Three cell sizes: L_x (radial), L_y (azimuthal), L_z (vertical) (AJ, Q2). The config today has one `cell_size_km`; ICR-009 asks for three.
+- Three cell sizes: L_x (radial), L_y (azimuthal), L_z (vertical) (AJ, Q2): `cell_radial_km`, `cell_azimuthal_km`, `cell_vertical_km` in `[collisions]` (ICR-009). `every_steps` sets the cadence (section 7).
 - Cell index: (⌊x / L_x⌋, ⌊y_c / L_y⌋, ⌊z / L_z⌋), with y_c = a₀ ((φ − φ₀) mod 2π) the arc length from the start of the domain: φ₀ = 0 for the full ring, and φ₀ = arc centre − Δθ/2 (rotating frame, after the D1 wrap) for the arc. So y_c is in [0, D).
 - Do not use a₀ (φ mod 2π) wrapped into [0, D) for the arc. It is correct only when 360°/Δθ is an integer. Example: Δθ = 7° with the centre at 0°. Then φ mod 7° maps both [−3°, 0°) and [0°, 3°) into [0°, 3°), so those cells hold particles from two places 3° (7,342 km) apart. The cells for [3.5°, 6.5°) stay empty, and the pair count in the shared cells is 4 times too large.
 - L_y is adjusted so that a whole number of cells fills the domain: n_y = round(D / L_y,config), L_y = D / n_y, where D = 2π a₀ for the full ring or the arc length for the arc domain (D1). No cell crosses the wrap.
@@ -151,7 +151,7 @@ These are diagnostics, not stops, except the 32,767-candidate limit.
 From `[collisions.restitution]` (`fring_model::config::Restitution`), with vₙ = |gₙ|:
 
 - `constant`: ε = epsilon.
-- `power_law`: ε = (vₙ / v_c)^(−p) if vₙ > v_c, else 1. Bridges, Hatzes and Lin (1984) give p = 0.234 and v_c = 0.0077 cm s⁻¹ for frosty ice at low temperature; this gives ε = 0.55 at 1 mm s⁻¹, 0.32 at 1 cm s⁻¹ and 0.11 at 1 m s⁻¹. A1 must cite the values in `params/sources.md` before a run uses them.
+- `power_law`: ε = (vₙ / v_c)^(−p) if vₙ > v_c, else 1. Bridges, Hatzes and Lin (1984) give p = 0.234 and v_c = 0.0077 cm s⁻¹ for frosted ice particles (radius 2.5 cm) at 210 K (Latter and Ogilvie 2006, eq. 1; `params/sources.md`, section "Collisions: restitution law and method references"); this gives ε = 0.55 at 1 mm s⁻¹, 0.32 at 1 cm s⁻¹ and 0.11 at 1 m s⁻¹. A1 must cite the values in `params/sources.md` before a run uses them.
 
 ε depends on vₙ, not on |g|. K1-T5 checks this.
 

@@ -15,7 +15,6 @@
 pub mod reference;
 
 use std::f64::consts::PI;
-use std::ops::AddAssign;
 
 use fring_model::Vec3;
 use fring_model::config::Restitution;
@@ -68,46 +67,7 @@ impl ModelParams {
     }
 }
 
-/// What a model reports for one collision step.
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
-pub struct Tally {
-    /// Accepted collisions.
-    pub collisions: u64,
-    /// Candidate pairs tested (stochastic models).
-    pub candidates: u64,
-    /// Σ ¼ (1 − ε²) gₙ² in km² s⁻² (`SPEC.md` section 9).
-    pub energy_loss_km2_s2: f64,
-    /// Σ of the squares of the single losses, for the standard error.
-    pub energy_loss_sq_km4_s4: f64,
-    /// Cells with W σ g_max Δt / V_c > 1 (stochastic) or pairs with P > 1.
-    pub overfull: u64,
-    /// Candidates with |g| > g_max, accepted with probability 1 (stochastic
-    /// models with the no-time-counter method, `SPEC.md` 5.3).
-    pub gmax_exceeded: u64,
-    /// Collisions with overlap depth > 0.2 s (hard spheres).
-    pub deep_collisions: u64,
-}
-
-impl Tally {
-    /// Adds one collision with its energy loss.
-    pub fn add_collision(&mut self, energy_loss_km2_s2: f64) {
-        self.collisions += 1;
-        self.energy_loss_km2_s2 += energy_loss_km2_s2;
-        self.energy_loss_sq_km4_s4 += energy_loss_km2_s2 * energy_loss_km2_s2;
-    }
-}
-
-impl AddAssign for Tally {
-    fn add_assign(&mut self, o: Self) {
-        self.collisions += o.collisions;
-        self.candidates += o.candidates;
-        self.energy_loss_km2_s2 += o.energy_loss_km2_s2;
-        self.energy_loss_sq_km4_s4 += o.energy_loss_sq_km4_s4;
-        self.overfull += o.overfull;
-        self.gmax_exceeded += o.gmax_exceeded;
-        self.deep_collisions += o.deep_collisions;
-    }
-}
+pub use crate::tally::Tally;
 
 /// A periodic cube divided into cubic cells.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -583,7 +543,7 @@ pub fn t4_rate<M: BoxModel>(
             step,
             setup.dt_s,
         );
-        assert_eq!(t.overfull, 0, "overfull cells in the rate test");
+        assert_eq!(t.stats.overfull_cells, 0, "overfull cells in the rate test");
         measured += t.collisions;
     }
     Check {
@@ -630,7 +590,7 @@ pub fn t5_energy_loss<M: BoxModel>(
         trial += 1;
         let n = tally.collisions as f64;
         if n >= 2.0 {
-            let mean = tally.energy_loss_km2_s2 / n;
+            let mean = tally.stats.energy_loss_km2_s2 / n;
             let var = (tally.energy_loss_sq_km4_s4 / n - mean * mean).max(0.0);
             let se = (var / n).sqrt();
             let enough = if theory == 0.0 {
@@ -640,7 +600,10 @@ pub fn t5_energy_loss<M: BoxModel>(
             };
             if enough || trial >= MAX_ITERATIONS {
                 if theory == 0.0 {
-                    assert_eq!(tally.energy_loss_km2_s2, 0.0, "ε = 1 must lose no energy");
+                    assert_eq!(
+                        tally.stats.energy_loss_km2_s2, 0.0,
+                        "ε = 1 must lose no energy"
+                    );
                 }
                 return Check {
                     name: format!("K1-T5 energy loss {kind:?} {law:?}"),
@@ -727,7 +690,7 @@ pub fn t6_budget<M: BoxModel>(
         energy_error_rel: if elastic {
             (k1 - k0).abs() / k0
         } else {
-            (k0 - k1 - tally.energy_loss_km2_s2).abs() / k0
+            (k0 - k1 - tally.stats.energy_loss_km2_s2).abs() / k0
         },
         energy_bound_rel: if elastic { 1e-12 } else { 1e-10 },
     }
