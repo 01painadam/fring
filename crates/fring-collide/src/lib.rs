@@ -13,6 +13,7 @@
 //!   reference models that pass them.
 
 pub mod frame;
+pub mod hard_sphere;
 pub mod pair;
 pub mod stochastic;
 pub mod tally;

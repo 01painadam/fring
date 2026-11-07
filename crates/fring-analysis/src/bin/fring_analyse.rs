@@ -39,6 +39,7 @@ fn main() {
         Some("ecc-compare") => cmd_ecc_compare(&args[1..]),
         Some("edge-compare") => cmd_edge_compare(&args[1..]),
         Some("ecc-configs") => cmd_ecc_configs(&args[1..]),
+        Some("pair-compare") => cmd_pair_compare(&args[1..]),
         Some("closest-bins") => cmd_closest_bins(&args[1..]),
         _ => Err("usage: fring-analyse map|compare|closest|apse|moons|laplace|lyapunov ...".into()),
     };
@@ -276,66 +277,89 @@ fn cmd_closest(a: &[String]) -> Res<()> {
 }
 
 /// `closest-bins <closest.csv> <out.csv> [bin_km hill_km min_column body_km]`: closest approach against the initial radius.
-/// `ecc-configs <out_dir> <years> <tag> [count=5000]`: writes the configs of the
-/// eccentric map (22 bins of 25 km from 140,150 to 140,700 km), each as an
-/// `ecc` file (e and apse from `params/ring.toml`) and a `circ` control (e = 0)
-/// with the same seed. For 10 years it also writes the apse + 120 deg variants
-/// (ecc only; the control has no apse) and the seed repeats of three bins (inner 0, core 2, outer 21).
-/// `<out_dir>/list_<tag>.txt` names them all, one per line.
+/// `ecc-configs <out_dir> <years> <tag> [count=5000] [step_div=1] [bins=all] [set=std]`:
+/// writes the configs of the eccentric map (22 bins of 25 km from 140,150 to
+/// 140,700 km). Set `std`: each bin as an `ecc` file (e and apse from
+/// `params/ring.toml`) and a `circ` control (e = 0) with the same seed; for 10
+/// years also the apse + 120 deg variants and the seed repeats of three bins
+/// (inner 0, core 2, outer 21). Set `ecc` or `phase120` (A5-ANALYSIS): only the
+/// ecc run, or only the apse + 120 deg run, of the bins in the comma list
+/// `bins` (`all` is 0 to 21). `step_div` divides the step and multiplies the
+/// renorm interval. `<out_dir>/list_<tag>.txt` names the runs, one per line.
 fn cmd_ecc_configs(a: &[String]) -> Res<()> {
     let (dir, years, tag) = (&a[0], num(a, 1, 10.0), &a[2]);
     let count = num(a, 3, 5000.0) as u32;
+    let step_div = num(a, 4, 1.0) as u32;
+    let bins: Vec<usize> = match a.get(5).map(String::as_str) {
+        None | Some("all") => (0..22).collect(),
+        Some(l) => l.split(',').map(str::parse).collect::<Result<_, _>>()?,
+    };
+    let set = a.get(6).map_or("std", String::as_str);
     let ring = std::fs::read_to_string("params/ring.toml")?;
     let e = setup::toml_number(&ring, "eccentricity").ok_or("no eccentricity")?;
     let w = setup::toml_number(&ring, "apse_longitude_deg").ok_or("no apse")?;
     std::fs::create_dir_all(dir)?;
-    let mut list = Vec::new();
-    let mut put = |name: String, seed: u64, bin: usize, ecc: f64, apse: f64| -> Res<()> {
-        let lo = 140_150.0 + 25.0 * bin as f64;
+    let jobs = setup::ecc_jobs(years, tag, step_div.max(1), &bins, set, e, w)?;
+    for j in &jobs {
+        let lo = 140_150.0 + 25.0 * j.bin as f64;
         let text = setup::ecc_config(
-            &name,
-            seed,
-            356.2537,
-            100,
+            &j.name,
+            j.seed,
+            j.step_s,
+            j.renorm_steps,
             years,
             (lo, lo + 25.0),
             count,
-            ecc,
-            apse,
+            j.ecc,
+            j.apse_deg,
         );
-        std::fs::write(Path::new(dir).join(format!("{name}.toml")), text)?;
-        list.push(name);
-        Ok(())
-    };
-    for bin in 0..22usize {
-        let seed = 20_261_200 + bin as u64;
-        put(format!("{tag}-ecc-b{bin:02}"), seed, bin, e, w)?;
-        put(format!("{tag}-circ-b{bin:02}"), seed, bin, 0.0, w)?;
+        std::fs::write(Path::new(dir).join(format!("{}.toml", j.name)), text)?;
     }
-    if years <= 10.0 {
-        for bin in [0usize, 2, 21] {
-            let seed = 20_261_200 + bin as u64;
-            put(
-                format!("{tag}-ecc-phase120-b{bin:02}"),
-                seed,
-                bin,
-                e,
-                (w + 120.0) % 360.0,
-            )?;
-            put(
-                format!("{tag}-ecc-repeat-b{bin:02}"),
-                seed + 1000,
-                bin,
-                e,
-                w,
-            )?;
-        }
-    }
+    let names: Vec<&str> = jobs.iter().map(|j| j.name.as_str()).collect();
     std::fs::write(
         Path::new(dir).join(format!("list_{tag}.txt")),
-        list.join("\n") + "\n",
+        names.join("\n") + "\n",
     )?;
-    println!("{} configs in {dir}", list.len());
+    println!("{} configs in {dir}", jobs.len());
+    Ok(())
+}
+
+/// `pair-compare <years> <out.csv> <label>=<A1,A2,..>:<B1,B2,..> ...`: for each
+/// group, joins the points of the run directories of A and of B and writes one
+/// row of the comparison (the columns of `edge_step.csv`, A first). Used by
+/// A5-ANALYSIS for the step test (A = h/4, B = h) and the apse phase (A = +120
+/// deg, B = base).
+fn cmd_pair_compare(a: &[String]) -> Res<()> {
+    use fring_analysis::compare::header;
+    let years = num(a, 0, 10.0);
+    let mut w = BufWriter::new(File::create(&a[1])?);
+    writeln!(w, "{}", header("window,a_lo_km,a_hi_km,"))?;
+    let read = |list: &str| -> Res<Vec<map::Point>> {
+        let mut v = Vec::new();
+        for d in list.split(',') {
+            v.extend(map::read_points(Path::new(d))?);
+        }
+        Ok(v)
+    };
+    for g in &a[2..] {
+        let (label, rest) = g.split_once('=').ok_or("group needs label=A:B")?;
+        let (ra, rb) = rest.split_once(':').ok_or("group needs label=A:B")?;
+        let (pa, pb) = (read(ra)?, read(rb)?);
+        let lo = pa
+            .iter()
+            .chain(&pb)
+            .map(|p| p.a_km)
+            .fold(f64::MAX, f64::min);
+        let hi = pa
+            .iter()
+            .chain(&pb)
+            .map(|p| p.a_km)
+            .fold(f64::MIN, f64::max);
+        let r =
+            map_compare(&pa, &pb, years, 13).ok_or(format!("group {label}: too few particles"))?;
+        writeln!(w, "{label},{lo:.0},{hi:.0},{}", r.csv())?;
+    }
+    w.flush()?;
     Ok(())
 }
 

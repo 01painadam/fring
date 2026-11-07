@@ -49,6 +49,7 @@ use crate::gpu::Gpu;
 use crate::wf32::model;
 use crate::wh_gpu::grid;
 use fring_model::config::{Collisions, Domain};
+use fring_model::physics::arc::EDGE_TOL;
 use fring_model::{Error, Real, Result, RunConfig};
 use std::f64::consts::{PI, TAU};
 
@@ -85,6 +86,15 @@ const THIRD: Dsm = Dsm {
 /// Rounding at the end of the domain: y − D below this is the last cell, km.
 const END_TOLERANCE_KM: f32 = 1.0e-6;
 
+/// Largest angle in rad by which a particle may be outside an edge of the arc
+/// after the D1 wrap: `EDGE_TOL (cos(Δθ/2) + sin(Δθ/2))`, at most √2 EDGE_TOL
+/// (1.4e-6 rad, 0.2 km at the core), plus 1 % for the rounding of the f32
+/// edge test of the wrap. A particle outside an edge by at most this much is
+/// put in the cell of its periodic image (y + D below the start edge, y - D
+/// beyond the end edge: the last or the first cell). One outside by more stays
+/// `OutOfRange`.
+pub const ARC_SLACK_RAD: f64 = 1.01 * std::f64::consts::SQRT_2 * EDGE_TOL;
+
 /// The cell grid: sizes, domain and frame (km, rad, s).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct BinGeometry {
@@ -104,6 +114,13 @@ pub struct BinGeometry {
     pub domain_km: f64,
     /// Longitude φ₀ of the start of the domain in the rotating frame, rad.
     pub phi0_rad: f64,
+    /// The domain is an arc kept by the D1 wrap ([`Self::from_config`] sets it
+    /// for `Domain::Arc`). The azimuth is then the signed angle from the arc
+    /// centre (in (−π, π]) plus Δθ/2, and a particle outside an edge by at most
+    /// [`ARC_SLACK_RAD`] is taken at its periodic image. `false`: the angle from φ₀
+    /// in [0, 2π) and the old end tolerance (the full ring, and any plain
+    /// domain made with [`Self::new`]).
+    pub arc: bool,
 }
 
 impl BinGeometry {
@@ -159,6 +176,7 @@ impl BinGeometry {
             ny: ny as u32,
             domain_km,
             phi0_rad,
+            arc: false,
         })
     }
 
@@ -192,19 +210,42 @@ impl BinGeometry {
                 (a0 * w, centre_longitude_deg.to_radians() - 0.5 * w)
             }
         };
-        Self::new(
+        let mut g = Self::new(
             a0,
             n0_rad_s,
             [cell_radial_km, cell_azimuthal_km, cell_vertical_km],
             d,
             phi0,
-        )
+        )?;
+        g.arc = matches!(config.domain, Domain::Arc { .. });
+        Ok(g)
+    }
+
+    /// Half the width of the arc in rad (0 when not an arc).
+    fn half_width_rad(&self) -> f64 {
+        if self.arc {
+            0.5 * self.domain_km / self.a0_km
+        } else {
+            0.0
+        }
+    }
+
+    /// The edge slack in km: [`ARC_SLACK_RAD`] a₀ for an arc, 0 otherwise.
+    pub fn slack_km(&self) -> f64 {
+        if self.arc {
+            ARC_SLACK_RAD * self.a0_km
+        } else {
+            0.0
+        }
     }
 
     /// α = (n₀ t + φ₀) mod 2π in f64: the inertial longitude minus α is
-    /// (φ − φ₀) mod 2π. The host forms it in f64 and passes it as DS.
+    /// (φ − φ₀) mod 2π. The host forms it in f64 and passes it as DS. For an
+    /// arc ([`Self::arc`]) α is the longitude of the arc centre,
+    /// n₀ t + φ₀ + Δθ/2, so that the inertial longitude minus α is the signed
+    /// angle s from the centre.
     pub fn alpha_rad(&self, time_s: f64) -> f64 {
-        (self.n0_rad_s * time_s + self.phi0_rad).rem_euclid(TAU)
+        (self.n0_rad_s * time_s + self.phi0_rad + self.half_width_rad()).rem_euclid(TAU)
     }
 }
 
@@ -288,7 +329,14 @@ pub fn params(g: &BinGeometry) -> Vec<f32> {
         put(5 + 2 * u, 2, ang.sin());
         put(6 + 2 * u, 0, ang);
     }
+    if g.arc {
+        put(4, 0, 0.5 * g.domain_km);
+    }
     w[0] = 1.0;
+    if g.arc {
+        w[1] = 1.0;
+        w[4 * 4 + 2] = g.slack_km() as f32;
+    }
     w
 }
 
@@ -356,7 +404,32 @@ pub fn cell_ds(prm: &[f32], ny: u32, alpha: Dsm, p: [Dsm; 3]) -> (Binned, [f64; 
         psi -= twopi;
     }
     let a0 = ds_at(prm, 1, 0);
-    let y = a0 * psi;
+    let arc = prm[1] != 0.0;
+    if arc {
+        // s = psi - 2 pi if psi > pi: the signed angle in (-pi, pi].
+        let over_pi = psi
+            - Dsm {
+                hi: 0.5 * twopi.hi,
+                lo: 0.5 * twopi.lo,
+            };
+        if over_pi.hi > 0.0 || (over_pi.hi == 0.0 && over_pi.lo > 0.0) {
+            psi -= twopi;
+        }
+    }
+    let mut y = a0 * psi;
+    if arc {
+        // y runs 0..D; D = 2 (D/2) is exact. Within the slack outside an edge
+        // the particle is taken at its periodic image (y -/+ D).
+        let half = ds_at(prm, 4, 0);
+        let slack = prm[4 * 4 + 2];
+        let d = half + half;
+        y += half;
+        if y.hi < 0.0 && y.hi > -slack {
+            y += d;
+        } else if y.hi >= 0.0 && !negp(y - d) && (y - d).hi < slack {
+            y -= d;
+        }
+    }
     let x = rho - a0;
     let local = [x.to_f64(), y.to_f64(), pz.to_f64()];
     let fx = ds_floor(x / ds_at(prm, 1, 2));
@@ -391,8 +464,23 @@ pub fn cell_f64(g: &BinGeometry, alpha: f64, p: [f64; 3]) -> (Binned, [f64; 3]) 
         return (Binned::NotBinned, [0.0; 3]);
     }
     let rho = r2.sqrt();
-    let psi = (p[1].atan2(p[0]) - alpha).rem_euclid(TAU);
-    let (x, y, z) = (rho - g.a0_km, g.a0_km * psi, p[2]);
+    let mut psi = (p[1].atan2(p[0]) - alpha).rem_euclid(TAU);
+    if g.arc && psi > PI {
+        psi -= TAU; // s in (-pi, pi]
+    }
+    let mut y = g.a0_km * psi;
+    if g.arc {
+        // y runs 0..D; within the slack outside an edge the particle is taken
+        // at its periodic image (y -/+ D).
+        let (d, slack) = (g.domain_km, g.slack_km());
+        y += 0.5 * d;
+        if y < 0.0 && y > -slack {
+            y += d;
+        } else if y >= d && y - d < slack {
+            y -= d;
+        }
+    }
+    let (x, z) = (rho - g.a0_km, p[2]);
     let local = [x, y, z];
     let fx = (x / g.lx_km).floor();
     let mut fy = (y / g.ly_km).floor();

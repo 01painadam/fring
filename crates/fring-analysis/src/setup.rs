@@ -119,6 +119,118 @@ pub fn ecc_config(
     )
 }
 
+/// One run of the eccentric map: name, seed, bin, e, apse longitude (deg), step (s), renorm steps.
+#[derive(Debug, Clone, PartialEq)]
+pub struct EccJob {
+    pub name: String,
+    pub seed: u64,
+    pub bin: usize,
+    pub ecc: f64,
+    pub apse_deg: f64,
+    pub step_s: f64,
+    pub renorm_steps: u32,
+}
+
+/// Step of the A2-ANALYSIS map (150 steps per orbit), seconds.
+pub const ECC_STEP_S: f64 = 356.2537;
+
+/// The jobs of `fring-analyse ecc-configs`. `set` is `std` (every bin as ecc and
+/// circular control; for `years <= 10` also the apse + 120 deg and seed-repeat
+/// runs of bins 0, 2 and 21), `ecc` (only the ecc run of each bin in `bins`) or
+/// `phase120` (only the apse + 120 deg run of each bin in `bins`). `step_div`
+/// divides the step and multiplies the renorm interval, so the renorm time stays
+/// the same (A5-ANALYSIS uses 4). The seed is 20261200 + bin in every set, so
+/// the initial conditions match the `std` runs bin by bin.
+pub fn ecc_jobs(
+    years: f64,
+    tag: &str,
+    step_div: u32,
+    bins: &[usize],
+    set: &str,
+    ecc: f64,
+    apse_deg: f64,
+) -> std::result::Result<Vec<EccJob>, String> {
+    let (step_s, renorm_steps) = (ECC_STEP_S / f64::from(step_div), 100 * step_div);
+    let job = |name: String, seed: u64, bin: usize, ecc: f64, apse_deg: f64| EccJob {
+        name,
+        seed,
+        bin,
+        ecc,
+        apse_deg,
+        step_s,
+        renorm_steps,
+    };
+    let phase = (apse_deg + 120.0) % 360.0;
+    let mut v = Vec::new();
+    match set {
+        "std" => {
+            for bin in 0..22usize {
+                let seed = 20_261_200 + bin as u64;
+                v.push(job(
+                    format!("{tag}-ecc-b{bin:02}"),
+                    seed,
+                    bin,
+                    ecc,
+                    apse_deg,
+                ));
+                v.push(job(
+                    format!("{tag}-circ-b{bin:02}"),
+                    seed,
+                    bin,
+                    0.0,
+                    apse_deg,
+                ));
+            }
+            if years <= 10.0 {
+                for bin in [0usize, 2, 21] {
+                    let seed = 20_261_200 + bin as u64;
+                    v.push(job(
+                        format!("{tag}-ecc-phase120-b{bin:02}"),
+                        seed,
+                        bin,
+                        ecc,
+                        phase,
+                    ));
+                    v.push(job(
+                        format!("{tag}-ecc-repeat-b{bin:02}"),
+                        seed + 1000,
+                        bin,
+                        ecc,
+                        apse_deg,
+                    ));
+                }
+            }
+        }
+        "ecc" | "phase120" => {
+            for &bin in bins {
+                if bin >= 22 {
+                    return Err(format!("bin {bin} is not in 0..22"));
+                }
+                let seed = 20_261_200 + bin as u64;
+                if set == "ecc" {
+                    v.push(job(
+                        format!("{tag}-ecc-b{bin:02}"),
+                        seed,
+                        bin,
+                        ecc,
+                        apse_deg,
+                    ));
+                } else {
+                    v.push(job(
+                        format!("{tag}-ecc-phase120-b{bin:02}"),
+                        seed,
+                        bin,
+                        ecc,
+                        phase,
+                    ));
+                }
+            }
+        }
+        other => return Err(format!("unknown set {other} (std|ecc|phase120)")),
+    }
+    Ok(v)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -154,5 +266,37 @@ mod tests {
             }
             d => panic!("{d:?}"),
         }
+    }
+
+    #[test]
+    fn ecc_jobs_sets() {
+        let (e, w) = (0.00235, 353.78);
+        let std10 = ecc_jobs(10.0, "t", 1, &[], "std", e, w).unwrap();
+        assert_eq!(std10.len(), 50);
+        assert!(
+            std10
+                .iter()
+                .all(|j| j.step_s == ECC_STEP_S && j.renorm_steps == 100)
+        );
+        let std30 = ecc_jobs(30.0, "t", 1, &[], "std", e, w).unwrap();
+        assert_eq!(std30.len(), 44);
+        let h4 = ecc_jobs(10.0, "x", 4, &[0, 21], "ecc", e, w).unwrap();
+        assert_eq!(h4.len(), 2);
+        assert_eq!(
+            (h4[1].name.as_str(), h4[1].seed, h4[1].renorm_steps),
+            ("x-ecc-b21", 20_261_221, 400)
+        );
+        assert!((h4[0].step_s * 4.0 - ECC_STEP_S).abs() < 1e-12);
+        // Same seed, e and apse as the std run of the same bin.
+        let base = std10.iter().find(|j| j.name == "t-ecc-b21").unwrap();
+        assert_eq!(
+            (base.seed, base.ecc, base.apse_deg),
+            (h4[1].seed, h4[1].ecc, h4[1].apse_deg)
+        );
+        let p = ecc_jobs(30.0, "p", 1, &(0..22).collect::<Vec<_>>(), "phase120", e, w).unwrap();
+        assert_eq!(p.len(), 22);
+        assert!((p[0].apse_deg - 113.78).abs() < 1e-9 && p[5].name == "p-ecc-phase120-b05");
+        assert!(ecc_jobs(10.0, "x", 1, &[22], "ecc", e, w).is_err());
+        assert!(ecc_jobs(10.0, "x", 1, &[], "bogus", e, w).is_err());
     }
 }

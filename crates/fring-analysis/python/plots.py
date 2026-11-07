@@ -551,6 +551,64 @@ def fig_ecc():
         save(alt.vconcat(*panels).configure_view(strokeWidth=0), f"ecc_profile_{tag}")
 
 
+def fig_a5():
+    """A5-ANALYSIS: (b) encounters and chaos per bin, (c) apse + 120 deg at 30 years."""
+    f = DATA / "a5_closest_ecc.csv"
+    if f.exists():
+        c = pd.read_csv(f)
+        c["bin"] = c.bin.astype(int).astype(str)
+        c["label"] = c.kind.map({"ecc": "e = 0.00235", "circ": "e = 0 (control)"})
+        c["share_enc"] = c["enc6.3_n"] / c.n
+        d = pd.concat(
+            [
+                pd.DataFrame({"bin": c.bin, "orbits": c.label, "what": "share with an encounter < 6.3 R_H", "value": c.share_enc}),
+                pd.DataFrame({"bin": c.bin, "orbits": c.label, "what": "chaotic fraction (10 yr)", "value": c.frac_chaotic}),
+            ]
+        ).round(4)
+        ch = (
+            alt.Chart(d)
+            .mark_bar()
+            .encode(
+                x=alt.X("bin:N", title="Bin (25 km from 140,150 km; 10 = 140,400, 20 = 140,650)", sort=["0", "1", "2", "10", "20", "21"]),
+                y=alt.Y("value:Q", title=None, scale=alt.Scale(domain=[0, 1])),
+                color=alt.Color("orbits:N", scale=alt.Scale(domain=["e = 0.00235", "e = 0 (control)"], range=["#D55E00", "#0072B2"]), title=None),
+                xOffset="orbits:N",
+                tooltip=["bin", "orbits", "what", "value"],
+            )
+            .properties(width=260, height=180)
+            .facet(column=alt.Column("what:N", title=None))
+        )
+        save(ch.configure_view(strokeWidth=0), "a5_closest")
+    f = DATA / "a5_phase120_e30.csv"
+    if f.exists():
+        p = pd.read_csv(f)
+        p = p[p.window.str.match(r"^b\d\d_p120_vs_base$")].copy()
+        q = pd.read_csv(f)
+        q = q[q.window.str.match(r"^b\d\d_p120_vs_circ$")]
+        p["a"] = 0.5 * (p.a_lo_km + p.a_hi_km)
+        q = q.assign(a=0.5 * (q.a_lo_km + q.a_hi_km))
+        frames = [
+            pd.DataFrame({"a": p.a, "orbits": "apse 113.78 deg", "value": p.frac_a, "lo": p.frac_a - p.sd_counting, "hi": p.frac_a + p.sd_counting}),
+            pd.DataFrame({"a": p.a, "orbits": "apse 353.78 deg", "value": p.frac_b, "lo": p.frac_b - p.sd_counting, "hi": p.frac_b + p.sd_counting}),
+            pd.DataFrame({"a": q.a, "orbits": "e = 0 (control)", "value": q.frac_b, "lo": q.frac_b - q.sd_counting, "hi": q.frac_b + q.sd_counting}),
+        ]
+        lam = [
+            pd.DataFrame({"a": p.a, "orbits": "apse 113.78 deg", "value": p.lam_a, "lo": p.lam_a_lo, "hi": p.lam_a_hi}),
+            pd.DataFrame({"a": p.a, "orbits": "apse 353.78 deg", "value": p.lam_b, "lo": p.lam_b_lo, "hi": p.lam_b_hi}),
+            pd.DataFrame({"a": q.a, "orbits": "e = 0 (control)", "value": q.lam_b, "lo": q.lam_b_lo, "hi": q.lam_b_hi}),
+        ]
+        colours = alt.Scale(domain=["apse 353.78 deg", "apse 113.78 deg", "e = 0 (control)"], range=["#D55E00", "#009E73", "#0072B2"])
+        panels = []
+        for fr, ytitle in ((frames, "Fraction chaotic (mean Y >= 5), 30 yr"), (lam, "Median lambda = 2 Y / t (1/yr), 30 yr")):
+            df = pd.concat(fr).round(4)
+            base = alt.Chart(df).encode(x=alt.X("a:Q", title="Guiding semi-major axis a (km)", scale=alt.Scale(domain=[140150, 140700], nice=False)), color=alt.Color("orbits:N", scale=colours, title=None))
+            panels.append(
+                (base.mark_errorband(opacity=0.25).encode(y=alt.Y("lo:Q", title=ytitle), y2="hi:Q") + base.mark_line(point=True).encode(y="value:Q", tooltip=["a", "orbits", "value"]))
+                .properties(width=620, height=200)
+            )
+        save(alt.vconcat(*panels).configure_view(strokeWidth=0), "a5_phase120_e30")
+
+
 FIGS = {
     "map": fig_chaos_map,
     "profile": fig_chaos_profile,
@@ -559,6 +617,7 @@ FIGS = {
     "closest": fig_closest,
     "closest_pandora": fig_closest_pandora,
     "ecc": fig_ecc,
+    "a5": fig_a5,
     "apse": fig_apse,
     "lyapunov": fig_lyapunov,
     "lyapunov_pairs": fig_lyapunov_pairs,

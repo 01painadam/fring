@@ -21,7 +21,7 @@
 // Bindings (group 0):
 // 0: state (the planes of GpuStepper, cap DS values per plane), read.
 // 1: status (8 + cap words of GpuStepper; word 8 + i is the drop reason), read.
-// 2: prm uniform, 135 vec4<f32>: [0] one; [1] a0, Lx; [2] Ly, Lz; [3] 2 pi, D
+// 2: prm uniform, 135 vec4<f32>: [0] one, arc flag (1 = arc); [4] D/2 (DS), edge slack km; [1] a0, Lx; [2] Ly, Lz; [3] 2 pi, D
 //    (each a DS pair); [5 + 2 u] = DS cos, DS sin of (u - 32) pi/32 (u = 0..64);
 //    [6 + 2 u] = DS of that angle.
 // 3: ctl uniform, 2 vec4<u32>: [0] n, cap, mask (M - 1), n_y; [1] mpad, nb, M.
@@ -145,7 +145,27 @@ fn cell_of(i: u32) -> Binned {
     if (ds_negp(psi)) { psi = ds_add(psi, twopi); }
     if (!ds_negp(ds_sub(psi, twopi))) { psi = ds_sub(psi, twopi); }
     let a0 = prm[1].xy;
-    let y = ds_mul(a0, psi);
+    // Arc (prm[0].y = 1): the signed angle from the arc centre in (-pi, pi]
+    // plus half the width, so y runs 0..D across the arc; tdyn holds the
+    // centre longitude then.
+    let arc = prm[0].y != 0.0;
+    if (arc) {
+        let over_pi = ds_sub(psi, vec2<f32>(0.5 * twopi.x, 0.5 * twopi.y));
+        if (over_pi.x > 0.0 || (over_pi.x == 0.0 && over_pi.y > 0.0)) { psi = ds_sub(psi, twopi); }
+    }
+    var y = ds_mul(a0, psi);
+    if (arc) {
+        // y runs 0..D (D = 2 (D/2) is exact). Within the slack outside an edge
+        // the particle is taken at its periodic image (y -/+ D).
+        let half = prm[4].xy;
+        let d = ds_add(half, half);
+        y = ds_add(y, half);
+        if (y.x < 0.0 && y.x > -prm[4].z) {
+            y = ds_add(y, d);
+        } else if (y.x >= 0.0 && !ds_negp(ds_sub(y, d)) && ds_sub(y, d).x < prm[4].z) {
+            y = ds_sub(y, d);
+        }
+    }
     let x = ds_sub(rho, a0);
     let qx = ds_div(x, prm[1].zw);
     let qy = ds_div(y, prm[2].xy);
