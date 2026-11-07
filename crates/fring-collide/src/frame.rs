@@ -84,8 +84,13 @@ impl CellGrid {
         self.radial_km * self.azimuthal_km * self.vertical_km
     }
 
-    /// The cell of local coordinates (x, y, z) in km. y is wrapped into
-    /// [0, D) first, so any y is allowed.
+    /// The cell of local coordinates (x, y, z) in km. y is the arc length
+    /// from the start of the domain, a₀ ((φ − φ₀) mod 2π), with φ₀ = 0 for the
+    /// full ring and φ₀ = arc centre − Δθ/2 for the arc (`SPEC.md` 5.1). y is
+    /// wrapped into [0, D) first, so a y outside one period is allowed.
+    ///
+    /// Do not pass a₀ (φ mod 2π) for the arc: wrapped into [0, D), it is
+    /// correct only when 360°/Δθ is an integer.
     pub fn key(&self, x_km: f64, y_km: f64, z_km: f64) -> CellKey {
         let y = y_km.rem_euclid(self.domain_length_km);
         // rem_euclid can round up to D itself; that point belongs to the last cell.
