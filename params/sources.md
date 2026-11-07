@@ -129,6 +129,23 @@ Opened in this session for K1-REFS (at most two attempts per reference):
 | Haff83 | Haff 1983, J. Fluid Mech. 134, 401-430 | Only bibliographic data and the abstract (Caltech record). Full text paywalled | The abstract says that grain collisions are inelastic and the energy equation is needed. The law that the kinetic energy falls as t^-2 is attributed to Haff by Ernst and Brito (as reported by a search result; that paper was not opened). The formula T = T0/(1 + t/t0)^2 and t0 = 6/((1 - eps^2) omega_0) in the SPEC are K1's own derivation (SPEC appendix A), not a quote of Haff |
 | vNE98 | van Noije, Ernst 1998, Granular Matter 1, 57-64, DOI 10.1007/s100350050009; arXiv cond-mat/9803042 | arXiv abstract | Velocity distribution of inelastic hard spheres in free cooling and in the heated case, with the fourth cumulant and the high-energy tail. The abstract says that the non-Gaussian corrections have a small effect on the cooling rate. This supports a Maxwellian approximation in the SPEC for small inelasticity. No value from this paper is used |
 
+## Variant: GR03b moon masses (task L3-PARAMS)
+
+Written 2026-11-07. File: `params/variants/gr03b-moons.toml`. It is a copy of `moons.toml` with only the two GM values changed. The nominal values do not change.
+
+| Key | Value | Source key | Status |
+|---|---|---|---|
+| Prometheus m/M | 5.80e-10 | GR03b, Table 1 | verified (primary), full text read by A1 in task L3 and re-checked by A0 on 2026-11-03 (`docs/handoffs/L3.md`). Not opened again in L3-PARAMS |
+| Pandora m/M | 3.43e-10 | GR03b, Table 1 | same |
+| Prometheus `gm_km3_s2` | 0.02200 | derived: 5.80e-10 x 37931206.234 = 0.0220001 | derived. Nominal 0.01071; ratio 2.054 |
+| Pandora `gm_km3_s2` | 0.01301 | derived: 3.43e-10 x 37931206.234 = 0.0130104 | derived. Nominal 0.00926; ratio 1.405 |
+
+Notes.
+
+- GR03b is Goldreich and Rappaport 2003, Icarus 166, 320, arXiv astro-ph/0307259 (v1). GR03b sec 2.1 gives the masses from an assumed density of 0.63 g/cm3. Moon labels follow `docs/literature/l3-moon-parameters-gr03.md` (unprimed is Prometheus).
+- The product uses GM(Saturn) of `saturn.toml`. GR03b used m/M, so the GM of the variant depends on this choice of GM(Saturn). The effect is 1e-8 relative or less for any current GM(Saturn).
+- Purpose: A4-ANALYSIS (the deciding run of L3). The states are the nominal ones, so only the masses differ.
+
 ## Source list
 
 | Key | Reference | DOI or URL | Opened in this session |

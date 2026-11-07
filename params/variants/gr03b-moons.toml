@@ -1,0 +1,45 @@
+# VARIANT (task L3-PARAMS): the moon masses of Goldreich and Rappaport 2003b [GR03b].
+# This file is a copy of params/moons.toml with ONLY the two gm_km3_s2 values changed.
+# States, radii and meta are the nominal ones (SAT415). The nominal file is unchanged.
+# GM = (m/M)_GR03b x GM(Saturn), with GM(Saturn) = 37931206.234 km^3 s^-2 (params/saturn.toml):
+#   Prometheus: 5.80e-10 x 37931206.234 = 0.0220001 -> 0.02200 (nominal 0.01071, ratio 2.054)
+#   Pandora:    3.43e-10 x 37931206.234 = 0.0130104 -> 0.01301 (nominal 0.00926, ratio 1.405)
+# Citation: params/sources.md, section "Variant: GR03b moon masses". If moons.toml changes,
+# update the states here too. It has the same layout, so moons_from_toml_str reads it.
+#
+# Prometheus and Pandora: GM and Cartesian state at the epoch. Task L2.
+# Units: km, km/s, km^3 s^-2. Source keys in brackets: see params/sources.md.
+# States: JPL Horizons, ephemeris SAT415 (sat415_merged_DE437), CENTER 500@699 (Saturn),
+# reference plane BODY (Saturn equator of date, IAU_SATURN), TDB, geometric (VEC_CORR NONE).
+# Exact queries and raw responses: params/horizons/ (fetch.sh reproduces them).
+# The x axis is the ascending node of Saturn's equator on the ICRF equator at the epoch.
+# These are inertial states. They are NOT Keplerian elements: osculating elements computed
+# from GM(Saturn) alone differ from the mean elements by hundreds of km because of J2.
+
+[meta]
+epoch_calendar = "2008-01-01 00:00:00"
+epoch_time_scale = "TDB"
+epoch_jd_tdb = 2454466.5
+frame = "Saturn-centred, Saturn equator of date (IAU_SATURN), fixed at the epoch"
+state_source = "HORIZONS_SAT415"
+# Check against an independent fit (Cooper et al. 2015, epoch 2007-06-01): see params/sources.md.
+
+[[moon]]
+name = "prometheus"
+naif_id = 616
+# GM from SAT415 via the JPL SSD page [SSD_PHYS]. Cooper et al. 2015 give 0.010677 +- 0.000006 [Coop15].
+gm_km3_s2 = 0.02200
+# Mean radius = cube root of the product of the Horizons semi-axes 68.2 x 41.6 x 28.2 km (derived).
+radius_km = 43.09
+position_km = [3.294735820205955e+03, 1.391209137473762e+05, -1.671177061433627e+01]
+velocity_km_s = [-1.655694598798910e+01, 3.662910145681393e-01, -1.597217763473199e-03]
+
+[[moon]]
+name = "pandora"
+naif_id = 617
+# GM from SAT415 via the JPL SSD page [SSD_PHYS]. Cooper et al. 2015 give 0.009133 +- 0.000009 [Coop15].
+gm_km3_s2 = 0.01301
+# Mean radius = cube root of the product of the Horizons semi-axes 52.2 x 40.8 x 31.5 km (derived).
+radius_km = 40.63
+position_km = [-2.160532000458390e+04, 1.405777074216482e+05, -9.317396458933035e+01]
+velocity_km_s = [-1.614256815970723e+01, -2.516130422007638e+00, 9.517031670933485e-03]
