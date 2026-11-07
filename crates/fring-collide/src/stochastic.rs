@@ -20,11 +20,12 @@
 //! its result in the buffer, can run for many cells at the same time. Only
 //! the final step, which writes to the state, needs `&mut`.)
 
-use std::f64::consts::TAU;
+use std::f64::consts::{PI, TAU};
 use std::fmt;
 
 use fring_model::Vec3;
 use fring_model::config::{Collisions, Restitution};
+use fring_model::physics::arc::ArcGeometry;
 use fring_model::physics::frames::{inertial_to_rotating, rotating_to_local};
 use fring_model::physics::gravity::SaturnField;
 use fring_model::rng::{Counter, Philox, Stream, mulhilo, u01_f64};
@@ -128,9 +129,38 @@ pub struct Domain {
     /// Longitude φ₀ of the start of the domain in the rotating frame, rad:
     /// 0 for the full ring (`SPEC.md` 5.1).
     pub phi0_rad: f64,
+    /// The arc, or `None` for the full ring. With an arc, `y` is counted from
+    /// the signed angle to the arc centre (see [`Domain::cell_key`]).
+    pub arc: Option<ArcGeometry>,
 }
 
 impl Domain {
+    /// The arc of `arc` (D = a₀ Δθ, φ₀ = centre − Δθ/2, n₀ of the arc). `None`
+    /// if a size or a₀ is not finite and > 0.
+    pub fn arc_domain(
+        radial_km: f64,
+        azimuthal_km: f64,
+        vertical_km: f64,
+        a0_km: f64,
+        arc: ArcGeometry,
+    ) -> Option<Self> {
+        if !(a0_km.is_finite() && a0_km > 0.0) {
+            return None;
+        }
+        Some(Self {
+            grid: CellGrid::new(
+                radial_km,
+                azimuthal_km,
+                vertical_km,
+                arc.arc_length_km(a0_km),
+            )?,
+            a0_km,
+            n0_rad_s: arc.n0_rad_s(),
+            phi0_rad: arc.rotating_start_rad(),
+            arc: Some(arc),
+        })
+    }
+
     /// The full ring: φ₀ = 0 and D = 2π a₀. `None` if a size is not finite
     /// and > 0.
     pub fn full_ring(
@@ -149,6 +179,7 @@ impl Domain {
             a0_km,
             n0_rad_s,
             phi0_rad: 0.0,
+            arc: None,
         })
     }
 
@@ -175,6 +206,14 @@ impl Domain {
     /// The cell of an inertial position at time `t_s` (seconds since the
     /// epoch): to the rotating frame with θ = n₀ t reduced to [0, 2π), to local
     /// coordinates, then `y` counted from φ₀ (`SPEC.md` 5.1).
+    ///
+    /// For an arc, `y = a₀ (s + Δθ/2)` with `s` the signed angle from the arc
+    /// centre in (−π, π] (not `a₀ (φ − φ₀)` with φ from `atan2`, which is wrong
+    /// across 180° when 360°/Δθ is not a whole number). A particle outside an
+    /// edge by the slack of the arc wrap (`EDGE_TOL`, at most 1.4e-6 rad) goes
+    /// to the periodic image of its place, which is the cell just inside the
+    /// other edge: that is where its collision partners are, as the wrap would
+    /// put it there (`CellGrid::key` takes `y` modulo D).
     pub fn cell_key(&self, pos_km: Vec3<f64>, t_s: f64) -> CellKey {
         // Reduce θ in f64 before the trigonometry: n₀ t is about 10⁴ rad after
         // a year, and the reduction keeps the rounding of θ small.
@@ -182,8 +221,18 @@ impl Domain {
         let zero = Vec3::new(0.0, 0.0, 0.0);
         let (p_rot, _) = inertial_to_rotating(pos_km, zero, self.n0_rad_s, theta / self.n0_rad_s);
         let l = rotating_to_local(p_rot, zero, self.a0_km);
-        self.grid
-            .key(l.x_km, l.y_km - self.a0_km * self.phi0_rad, l.z_km)
+        let y_km = match self.arc {
+            None => l.y_km - self.a0_km * self.phi0_rad,
+            Some(arc) => {
+                let lon = pos_km.y.atan2(pos_km.x);
+                let mut s = (lon - arc.centre_at_rad(t_s)).rem_euclid(TAU);
+                if s > PI {
+                    s -= TAU;
+                }
+                self.a0_km * (s + 0.5 * arc.width_rad())
+            }
+        };
+        self.grid.key(l.x_km, y_km, l.z_km)
     }
 
     /// Sorts the particles into cells. `ids[i]` is the id of particle `i`;

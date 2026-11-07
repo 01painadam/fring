@@ -25,6 +25,7 @@
 
 use fring_model::Vec3;
 use fring_model::config::{Collisions, Restitution};
+use fring_model::physics::arc::ArcGeometry;
 
 use crate::frame::{CellGrid, CellKey};
 use crate::pair;
@@ -75,15 +76,32 @@ impl Wrap {
     }
 }
 
-/// Pairs `(i, j)` of particle indices with `ids[i] < ids[j]` and `close(i, j)`,
-/// sorted by `(ids[i], ids[j])`. Each pair once.
+/// A close pair of particles, as indices into the caller's arrays, with
+/// `ids[i] < ids[j]`.
+///
+/// `shift` is 0 for a pair in the same copy of the domain. In an arc, a pair
+/// across the seam has `shift` = ±1: the partner `j` is the particle rotated
+/// by `shift` × Δθ about the z axis (position and velocity), and `d`, `g` and
+/// the impulse are those of `i` and the rotated `j`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Pair {
+    /// Index of the first particle (the smaller id).
+    pub i: u32,
+    /// Index of the second particle.
+    pub j: u32,
+    /// Number of arc widths that `j` is rotated by (0 or ±1).
+    pub shift: i8,
+}
+
+/// Pairs of particle indices with `ids[i] < ids[j]` and `close(i, j)`
+/// (`Some(shift)` when close), sorted by `(ids[i], ids[j])`. Each pair once.
 fn pairs_in_cells(
     cells: &CellList,
     keys: &[CellKey],
     wrap: Wrap,
     ids: &[u32],
-    close: impl Fn(usize, usize) -> bool,
-) -> Vec<(u32, u32)> {
+    close: impl Fn(usize, usize) -> Option<i8>,
+) -> Vec<Pair> {
     let mut pairs = Vec::new();
     for (c, &key) in keys.iter().enumerate() {
         for nb in wrap.neighbours(key) {
@@ -94,15 +112,23 @@ fn pairs_in_cells(
                 for &j in cells.members(c2) {
                     // A pair in two cells A ≠ B is seen from A and from B, but
                     // only one of the two orders has ids[i] < ids[j].
-                    if ids[i as usize] < ids[j as usize] && close(i as usize, j as usize) {
-                        pairs.push((i, j));
+                    if ids[i as usize] < ids[j as usize] {
+                        if let Some(shift) = close(i as usize, j as usize) {
+                            pairs.push(Pair { i, j, shift });
+                        }
                     }
                 }
             }
         }
     }
-    pairs.sort_unstable_by_key(|&(i, j)| (ids[i as usize], ids[j as usize]));
+    pairs.sort_unstable_by_key(|p| (ids[p.i as usize], ids[p.j as usize]));
     pairs
+}
+
+/// `v` rotated about +z by the angle with cosine `c` and sine `s`.
+#[inline]
+fn rot_z(v: Vec3<f64>, c: f64, s: f64) -> Vec3<f64> {
+    Vec3::new(c * v.x - s * v.y, s * v.x + c * v.y, v.z)
 }
 
 /// The model parameters (`SPEC.md` 3, 6).
@@ -146,6 +172,13 @@ impl HardSphereModel {
         Domain::full_ring(e, e, e, a0_km, n0_rad_s)
     }
 
+    /// The arc as a [`Domain`] (D = a₀ Δθ), for [`Self::find_pairs`]; as
+    /// [`Self::full_ring_domain`] otherwise. `None` if a₀ is not finite and > 0.
+    pub fn arc_domain(&self, a0_km: f64, arc: ArcGeometry) -> Option<Domain> {
+        let e = self.contact_km() * EDGE_SLACK;
+        Domain::arc_domain(e, e, e, a0_km, arc)
+    }
+
     /// All pairs with |rᵢ − rⱼ| < 2s (`SPEC.md` 8), as indices into the
     /// caller's arrays, each pair once with `ids[i] < ids[j]`, sorted by
     /// `(ids[i], ids[j])`.
@@ -159,6 +192,11 @@ impl HardSphereModel {
     /// curvature: an arc length y = a₀ φ is longer than the distance at a
     /// radius ρ < a₀. So a pair closer than 2s is in the same cell or in
     /// neighbouring cells, also across the wrap.
+    ///
+    /// In an arc (`domain.arc`), a particle near one edge and a particle near
+    /// the other edge are images of each other's neighbours: the second one is
+    /// rotated by ±Δθ about z before the distance is taken, and the pair
+    /// carries that `shift` (see [`Pair`]). The full ring has `shift` 0 only.
     pub fn find_pairs(
         &self,
         domain: &Domain,
@@ -166,7 +204,7 @@ impl HardSphereModel {
         ids: &[u32],
         active: Option<&[bool]>,
         position: impl Fn(usize) -> Vec3<f64>,
-    ) -> Vec<(u32, u32)> {
+    ) -> Vec<Pair> {
         let rho_min = (0..ids.len())
             .filter(|&i| active.is_none_or(|a| a[i]))
             .map(|i| {
@@ -190,32 +228,62 @@ impl HardSphereModel {
             vertical: None,
         };
         let c2 = self.contact_km().powi(2);
+        let width = domain.arc.map(|a| (a.width_cos_sin(), a.width_rad()));
         pairs_in_cells(&cells, &keys, wrap, ids, |i, j| {
-            (position(i) - position(j)).norm_squared() < c2
+            let (pi, pj) = (position(i), position(j));
+            if (pi - pj).norm_squared() < c2 {
+                return Some(0);
+            }
+            // Not close directly: in an arc, try the partner rotated by ±Δθ. This
+            // is needed in the same and in the neighbouring cells too: a
+            // particle just outside an edge (the wrap slack) is in the cell of
+            // its periodic image.
+            let ((cw, sw), _) = width?;
+            let mut best: Option<(f64, i8)> = None;
+            for shift in [1_i8, -1] {
+                let d2 = (pi - rot_z(pj, cw, sw * f64::from(shift))).norm_squared();
+                if d2 < c2 && best.is_none_or(|(b, _)| d2 < b) {
+                    best = Some((d2, shift));
+                }
+            }
+            best.map(|(_, shift)| shift)
         })
     }
 
     /// Resolves the pairs of [`Self::find_pairs`], one after the other in the
     /// given order (`SPEC.md` 8).
     ///
-    /// `separation(i, j)` is d = rᵢ − rⱼ; `vel` the velocities (inertial, or
-    /// any frame that does not change gₙ), changed in place; `h_s` the
-    /// integrator step. For each pair the current velocities decide: a pair
-    /// with d · g ≥ 0 is left alone. The contact normal is found by going back
-    /// along the straight relative path (`SPEC.md` 8).
+    /// `separation(i, j, shift)` is d = rᵢ − R(shift Δθ) rⱼ (for `shift` 0 just
+    /// rᵢ − rⱼ); `vel` the velocities (inertial, or any frame that does not
+    /// change gₙ), changed in place; `h_s` the integrator step. `width_rad` is
+    /// the arc width Δθ (`None` for the full ring and the box). For a pair
+    /// across the seam (`shift` ±1) the partner velocity is rotated by
+    /// `shift` Δθ for g, and the impulse is rotated back for the partner. For
+    /// each pair the current velocities decide: a pair with d · g ≥ 0 is left
+    /// alone. The contact normal is found by going back along the straight
+    /// relative path (`SPEC.md` 8).
     pub fn resolve_pairs(
         &self,
-        pairs: &[(u32, u32)],
+        pairs: &[Pair],
         h_s: f64,
-        separation: impl Fn(usize, usize) -> Vec3<f64>,
+        width_rad: Option<f64>,
+        separation: impl Fn(usize, usize, i8) -> Vec3<f64>,
         vel: &mut [Vec3<f64>],
     ) -> Tally {
         let contact = self.contact_km();
         let mut tally = Tally::default();
-        for &(i, j) in pairs {
+        for &Pair { i, j, shift } in pairs {
             let (i, j) = (i as usize, j as usize);
-            let d = separation(i, j);
-            let g = vel[i] - vel[j];
+            let d = separation(i, j, shift);
+            let turn = match (shift, width_rad) {
+                (0, _) => None,
+                (_, Some(w)) => Some((w.cos(), w.sin() * f64::from(shift))),
+                (_, None) => panic!("a pair with a shift needs the arc width"),
+            };
+            let g = match turn {
+                None => vel[i] - vel[j],
+                Some((c, s)) => vel[i] - rot_z(vel[j], c, s),
+            };
             let b = d.dot(g);
             if b >= 0.0 {
                 continue;
@@ -230,7 +298,10 @@ impl HardSphereModel {
             let n_hat = dc / dc.norm();
             if let Some(imp) = pair::collide(g, n_hat, &self.restitution) {
                 vel[i] += imp.delta_ui_km_s;
-                vel[j] -= imp.delta_ui_km_s;
+                match turn {
+                    None => vel[j] -= imp.delta_ui_km_s,
+                    Some((c, s)) => vel[j] -= rot_z(imp.delta_ui_km_s, c, -s),
+                }
                 tally.add_collision(imp.energy_loss_km2_s2);
                 if contact - d.norm() > DEEP_FRACTION * contact {
                     tally.stats.deep_collisions += 1;
@@ -259,9 +330,16 @@ impl HardSphereModel {
             return Tally::default();
         }
         let mut vel: Vec<Vec3<f64>> = state.iter().map(|s| Vec3::new(s[3], s[4], s[5])).collect();
-        let tally = self.resolve_pairs(&pairs, h_s, |i, j| pos(state, i) - pos(state, j), &mut vel);
-        for &(i, j) in &pairs {
-            for k in [i as usize, j as usize] {
+        let arc = domain.arc.map(|a| (a.width_cos_sin(), a.width_rad()));
+        let separation = |i: usize, j: usize, shift: i8| match arc {
+            Some(((cw, sw), _)) if shift != 0 => {
+                pos(state, i) - rot_z(pos(state, j), cw, sw * f64::from(shift))
+            }
+            _ => pos(state, i) - pos(state, j),
+        };
+        let tally = self.resolve_pairs(&pairs, h_s, arc.map(|(_, w)| w), separation, &mut vel);
+        for p in &pairs {
+            for k in [p.i as usize, p.j as usize] {
                 state[k][3] = vel[k].x;
                 state[k][4] = vel[k].y;
                 state[k][5] = vel[k].z;
@@ -318,12 +396,13 @@ mod box_model {
             let ids: Vec<u32> = (0..pos_km.len() as u32).collect();
             let c2 = self.contact_km().powi(2);
             let pairs = pairs_in_cells(&list, &keys, wrap, &ids, |i, j| {
-                cells.min_image(pos_km[i] - pos_km[j]).norm_squared() < c2
+                (cells.min_image(pos_km[i] - pos_km[j]).norm_squared() < c2).then_some(0)
             });
             self.resolve_pairs(
                 &pairs,
                 dt_s,
-                |i, j| cells.min_image(pos_km[i] - pos_km[j]),
+                None,
+                |i, j, _| cells.min_image(pos_km[i] - pos_km[j]),
                 vel_km_s,
             )
         }
