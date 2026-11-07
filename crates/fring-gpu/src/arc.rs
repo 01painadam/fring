@@ -22,6 +22,7 @@
 
 use crate::ds::Ds;
 use crate::wh::ROW;
+use fring_model::physics::arc::EDGE_TOL;
 use fring_model::physics::{ArcGeometry, MAX_WRAPS};
 
 /// Word of the cosine of the arc centre in a kick row.
@@ -137,7 +138,7 @@ pub fn wrap_ds<const M: u8>(
     for it in 0..=MAX_WRAPS as usize {
         let x = q[0].hi * psi.0 + q[1].hi * psi.1;
         let y = q[1].hi * psi.0 - q[0].hi * psi.1;
-        if x * c.sh - y.abs() * c.ch >= 0.0 {
+        if x * c.sh - y.abs() * c.ch >= -(EDGE_TOL as f32) * (x.abs() + y.abs()) {
             return WrapDs {
                 p: q,
                 v: u,

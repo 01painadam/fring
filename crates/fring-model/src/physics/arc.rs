@@ -26,11 +26,11 @@
 //! Call [`ArcGeometry::wrap`] after every step, with the time of the state.
 //! Positions and velocities are Saturn-centred and inertial (km, km/s); `t_s`
 //! is in seconds since the epoch of the rotating frame. After the wrap the
-//! rotating-frame longitude of the particle is in `[φ0, φ0 + Δθ]` (closed:
-//! a particle exactly on an edge is not moved), with
-//! `φ0 = `[`ArcGeometry::rotating_start_rad`]. A cell index for collisions
-//! should clamp to the last cell, because rounding can leave a particle a few
-//! ulp above the upper edge.
+//! rotating-frame longitude of the particle is in `[φ0 - ε, φ0 + Δθ + ε]`
+//! with `ε =` [`EDGE_TOL`] (1e-6 rad) and
+//! `φ0 = `[`ArcGeometry::rotating_start_rad`]: a particle that is outside by
+//! less than `ε` is not moved. A cell index for collisions must clamp to the
+//! first and the last cell.
 
 use super::frames::reference_mean_motion;
 use super::gravity::SaturnField;
@@ -41,6 +41,14 @@ use crate::{Error, Real, Result, Vec3};
 /// more than `MAX_WRAPS` widths in one step, and [`ArcGeometry::wrap`]
 /// returns `None`.
 pub const MAX_WRAPS: u32 = 2;
+
+/// Slack of the edge test, as a fraction of the distance of the particle from
+/// the axis (about 1e-6 rad, 0.14 km at the core). A particle that is outside
+/// by less than this stays where it is. Without it, a particle on an edge could
+/// be rotated to the other edge and back by the rounding of the test (found on
+/// the GPU in f32, about one particle in 10^5 over 1500 steps). The GPU
+/// kernels use the same value.
+pub const EDGE_TOL: f64 = 1e-6;
 
 /// The geometry of an arc (angles in radians, rates in rad s⁻¹).
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -188,8 +196,9 @@ impl ArcGeometry {
     fn outside<T: Real>(pos: Vec3<T>, cp: T, sp: T, ch: T, sh: T) -> Option<bool> {
         let x = pos.x * cp + pos.y * sp;
         let y = pos.y * cp - pos.x * sp;
-        // `!(a >= 0)` and not `a < 0`: a NaN counts as outside.
-        let inside = x * sh - y.abs() * ch >= T::ZERO;
+        // `!(a >= -tol)` and not `a < -tol`: a NaN counts as outside.
+        let tol = T::from_f64(EDGE_TOL) * (x.abs() + y.abs());
+        let inside = x * sh - y.abs() * ch >= -tol;
         if inside { None } else { Some(y >= T::ZERO) }
     }
 
@@ -365,6 +374,16 @@ mod tests {
             assert!(dang(lon(r.pos_km), 0.3).abs() <= 0.5 * g.width_rad() + 1e-12);
             assert!(r.k.abs() <= 1);
         }
+    }
+
+    #[test]
+    fn the_edge_slack_is_one_microradian() {
+        let g = ArcGeometry::new(10f64.to_radians(), 0.0, n0()).unwrap();
+        let h = 0.5 * g.width_rad();
+        let (p, v) = state(h + 0.5 * EDGE_TOL, A0, 0.0);
+        assert_eq!(g.wrap(p, v, 0.0).unwrap().k, 0, "inside the slack");
+        let (p, v) = state(h + 3.0 * EDGE_TOL, A0, 0.0);
+        assert_eq!(g.wrap(p, v, 0.0).unwrap().k, -1, "beyond the slack");
     }
 
     #[test]

@@ -57,7 +57,8 @@ fn arc_wrap(p: V3, v: V3, psi: vec2<f32>, n: u32) -> ArcOut {
     for (var it = 0u; it < 3u; it++) {
         let x = q.x.x * psi.x + q.y.x * psi.y;
         let y = q.y.x * psi.x - q.x.x * psi.y;
-        if (x * sh - abs(y) * ch >= 0.0) {
+        // 1e-6 = fring_model::physics::arc::EDGE_TOL (see there).
+        if (x * sh - abs(y) * ch >= -1.0e-6 * (abs(x) + abs(y))) {
             return ArcOut(q, u, d0, d1, true);
         }
         if (it == 2u) { break; }

@@ -418,7 +418,8 @@ fn arc_run_is_the_full_ring_run_rotated_by_whole_widths() {
             max_off.max(0.0)
         );
         println!("  position difference by |m| = 0, 1, 2, 3: {:?}", by_m);
-        assert!(max_off < 1e-6, "all particles are inside the arc");
+        // 2e-6 rad: the edge slack EDGE_TOL = 1e-6 rad plus the f32 rounding of the test.
+        assert!(max_off < 2e-6, "all particles are inside the arc");
         assert!(moved > pr.len() / 10, "enough wraps to test");
         // Tolerance: 4 times the rounding floor (+ 1e-6 km, 1e-9 km/s). The arc run
         // and the ring run use different f32 rounding of the kick (the state is
@@ -614,7 +615,8 @@ fn arc_cost() {
         let i = if arc { &init_arc } else { &init };
         let mut b = run(&cfg, &system, i, &[1], Mode::Dp, 64); // warm up
         let t0 = std::time::Instant::now();
-        b.step(steps - 1).unwrap();
+        b.step(steps - 1)
+            .unwrap_or_else(|e| panic!("arc {arc}: {e}"));
         let _ = b.particles().unwrap();
         times.push(t0.elapsed().as_secs_f64());
     }
