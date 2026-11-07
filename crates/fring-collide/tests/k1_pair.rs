@@ -137,8 +137,9 @@ fn k1_t1_pair_operator_edge_cases() {
     let one = Restitution::Constant { epsilon: 1.0 };
     assert_eq!(collide(g, n_head_on, &one).unwrap().energy_loss_km2_s2, 0.0);
     // gₙ = 0 and gₙ > 0: no collision.
-    let perp = unit(g.cross(Vec3::new(0.0, 0.0, 1.0)));
-    assert!(collide(g, perp, &zero).is_none() || g.dot(perp) < 0.0);
+    // An exact gₙ = 0: g along x, n̂ along y.
+    let gx = Vec3::new(1e-5, 0.0, 0.0);
+    assert!(collide(gx, Vec3::new(0.0, 1.0, 0.0), &zero).is_none());
     assert!(collide(g, Vec3::new(0.0, 0.0, 0.0), &zero).is_none());
     assert!(collide(g, -n_head_on, &zero).is_none());
     // Not a number: no collision.
