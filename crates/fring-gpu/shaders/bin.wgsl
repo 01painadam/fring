@@ -21,7 +21,7 @@
 // Bindings (group 0):
 // 0: state (the planes of GpuStepper, cap DS values per plane), read.
 // 1: status (8 + cap words of GpuStepper; word 8 + i is the drop reason), read.
-// 2: prm uniform, 135 vec4<f32>: [0] one; [1] a0, Lx; [2] Ly, Lz; [3] 2 pi, D
+// 2: prm uniform, 135 vec4<f32>: [0] one, arc flag (1 = arc); [4] D/2 (DS), edge slack km; [1] a0, Lx; [2] Ly, Lz; [3] 2 pi, D
 //    (each a DS pair); [5 + 2 u] = DS cos, DS sin of (u - 32) pi/32 (u = 0..64);
 //    [6 + 2 u] = DS of that angle.
 // 3: ctl uniform, 2 vec4<u32>: [0] n, cap, mask (M - 1), n_y; [1] mpad, nb, M.
@@ -145,7 +145,16 @@ fn cell_of(i: u32) -> Binned {
     if (ds_negp(psi)) { psi = ds_add(psi, twopi); }
     if (!ds_negp(ds_sub(psi, twopi))) { psi = ds_sub(psi, twopi); }
     let a0 = prm[1].xy;
-    let y = ds_mul(a0, psi);
+    // Arc (prm[0].y = 1): the signed angle from the arc centre in (-pi, pi]
+    // plus half the width, so y runs 0..D across the arc; tdyn holds the
+    // centre longitude then.
+    let arc = prm[0].y != 0.0;
+    if (arc) {
+        let over_pi = ds_sub(psi, vec2<f32>(0.5 * twopi.x, 0.5 * twopi.y));
+        if (over_pi.x > 0.0 || (over_pi.x == 0.0 && over_pi.y > 0.0)) { psi = ds_sub(psi, twopi); }
+    }
+    var y = ds_mul(a0, psi);
+    if (arc) { y = ds_add(y, prm[4].xy); }
     let x = ds_sub(rho, a0);
     let qx = ds_div(x, prm[1].zw);
     let qy = ds_div(y, prm[2].xy);
@@ -154,10 +163,14 @@ fn cell_of(i: u32) -> Binned {
     var fy = ds_floor(qy);
     let fz = ds_floor(qz);
     let ny = f32(n_y());
+    let slack = select(0.0, prm[4].z, arc); // arc edge slack, km (see ARC_SLACK_RAD)
     if (fy >= ny) {
-        // Rounding at the end of the domain: y - D below 1e-6 km is the last cell.
+        // Rounding at the end of the domain: y - D below 1e-6 km (arc: the
+        // slack) is the last cell.
         let over = ds_sub(y, prm[3].zw);
-        if (over.x < 1.0e-6) { fy = ny - 1.0; }
+        if (over.x < max(1.0e-6, slack)) { fy = ny - 1.0; }
+    } else if (fy < 0.0 && arc && y.x > -slack) {
+        fy = 0.0; // outside the start edge by at most the slack: the first cell
     }
     if (!(abs(fx) <= IX_MAX && abs(fz) <= IZ_MAX && fy >= 0.0 && fy < ny)) {
         return Binned(2u, vec2<u32>(NONE, NONE));
