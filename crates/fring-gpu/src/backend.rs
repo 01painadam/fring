@@ -147,6 +147,23 @@ impl GpuBackend {
         let kernels = WhKernels::new(&gpu, wg)?;
         startup_check(&kernels, opts.mode, system, init.time_s, step_s)?;
 
+        // Task D1: a co-moving arc domain. Particles made all round the ring
+        // are folded into the arc first (a rotation by whole widths).
+        let field = SaturnField::<f64>::from_params(&system.saturn);
+        let arc = ArcGeometry::from_domain_in_field(
+            &config.domain,
+            &field,
+            config.frame.reference_semi_major_axis_km,
+        )?;
+        let folded;
+        let init = if let Some(g) = &arc {
+            folded = fold_into_arc(g, init)?;
+            &folded
+        } else {
+            init
+        };
+        let p = &init.particles;
+
         let block_steps = opts
             .block_steps
             .unwrap_or_else(|| (TARGET_PARTICLE_STEPS / n.max(1)).clamp(8, MAX_BLOCK_STEPS))
@@ -163,13 +180,7 @@ impl GpuBackend {
             chaos_cfg,
         )?;
 
-        let field = SaturnField::<f64>::from_params(&system.saturn);
-        // Task D1: a co-moving arc domain.
-        if let Some(geom) = ArcGeometry::from_domain_in_field(
-            &config.domain,
-            &field,
-            config.frame.reference_semi_major_axis_km,
-        )? {
+        if let Some(geom) = arc {
             stepper.set_arc(geom)?;
         }
 
@@ -458,6 +469,25 @@ impl Backend for GpuBackend {
 /// The second start-up check of ADR 0006: one short block of the real kernel
 /// against its Rust twin on a few particles (relative < 1e-6, PLAN section
 /// 10), because a primitive can pass alone and fail after inlining.
+/// The initial state with every particle folded into the arc (task D1).
+fn fold_into_arc(g: &ArcGeometry, init: &InitialState) -> Result<InitialState> {
+    let mut particles = Particles::with_capacity(init.particles.len());
+    for i in 0..init.particles.len() {
+        let w = g
+            .fold(
+                init.particles.position_km(i),
+                init.particles.velocity_km_s(i),
+                init.time_s,
+            )
+            .ok_or_else(|| Error::Input(format!("particle {i} has no finite position")))?;
+        particles.push(init.particles.id[i], w.pos_km, w.vel_km_s);
+    }
+    Ok(InitialState {
+        time_s: init.time_s,
+        particles,
+    })
+}
+
 fn startup_check(k: &WhKernels, mode: Mode, system: &System, t0_s: f64, h_s: f64) -> Result<()> {
     const M: u8 = model::M4;
     const STEPS: usize = 4;

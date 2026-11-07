@@ -193,6 +193,39 @@ impl ArcGeometry {
         if inside { None } else { Some(y >= T::ZERO) }
     }
 
+    /// Puts a Saturn-centred inertial state into the arc at time `t_s` with
+    /// any number of rotations (for the start of a run, when the particles
+    /// were made all round the ring), then applies [`ArcGeometry::wrap`] for
+    /// rounding. Returns `None` if the position is not finite.
+    ///
+    /// Note: folding a uniform ring distribution this way is not uniform in the
+    /// arc when `2π / Δθ` is not a whole number (the first part of the arc is
+    /// covered once more). Draw the longitudes inside the arc instead.
+    pub fn fold<T: Real>(
+        &self,
+        pos_km: Vec3<T>,
+        vel_km_s: Vec3<T>,
+        t_s: f64,
+    ) -> Option<Wrapped<T>> {
+        let lon = pos_km.y.to_f64().atan2(pos_km.x.to_f64());
+        if !lon.is_finite() {
+            return None;
+        }
+        let tau = std::f64::consts::TAU;
+        let d = {
+            let d = (lon - self.centre_at_rad(t_s)).rem_euclid(tau);
+            if d > std::f64::consts::PI { d - tau } else { d }
+        };
+        let m = (d / self.width_rad).round();
+        let a = -m * self.width_rad;
+        let (c, s) = (T::from_f64(a.cos()), T::from_f64(a.sin()));
+        let w = self.wrap(rot(pos_km, c, s), rot(vel_km_s, c, s), t_s)?;
+        Some(Wrapped {
+            k: w.k - m as i32,
+            ..w
+        })
+    }
+
     /// Wraps a Saturn-centred inertial state into the arc at time `t_s` (see
     /// the module documentation). Returns `None` if more than [`MAX_WRAPS`]
     /// rotations would be needed, or the position is not finite.
@@ -450,6 +483,20 @@ mod tests {
         assert!(worst_l < 1e-13, "dLz/Lz {worst_l}");
         assert!(worst_loc < 1e-8, "local {worst_loc}");
         assert!(worst_y < 1e-8, "y {worst_y}");
+    }
+
+    #[test]
+    fn fold_puts_any_longitude_into_the_arc() {
+        let g = ArcGeometry::new(7f64.to_radians(), -0.4, n0()).unwrap();
+        for i in 0..360 {
+            let t = 1.0e8;
+            let (p, v) = state(f64::from(i).to_radians() - 3.0, A0, 0.01);
+            let r = g.fold(p, v, t).unwrap();
+            let d = dang(lon(r.pos_km), g.centre_at_rad(t));
+            assert!(d.abs() <= 0.5 * g.width_rad() + 1e-12, "lon {i} d {d}");
+            assert!((r.pos_km.norm() - p.norm()).abs() < 1e-9);
+            assert!((r.vel_km_s.norm() - v.norm()).abs() < 1e-12);
+        }
     }
 
     #[test]

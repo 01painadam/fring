@@ -590,6 +590,12 @@ impl GpuStepper {
         &self.status_buf
     }
 
+    /// The state buffer of the chaos shadows (same layout as
+    /// [`Self::state_buffer`]), if chaos is on.
+    pub fn shadow_buffer(&self) -> Option<&wgpu::Buffer> {
+        self.shadow_buf.as_ref()
+    }
+
     /// Steps per dispatch.
     pub fn block_steps(&self) -> usize {
         self.block_steps
