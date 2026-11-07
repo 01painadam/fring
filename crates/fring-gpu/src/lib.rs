@@ -14,6 +14,7 @@
 //! Task K5-BIN: [`bin`] sorts the particles by collision cell (hashed
 //! buckets, counting sort) with a Rust twin.
 
+pub mod arc;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod backend;
 pub mod bin;

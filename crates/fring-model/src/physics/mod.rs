@@ -16,7 +16,9 @@
 //! - [`initial`]: initial conditions from the config distributions (task C4).
 //! - [`leapfrog`]: plain drift-kick-drift step, kept as a reference.
 //! - [`frames`]: inertial, rotating and local coordinates.
+//! - [`arc`]: the co-moving arc domain and its azimuthal wrap (task D1).
 
+pub mod arc;
 pub mod chaos;
 pub mod circular;
 pub mod ephemeris;
@@ -31,6 +33,7 @@ pub mod moon_dynamics;
 pub mod moon_kick;
 pub mod wisdom_holman;
 
+pub use arc::{ArcGeometry, MAX_WRAPS, Wrapped};
 pub use chaos::{ChaosAccum, shadow_offset_km};
 pub use circular::{CircularFrequencies, circular_speed, frequencies};
 pub use ephemeris::{

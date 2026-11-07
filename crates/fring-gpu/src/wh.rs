@@ -35,6 +35,17 @@ pub enum Mode {
     C,
 }
 
+/// What the arc kernel does with the wrap decisions (task D1).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ArcRole {
+    /// Decide and wrap (no chaos).
+    Plain,
+    /// Decide, wrap and log the rotations (the particle, when it has a shadow).
+    Log,
+    /// Replay the log of the particle (its shadow), so both take the same k.
+    Replay,
+}
+
 impl Mode {
     /// The entry point of the block kernel in `shaders/wh.wgsl`.
     pub fn entry(self) -> &'static str {
@@ -52,6 +63,21 @@ impl Mode {
             Mode::D => Some("step_d_r"),
             Mode::Dp => Some("step_dp_r"),
             Mode::C => None,
+        }
+    }
+
+    /// The entry point with the arc wrap (task D1), or `None` for option C.
+    /// `role`: [`ArcRole::Plain`], or with chaos [`ArcRole::Log`] for the
+    /// particle and [`ArcRole::Replay`] for its shadow.
+    pub fn entry_arc(self, role: ArcRole) -> Option<&'static str> {
+        match (self, role) {
+            (Mode::D, ArcRole::Plain) => Some("step_d_arc"),
+            (Mode::D, ArcRole::Log) => Some("step_d_arc_log"),
+            (Mode::D, ArcRole::Replay) => Some("step_d_arc_replay"),
+            (Mode::Dp, ArcRole::Plain) => Some("step_dp_arc"),
+            (Mode::Dp, ArcRole::Log) => Some("step_dp_arc_log"),
+            (Mode::Dp, ArcRole::Replay) => Some("step_dp_arc_replay"),
+            (Mode::C, _) => None,
         }
     }
 

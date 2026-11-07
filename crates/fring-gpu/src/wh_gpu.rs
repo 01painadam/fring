@@ -19,6 +19,7 @@ pub const WH_WGSL: &str = concat!(
     include_str!("../shaders/ds.wgsl"),
     include_str!("../shaders/trig.wgsl"),
     include_str!("../shaders/wh.wgsl"),
+    include_str!("../shaders/arc.wgsl"),
     include_str!("../shaders/chaos.wgsl")
 );
 
