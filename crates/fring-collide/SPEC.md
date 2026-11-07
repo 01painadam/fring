@@ -1,6 +1,6 @@
 # Collision specification
 
-Owner: A4. Task K1. Status: **draft 0.3, for AJ's confirmation.** AJ chose the four options of section 13 on 2026-11-07. Draft 0.3 applies the A0 review of PR #38 (2026-11-07): sections 5.1, 5.3, 5.6, 8, 9, 11, 12 and the references.
+Owner: A4. Task K1. Status: **confirmed by AJ on 2026-11-07** (draft 0.3, which applies the A0 review of PR #38: sections 5.1, 5.3, 5.6, 8, 9, 11, 12 and the references). AJ chose the four options of section 13 on 2026-11-07.
 
 This file is a shared interface (`AGENTS.md`). The stochastic model on the CPU (K2), the hard-sphere model on the CPU (K3), the stochastic model on the GPU (K5) and the cross-check (K4) all follow it. To change it after AJ confirms it, write an ICR.
 
