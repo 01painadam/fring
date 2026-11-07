@@ -76,18 +76,26 @@ pub struct CellList {
 impl CellList {
     /// Groups items `(cell key, particle id, particle index)`. The cells are
     /// in the order of their keys and the members in the order of their ids.
-    pub fn group<K: Ord + Copy>(mut items: Vec<(K, u32, u32)>) -> Self {
+    pub fn group<K: Ord + Copy>(items: Vec<(K, u32, u32)>) -> Self {
+        Self::group_with_keys(items).0
+    }
+
+    /// Like [`Self::group`], and returns the key of each cell too (ascending,
+    /// so a cell can be found by binary search).
+    pub fn group_with_keys<K: Ord + Copy>(mut items: Vec<(K, u32, u32)>) -> (Self, Vec<K>) {
         items.sort_unstable_by_key(|&(k, id, _)| (k, id));
         let mut order = Vec::with_capacity(items.len());
         let mut starts = Vec::new();
+        let mut keys = Vec::new();
         for (n, &(k, _, index)) in items.iter().enumerate() {
             if n == 0 || items[n - 1].0 != k {
                 starts.push(n);
+                keys.push(k);
             }
             order.push(index);
         }
         starts.push(items.len());
-        Self { order, starts }
+        (Self { order, starts }, keys)
     }
 
     /// Number of non-empty cells.
@@ -188,11 +196,22 @@ impl Domain {
         active: Option<&[bool]>,
         position: impl Fn(usize) -> Vec3<f64>,
     ) -> CellList {
+        self.build_keyed(t_s, ids, active, position).0
+    }
+
+    /// Like [`Self::build_cells`], and returns the key of each cell too.
+    pub fn build_keyed(
+        &self,
+        t_s: f64,
+        ids: &[u32],
+        active: Option<&[bool]>,
+        position: impl Fn(usize) -> Vec3<f64>,
+    ) -> (CellList, Vec<CellKey>) {
         let items = (0..ids.len())
             .filter(|&i| active.is_none_or(|a| a[i]))
             .map(|i| (self.cell_key(position(i), t_s), ids[i], i as u32))
             .collect();
-        CellList::group(items)
+        CellList::group_with_keys(items)
     }
 }
 

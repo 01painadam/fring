@@ -713,7 +713,7 @@ pub fn t7_haff<M: BoxModel>(
         (ModelKind::Stochastic, Sample::Full) => Setup::stochastic(33, 2.0, 0.02, law, 71),
         (ModelKind::Stochastic, Sample::Quick) => Setup::stochastic(16, 2.5, 0.02, law, 71),
         (ModelKind::HardSphere, Sample::Full) => Setup::hard_sphere(72_000, 0.01, law, 71),
-        (ModelKind::HardSphere, Sample::Quick) => Setup::hard_sphere(4000, 0.01, law, 71),
+        (ModelKind::HardSphere, Sample::Quick) => Setup::hard_sphere(9000, 0.01, law, 71),
     };
     let mut state = setup.initial_state(0);
     let mut model = make(setup.params);
