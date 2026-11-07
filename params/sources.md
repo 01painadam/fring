@@ -105,6 +105,30 @@ Notes.
 - The apse longitude at the epoch is the least certain number in `ring.toml`. The rate error alone gives ±0.85 deg after 2921.5 d. The J2000 value is "about" and has no uncertainty in the source.
 - The e of Bosh (0.00254, via Charnoz09) differs from the Albers value (0.00235) by 8 %.
 
+## Collisions: restitution law and method references (task K1-REFS)
+
+Written 2026-11-07. These values are not in a TOML file. A run config sets them in `[collisions.restitution]` (`law = "power_law"`, `exponent`, `reference_speed_km_s`). The test `crates/fring-collide/tests/k1_pair.rs` uses `reference_speed_km_s = 7.7e-8`.
+
+| Key | Value | Source key | Status |
+|---|---|---|---|
+| `exponent` p | 0.234 | Bridges84_via_LO06 (Latter and Ogilvie 2006, section 1) | verified (secondary, quoted in LO06). The primary was not opened |
+| `reference_speed_km_s` v_c | 0.0077 cm/s = 7.7e-8 km/s | Bridges84_via_LO06 | verified (secondary, quoted in LO06). Unit conversion: 1 cm/s = 1e-5 km/s, so 0.0077 cm/s = 7.7e-8 km/s |
+| Law | eps = (v_n / v_c)^(-p) for v_n > v_c, eps = 1 for v_n <= v_c | LO06, Eq. (1) | verified (secondary, quoted in LO06). The cut at v_c is part of the quoted step-wise power law, but LO06 gives it for all the authors it cites (Bridges, Hatzes, Supulver), not for Bridges alone. Whether Bridges et al. 1984 print it in this form is UNVERIFIED. v_n is the normal impact speed (LO06) |
+| eps at 1 mm/s, 1 cm/s, 1 m/s | 0.549, 0.320, 0.109 | derived | derived: (v / 0.0077 cm/s)^(-0.234) with v/v_c = 12.99, 129.9, 12987. The SPEC values 0.55, 0.32, 0.11 agree |
+
+Conditions of the Bridges values. LO06 says: "Bridges' data admit p = 0.234 and vc = 0.0077 cm s-1 for frosted particles of radius 2.5cm at a temperature of 210K (significantly higher than the appropriate conditions)." So the temperature is 210 K, not a low temperature. `fring-collide/SPEC.md` section 6 says "frosty ice at low temperature". This differs from LO06 (reported to A0). Other values quoted in LO06 for the same law: Hatzes et al. 1988, p = 0.20 and v_c = 0.025 cm/s (frosted particles, 123 K); Supulver et al. 1995, p = 0.19 and v_c = 0.029 cm/s (about 100 K). LO06 also says that a power law fits smoother particles worse than an exponential law, and that the coefficient of restitution changes much with the surface state.
+
+Opened in this session for K1-REFS (at most two attempts per reference):
+
+| Key | Reference | What was opened | What it supports |
+|---|---|---|---|
+| Bridges84 | Bridges, Hatzes, Lin 1984, Nature 309, 333-335 (title in the LO06 reference list: "Structure, Stability and Evolution of Saturn's Rings"). DOI 10.1038/309333a0 (not opened) | Not opened: the ADS page returned HTTP 405 and the Nature page was not tried. Values are from LO06 | p and v_c above, as quoted |
+| LO06 | Latter, Ogilvie 2006, "The linear stability of dilute particulate rings", Icarus; arXiv astro-ph/0609164 | Full text | The Bridges values, Hatzes and Supulver values and the form of the law (Eq. 1) |
+| Bird94 | Bird 1994, Molecular Gas Dynamics and the Direct Simulation of Gas Flows, Clarendon Press, Oxford | Not opened (a book). Search results only: secondary pages (arXiv 0709.3221 and a DSMC tutorial at particleincell.com) describe the NTC method | NTC: a candidate count from the maximum of sigma times relative speed, accepted with probability proportional to sigma times relative speed. The book chapter and equation numbers were not checked |
+| CS69 | Carnahan, Starling 1969, J. Chem. Phys. 51(2), 635-636, DOI 10.1063/1.1672048 | Only the bibliographic record and abstract (via search). Full text not opened | The equation of state Z = (1 + eta + eta^2 - eta^3)/(1 - eta)^3 (formula from a textbook page, not from the paper). The SPEC uses it for a rate correction of 2.5 D. This is derived here: Z = 1 + 4 eta g gives g(contact) = (1 - eta/2)/(1 - eta)^3, which is 1 + 2.5 eta + ... for small eta. The paper gives the equation of state, not the contact value |
+| Haff83 | Haff 1983, J. Fluid Mech. 134, 401-430 | Only bibliographic data and the abstract (Caltech record). Full text paywalled | The abstract says that grain collisions are inelastic and the energy equation is needed. The law that the kinetic energy falls as t^-2 is attributed to Haff by Ernst and Brito (as reported by a search result; that paper was not opened). The formula T = T0/(1 + t/t0)^2 and t0 = 6/((1 - eps^2) omega_0) in the SPEC are K1's own derivation (SPEC appendix A), not a quote of Haff |
+| vNE98 | van Noije, Ernst 1998, Granular Matter 1, 57-64, DOI 10.1007/s100350050009; arXiv cond-mat/9803042 | arXiv abstract | Velocity distribution of inelastic hard spheres in free cooling and in the heated case, with the fourth cumulant and the high-energy tail. The abstract says that the non-Gaussian corrections have a small effect on the cooling rate. This supports a Maxwellian approximation in the SPEC for small inelasticity. No value from this paper is used |
+
 ## Variant: GR03b moon masses (task L3-PARAMS)
 
 Written 2026-11-07. File: `params/variants/gr03b-moons.toml`. It is a copy of `moons.toml` with only the two GM values changed. The nominal values do not change.
