@@ -11,6 +11,7 @@
 //!   `shaders/spike.wgsl`).
 //! - [`spike_gpu`]: the same options on the GPU.
 
+pub mod arc;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod backend;
 pub mod chaos;

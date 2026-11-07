@@ -33,7 +33,7 @@ use crate::wf32::model;
 use crate::wh::{self, HostTable, Mode};
 use crate::wh_gpu::{DEFAULT_WORKGROUP, NO_FAILURE, WhKernels, unbound};
 use fring_model::physics::{
-    EpicycleElements, KickTable, SaturnField, epicycle_state, interpolate_moons,
+    ArcGeometry, EpicycleElements, KickTable, SaturnField, epicycle_state, interpolate_moons,
 };
 use fring_model::{
     Backend, ChaosReport, Error, InitialState, MoonState, ParticleView, Particles, Result,
@@ -152,7 +152,7 @@ impl GpuBackend {
             .unwrap_or_else(|| (TARGET_PARTICLE_STEPS / n.max(1)).clamp(8, MAX_BLOCK_STEPS))
             .clamp(1, MAX_BLOCK_STEPS);
         let chaos_cfg = config.diagnostics.as_ref().and_then(|d| d.chaos);
-        let stepper = GpuStepper::new(
+        let mut stepper = GpuStepper::new(
             &gpu,
             &kernels,
             system,
@@ -162,6 +162,16 @@ impl GpuBackend {
             opts.mode,
             chaos_cfg,
         )?;
+
+        let field = SaturnField::<f64>::from_params(&system.saturn);
+        // Task D1: a co-moving arc domain.
+        if let Some(geom) = ArcGeometry::from_domain_in_field(
+            &config.domain,
+            &field,
+            config.frame.reference_semi_major_axis_km,
+        )? {
+            stepper.set_arc(geom)?;
+        }
 
         let d = gpu.device();
         let mk = |size: u64, usage: wgpu::BufferUsages| {
@@ -175,7 +185,6 @@ impl GpuBackend {
         let read = wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST;
         let acc_stage = chaos_cfg.map(|_| mk((crate::chaos::ACC_PLANES * cap * 8) as u64, read));
 
-        let field = SaturnField::<f64>::from_params(&system.saturn);
         let energy0 = if eph.tracks.is_empty() {
             (0..n)
                 .map(|i| field.specific_energy(p.position_km(i), p.velocity_km_s(i)))

@@ -19,11 +19,11 @@
 
 use crate::spike::{Consts, State, kick_scale, state_from_f64};
 use crate::wf32::model;
-use crate::wh::{self, Mode, ROW};
+use crate::wh::{self, ArcRole, Mode, ROW};
 use crate::wh_gpu::{WhKernels, grid, status_init_bytes, status_words};
 use fring_model::config::ChaosConfig;
-use fring_model::physics::KickTable;
 use fring_model::physics::chaos::shadow_offset_km;
+use fring_model::physics::{ArcGeometry, KickTable};
 use fring_model::{Error, InitialState, MoonEphemeris, Result, System};
 
 /// Number of table buffers in flight.
@@ -38,6 +38,13 @@ struct GpuChaos {
     acc_buf: wgpu::Buffer,
     renorm_pipeline: wgpu::ComputePipeline,
     renorm_bind: wgpu::BindGroup,
+}
+
+/// The arc domain of task D1 (see [`crate::arc`]): the geometry and the
+/// pipeline of the shadow (the pipeline of the particles is `pipeline`).
+struct GpuArc {
+    geom: ArcGeometry,
+    shadow_pipeline: Option<wgpu::ComputePipeline>,
 }
 
 /// The buffers of one block: kick table and control words.
@@ -109,6 +116,7 @@ pub struct GpuStepper {
     slots: Vec<Slot>,
     next_slot: usize,
     chaos: Option<GpuChaos>,
+    arc: Option<GpuArc>,
 }
 
 impl GpuStepper {
@@ -214,6 +222,7 @@ impl GpuStepper {
             slots: Vec::new(),
             next_slot: 0,
             chaos: None,
+            arc: None,
         };
         for _ in 0..RING {
             let slot = s.make_slot();
@@ -324,7 +333,17 @@ impl GpuStepper {
         // The host works while the GPU runs the previous blocks.
         self.table
             .fill(&self.eph, self.start_s, self.step_s, first, block)?;
-        let packed = wh::pack_table(&self.table, self.scale);
+        let mut packed = wh::pack_table(&self.table, self.scale);
+        if let Some(a) = &self.arc {
+            crate::arc::set_kick_angles(
+                &mut packed,
+                &a.geom,
+                self.start_s,
+                self.step_s,
+                first,
+                block,
+            );
+        }
         let idx = if used_in_call >= self.slots.len() {
             let slot = self.make_slot();
             self.slots.push(slot);
@@ -342,6 +361,11 @@ impl GpuStepper {
             let rows = wh::sync_rows(&self.eph, self.start_s, self.step_s, first, block);
             q.write_buffer(&slot.table, (block * ROW * 4) as u64, &le_bytes(&rows));
         }
+        if let Some(a) = &self.arc {
+            // The arc centre at the sync times and the constants of the wrap.
+            let rows = crate::arc::extra_rows(&a.geom, self.start_s, self.step_s, first, block);
+            q.write_buffer(&slot.table, (block * ROW * 4) as u64, &le_bytes(&rows));
+        }
         let ctl = wh::control(block, self.n, self.cap, self.n_moons);
         let ctl_bytes: Vec<u8> = ctl.iter().flat_map(|x| x.to_le_bytes()).collect();
         q.write_buffer(&slot.ctl, 0, &ctl_bytes);
@@ -351,6 +375,9 @@ impl GpuStepper {
             pass.set_bind_group(0, &slot.bind, &[]);
             pass.dispatch_workgroups(gx, gy, 1);
             if let (Some(c), Some(bs)) = (&self.chaos, &slot.bind_shadow) {
+                if let Some(sp) = self.arc.as_ref().and_then(|a| a.shadow_pipeline.as_ref()) {
+                    pass.set_pipeline(sp);
+                }
                 pass.set_bind_group(0, bs, &[]);
                 pass.dispatch_workgroups(gx, gy, 1);
                 if renorm_now {
@@ -422,6 +449,9 @@ impl GpuStepper {
         if self.chaos.is_some() {
             return err("the moon-radius rule cannot be combined with chaos".into());
         }
+        if self.arc.is_some() {
+            return err("the moon-radius rule cannot be combined with the arc".into());
+        }
         if radii_km.len() != self.n_moons {
             return err(format!(
                 "{} moon radii for {} moons",
@@ -438,6 +468,77 @@ impl GpuStepper {
         self.pipeline = self.kernels.pipeline(entry);
         self.radii_km = Some(radii_km.to_vec());
         Ok(())
+    }
+
+    /// Switches the co-moving arc domain of task D1 on: after each of the
+    /// wrap sites of [`crate::arc`] (start of a block, before each kick, end of
+    /// a block) a particle outside the arc is rotated by a multiple of the
+    /// width, in position and velocity, so that every particle is inside the
+    /// arc at the end of every block. With chaos, the shadow of a particle
+    /// takes the same rotations as the particle.
+    ///
+    /// Call it before the first step. With no arc the kernels are those of a
+    /// stepper without this method, bit for bit.
+    ///
+    /// # Errors
+    /// [`Error::Config`] if steps were already recorded, if the mode is C, or
+    /// if the moon-radius rule is on.
+    pub fn set_arc(&mut self, geom: ArcGeometry) -> Result<()> {
+        let err = |m: &str| Err(Error::Config(m.to_string()));
+        if self.steps_total > 0 {
+            return err("set_arc must be called before the first step");
+        }
+        if self.radii_km.is_some() {
+            return err("the arc cannot be combined with the moon-radius rule");
+        }
+        let role = if self.chaos.is_some() {
+            ArcRole::Log
+        } else {
+            ArcRole::Plain
+        };
+        let Some(entry) = self.mode.entry_arc(role) else {
+            return err("the arc is not available in mode C");
+        };
+        self.pipeline = self.kernels.pipeline(entry);
+        let shadow_pipeline = if self.chaos.is_some() {
+            self.mode
+                .entry_arc(ArcRole::Replay)
+                .map(|e| self.kernels.pipeline(e))
+        } else {
+            None
+        };
+        if self.chaos.is_some() {
+            // The wrap log of the chaos shadows lives after the status words.
+            let words = status_words(self.cap) + self.cap * crate::arc::ARC_LOG_WORDS;
+            let mut init = status_init_bytes(self.cap);
+            init.resize(4 * words, 0);
+            let d = self.kernels.gpu().device();
+            self.status_buf = d.create_buffer(&wgpu::BufferDescriptor {
+                label: None,
+                size: (4 * words) as u64,
+                usage: wgpu::BufferUsages::STORAGE
+                    | wgpu::BufferUsages::COPY_SRC
+                    | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            });
+            self.kernels
+                .gpu()
+                .queue()
+                .write_buffer(&self.status_buf, 0, &init);
+            let n = self.slots.len();
+            self.slots = (0..n).map(|_| self.make_slot()).collect();
+            self.next_slot = 0;
+        }
+        self.arc = Some(GpuArc {
+            geom,
+            shadow_pipeline,
+        });
+        Ok(())
+    }
+
+    /// The arc geometry, if the arc is on.
+    pub fn arc(&self) -> Option<&ArcGeometry> {
+        self.arc.as_ref().map(|a| &a.geom)
     }
 
     /// The moon radii of the rule, km, if it is on.
