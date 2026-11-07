@@ -1,6 +1,6 @@
 # ICR-009-IMPL: implement ICR-009 with amendments A1 to A3
-Role: A0  Branch: ws/a0-icr-009-impl  Status: review
-Updated: 2026-11-07 16:50
+Role: A0  Branch: ws/a0-icr-009-impl  Status: done
+Updated: 2026-11-07 17:10
 
 ## Goal and acceptance criteria
 From `docs/status/BOARD.md` and `docs/interfaces/ICR-009.md` (section "A0 decision"): three cell sizes and `every_steps` in `[collisions]`, `CollisionStats` in `StepStats`, `fring-collide` as a dependency of `fring-cpu` and `fring-gpu`, the CI wasm32 line, the column list in `docs/snapshot-format.md`. A5 reviews the `fring-io` and `fring-run` test changes. Blocks K2, K3 and K5-BIN.
@@ -14,7 +14,7 @@ From `docs/status/BOARD.md` and `docs/interfaces/ICR-009.md` (section "A0 decisi
 - `docs/snapshot-format.md` section 8: collision columns (names equal to the field names, in struct order, at the end). `docs/adr/0001-fring-model-interfaces.md`: one line that ICR-009 replaced `cell_size_km`.
 
 ## Next step (one concrete action)
-PR #39 is open. When CI is green and A5 has looked at the `fring-io` and `fring-run` test changes, A0 merges it and sets ICR-009-IMPL to `done` (memory: PR edit permission). Then K2, K3, K5-BIN and ICR-009-IO can start.
+None for ICR-009-IMPL. PR #39 merged on 2026-11-07 (merge commit e939163) after the A5 review (PR comment 6708448317, approved, notes for ICR-009-IO). Next tasks that build on it: K2, K3, K5-BIN (A4, A3) and ICR-009-IO (A5).
 
 ## How to verify the current state
 ```sh
