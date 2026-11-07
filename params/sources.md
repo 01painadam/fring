@@ -105,6 +105,23 @@ Notes.
 - The apse longitude at the epoch is the least certain number in `ring.toml`. The rate error alone gives ±0.85 deg after 2921.5 d. The J2000 value is "about" and has no uncertainty in the source.
 - The e of Bosh (0.00254, via Charnoz09) differs from the Albers value (0.00235) by 8 %.
 
+## Variant: GR03b moon masses (task L3-PARAMS)
+
+Written 2026-11-07. File: `params/variants/gr03b-moons.toml`. It is a copy of `moons.toml` with only the two GM values changed. The nominal values do not change.
+
+| Key | Value | Source key | Status |
+|---|---|---|---|
+| Prometheus m/M | 5.80e-10 | GR03b, Table 1 | verified (primary), full text read by A1 in task L3 and re-checked by A0 on 2026-11-03 (`docs/handoffs/L3.md`). Not opened again in L3-PARAMS |
+| Pandora m/M | 3.43e-10 | GR03b, Table 1 | same |
+| Prometheus `gm_km3_s2` | 0.02200 | derived: 5.80e-10 x 37931206.234 = 0.0220001 | derived. Nominal 0.01071; ratio 2.054 |
+| Pandora `gm_km3_s2` | 0.01301 | derived: 3.43e-10 x 37931206.234 = 0.0130104 | derived. Nominal 0.00926; ratio 1.405 |
+
+Notes.
+
+- GR03b is Goldreich and Rappaport 2003, Icarus 166, 320, arXiv astro-ph/0307259 (v1). GR03b sec 2.1 gives the masses from an assumed density of 0.63 g/cm3. Moon labels follow `docs/literature/l3-moon-parameters-gr03.md` (unprimed is Prometheus).
+- The product uses GM(Saturn) of `saturn.toml`. GR03b used m/M, so the GM of the variant depends on this choice of GM(Saturn). The effect is 1e-8 relative or less for any current GM(Saturn).
+- Purpose: A4-ANALYSIS (the deciding run of L3). The states are the nominal ones, so only the masses differ.
+
 ## Source list
 
 | Key | Reference | DOI or URL | Opened in this session |
