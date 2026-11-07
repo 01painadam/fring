@@ -466,9 +466,6 @@ impl Backend for GpuBackend {
     }
 }
 
-/// The second start-up check of ADR 0006: one short block of the real kernel
-/// against its Rust twin on a few particles (relative < 1e-6, PLAN section
-/// 10), because a primitive can pass alone and fail after inlining.
 /// The initial state with every particle folded into the arc (task D1).
 fn fold_into_arc(g: &ArcGeometry, init: &InitialState) -> Result<InitialState> {
     let mut particles = Particles::with_capacity(init.particles.len());
@@ -488,6 +485,9 @@ fn fold_into_arc(g: &ArcGeometry, init: &InitialState) -> Result<InitialState> {
     })
 }
 
+/// The second start-up check of ADR 0006: one short block of the real kernel
+/// against its Rust twin on a few particles (relative < 1e-6, PLAN section
+/// 10), because a primitive can pass alone and fail after inlining.
 fn startup_check(k: &WhKernels, mode: Mode, system: &System, t0_s: f64, h_s: f64) -> Result<()> {
     const M: u8 = model::M4;
     const STEPS: usize = 4;

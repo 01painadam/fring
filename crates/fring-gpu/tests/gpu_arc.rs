@@ -235,7 +235,7 @@ fn wrap_kernel_matches_its_twin_and_the_f64_wrap() {
             .max((p_out - p_tw).norm() / p_tw.norm())
             .max((v_out - v_tw).norm() / v_tw.norm());
         // GPU against f64 (the f32 centre angle can flip a particle that sits
-        // within 1e-6 rad of an edge; none are expected).
+        // within about 1e-6 rad of an edge; none are expected).
         let rf = reference.expect("f64 wrap");
         let kf = rf.k;
         if (tw.dirs[0] + tw.dirs[1]) != kf {
@@ -418,7 +418,7 @@ fn arc_run_is_the_full_ring_run_rotated_by_whole_widths() {
             max_off.max(0.0)
         );
         println!("  position difference by |m| = 0, 1, 2, 3: {:?}", by_m);
-        // 2e-6 rad: the edge slack EDGE_TOL = 1e-6 rad plus the f32 rounding of the test.
+        // 2e-6 rad: the edge slack (at most 1.4e-6 rad) plus the f32 rounding of the test.
         assert!(max_off < 2e-6, "all particles are inside the arc");
         assert!(moved > pr.len() / 10, "enough wraps to test");
         // Tolerance: 4 times the rounding floor (+ 1e-6 km, 1e-9 km/s). The arc run

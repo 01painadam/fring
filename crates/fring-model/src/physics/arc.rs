@@ -27,7 +27,8 @@
 //! Positions and velocities are Saturn-centred and inertial (km, km/s); `t_s`
 //! is in seconds since the epoch of the rotating frame. After the wrap the
 //! rotating-frame longitude of the particle is in `[φ0 - ε, φ0 + Δθ + ε]`
-//! with `ε =` [`EDGE_TOL`] (1e-6 rad) and
+//! with `ε =` [`EDGE_TOL`]` * (cos(Δθ/2) + sin(Δθ/2))` (at most √2 × 1e-6 rad,
+//! 0.2 km at the core) and
 //! `φ0 = `[`ArcGeometry::rotating_start_rad`]: a particle that is outside by
 //! less than `ε` is not moved. A cell index for collisions must clamp to the
 //! first and the last cell.
@@ -43,8 +44,10 @@ use crate::{Error, Real, Result, Vec3};
 pub const MAX_WRAPS: u32 = 2;
 
 /// Slack of the edge test, as a fraction of the distance of the particle from
-/// the axis (about 1e-6 rad, 0.14 km at the core). A particle that is outside
-/// by less than this stays where it is. Without it, a particle on an edge could
+/// the axis (`|x| + |y|` in the local frame). At the edge this is an angular
+/// slack of `EDGE_TOL * (cos(Δθ/2) + sin(Δθ/2))`: 1.04e-6 rad for 5 degrees,
+/// 1.12e-6 for 10, 1.23e-6 for 30, at most √2 × 1e-6 rad (0.2 km at the core).
+/// A particle that is outside by less than this stays where it is. Without it, a particle on an edge could
 /// be rotated to the other edge and back by the rounding of the test (found on
 /// the GPU in f32, about one particle in 10^5 over 1500 steps). The GPU
 /// kernels use the same value.
