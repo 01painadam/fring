@@ -112,10 +112,10 @@ fn pairs_in_cells(
                 for &j in cells.members(c2) {
                     // A pair in two cells A ≠ B is seen from A and from B, but
                     // only one of the two orders has ids[i] < ids[j].
-                    if ids[i as usize] < ids[j as usize] {
-                        if let Some(shift) = close(i as usize, j as usize) {
-                            pairs.push(Pair { i, j, shift });
-                        }
+                    if ids[i as usize] < ids[j as usize]
+                        && let Some(shift) = close(i as usize, j as usize)
+                    {
+                        pairs.push(Pair { i, j, shift });
                     }
                 }
             }
