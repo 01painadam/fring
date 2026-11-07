@@ -7,10 +7,12 @@
 //!   same key for each particle (when the particle is not within 1e-6 km of
 //!   an edge) and the same sorted arrays.
 //! - Twin or GPU against the f64 reference: a particle may get another cell
-//!   only if its f64 coordinate is within `DELTA` = 1e-7 km of a cell edge on
+//!   only if its f64 coordinate is within `DELTA` = 1.01e-7 km of a cell edge on
 //!   an axis where the cells differ (10 times the largest error measured in
 //!   the unit test `twin_agrees_with_f64_up_to_the_edge_rule`, which is
-//!   1.0e-8 km, and at most 1e-6 km).
+//!   1.001e-8 km, rounded up; at most 1e-6 km).
+
+mod common;
 
 use fring_gpu::bin::{
     BinGeometry, BinOutput, Binned, Cell, Dsm, GpuBinner, NO_ID, NO_KEY, Stage, bin_twin, cell_ds,
@@ -18,13 +20,18 @@ use fring_gpu::bin::{
 };
 use fring_gpu::gpu::Gpu;
 use fring_gpu::probe::self_test;
+use fring_gpu::stepper::GpuStepper;
+use fring_gpu::wh::Mode;
+use fring_gpu::wh_gpu::{DEFAULT_WORKGROUP, WhKernels};
 use fring_gpu::wh_gpu::{pack_states, status_init_bytes};
+use fring_model::physics::{SaturnField, reference_mean_motion};
 use fring_model::rng::{philox4x32_10, u01_f64};
 use std::f64::consts::TAU;
 
 const A0: f64 = 140_222.43;
 const N0: f64 = 1.1756e-4;
-const DELTA: f64 = 1.0e-7;
+/// 10 x 1.001e-8 km (the largest error of the unit test), rounded up.
+const DELTA: f64 = 1.01e-7;
 
 fn uniform(seed: u32, stream: u32, n: usize) -> Vec<f64> {
     (0..n)
@@ -437,4 +444,92 @@ fn particles_next_to_an_edge_agree_with_the_twin_and_obey_the_rule() {
         iy: 0,
         iz: 0,
     };
+}
+
+/// The binner behind a real stepper in one command encoder: the time given to
+/// the binner is `stepper.time_s()` after `encode_steps`, and the cells agree
+/// with the f64 cells of the state that the GPU holds (a wrong time of one
+/// step, 356 s, would turn the ring by 0.04 rad = 5900 km and fail at once).
+#[test]
+#[ignore = "needs a GPU"]
+fn binner_follows_the_stepper_in_one_encoder() {
+    let Some(gpu) = gpu() else { return };
+    let steps = 40u64;
+    let system = common::system(common::H_S, steps + 10, true);
+    let n = 20_000;
+    let (init, _) = common::ensemble(&system, n);
+    let kernels = WhKernels::new(&gpu, DEFAULT_WORKGROUP).expect("kernels");
+    let mut stepper = GpuStepper::new(
+        &gpu,
+        &kernels,
+        &system,
+        &init,
+        common::H_S,
+        8,
+        Mode::Dp,
+        None,
+    )
+    .expect("stepper");
+    let field = SaturnField::<f64>::from_params(&system.saturn);
+    let n0 = reference_mean_motion(&field, common::A0_KM);
+    let g = BinGeometry::new(
+        common::A0_KM,
+        n0,
+        [0.05, 10.0, 0.04],
+        TAU * common::A0_KM,
+        0.0,
+    )
+    .unwrap();
+    let binner = GpuBinner::for_stepper(&gpu, &stepper, g).expect("binner");
+    let mut enc = gpu.device().create_command_encoder(&Default::default());
+    stepper.encode_steps(&mut enc, steps).expect("steps");
+    binner.encode(&mut enc, stepper.time_s());
+    gpu.queue().submit([enc.finish()]);
+    gpu.device()
+        .poll(wgpu::PollType::wait_indefinitely())
+        .expect("poll");
+    let t = stepper.time_s();
+    assert!((t - steps as f64 * common::H_S).abs() < 1e-6);
+    // The state the GPU holds, as f64 (planes x, y, z of hi + lo).
+    let cap = stepper.capacity();
+    let w = binner.read_words(stepper.state_buffer(), 0, 12 * cap);
+    let f = |c: usize, i: usize| {
+        f64::from(f32::from_bits(w[2 * (c * cap + i)]))
+            + f64::from(f32::from_bits(w[2 * (c * cap + i) + 1]))
+    };
+    let keys = binner.read_particle_keys();
+    let alpha = g.alpha_rad(t);
+    let mut cells_seen = std::collections::HashSet::new();
+    let mut differ = 0;
+    for i in 0..n {
+        let (bf, lf) = cell_f64(&g, alpha, [f(0, i), f(1, i), f(2, i)]);
+        if keys[i] != key_of(bf) {
+            differ += 1;
+            let near = edge_distance_km(&g, lf)
+                .into_iter()
+                .fold(f64::INFINITY, f64::min);
+            assert!(near <= DELTA, "particle {i}: edge distance {near}");
+        }
+        cells_seen.insert(keys[i]);
+    }
+    // Not a trivial binning: many cells, and a time that matters.
+    assert!(cells_seen.len() > n / 4, "{} cells", cells_seen.len());
+    let wrong = g.alpha_rad(t - common::H_S);
+    let off = (0..n)
+        .filter(|&i| key_of(cell_f64(&g, wrong, [f(0, i), f(1, i), f(2, i)]).0) != keys[i])
+        .count();
+    assert!(
+        off > n / 2,
+        "a time wrong by one step must change most keys: {off}"
+    );
+    let out = binner.read_output();
+    assert_eq!(
+        out.n_binned as usize + out.n_not_binned as usize + out.n_out_of_range as usize,
+        n
+    );
+    eprintln!(
+        "stepper + binner: t = {t:.1} s, {} cells, {differ} keys differ from f64 (within {DELTA:e} km of an edge), \
+         a time wrong by one step changes {off} of {n} keys",
+        cells_seen.len()
+    );
 }

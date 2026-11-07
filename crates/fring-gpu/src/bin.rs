@@ -1243,12 +1243,12 @@ mod tests {
 
     /// Particles placed on a cell edge plus an offset of 1e-9 to 1e-5 km, on
     /// each axis, at several phases: the twin may differ from f64 only for an
-    /// offset within `delta` (the rule of the test above, with delta = 1e-7 km,
-    /// 10 times the largest error measured there), and must agree for 1e-6 km
+    /// offset within `delta` (the rule of the test above, with delta = 1.01e-7 km,
+    /// 10 times the largest error measured there, 1.001e-8 km), and must agree for 1e-6 km
     /// and more.
     #[test]
     fn particles_next_to_an_edge_obey_the_rule() {
-        let delta = 1.0e-7;
+        let delta = 1.01e-7;
         let offsets = [
             -1e-5, -1e-6, -1e-7, -1e-8, -1e-9, 0.0, 1e-9, 1e-8, 1e-7, 1e-6, 1e-5,
         ];
