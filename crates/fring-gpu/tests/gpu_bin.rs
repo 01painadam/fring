@@ -501,16 +501,16 @@ fn binner_follows_the_stepper_in_one_encoder() {
     let alpha = g.alpha_rad(t);
     let mut cells_seen = std::collections::HashSet::new();
     let mut differ = 0;
-    for i in 0..n {
+    for (i, &key) in keys.iter().enumerate().take(n) {
         let (bf, lf) = cell_f64(&g, alpha, [f(0, i), f(1, i), f(2, i)]);
-        if keys[i] != key_of(bf) {
+        if key != key_of(bf) {
             differ += 1;
             let near = edge_distance_km(&g, lf)
                 .into_iter()
                 .fold(f64::INFINITY, f64::min);
             assert!(near <= DELTA, "particle {i}: edge distance {near}");
         }
-        cells_seen.insert(keys[i]);
+        cells_seen.insert(key);
     }
     // Not a trivial binning: many cells, and a time that matters.
     assert!(cells_seen.len() > n / 4, "{} cells", cells_seen.len());
