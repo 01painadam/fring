@@ -111,6 +111,15 @@ Plain CSV: a header row with column names, then one row per output. No comment l
 - **Crash rule (R1).** A row is complete only when its newline has been written. A reader drops a last line that has no final newline, even if it parses, because a truncated number (`0.0001` cut from `0.000123`) can still parse and be wrong. `read_stats_csv_report` says whether it dropped a line. Any other bad row, including a finished ragged row, is an error. A header without a newline counts as an empty file.
 - New `StepStats` fields add columns at the end. The format version is in `meta.json`.
 
+**Collision columns (ICR-009; additive to version 1).** The collision diagnostics follow the columns above, in this order. Each column has the name of its field in `CollisionStats` (`crates/fring-model/src/backend.rs`, `crates/fring-collide/SPEC.md` section 9). The runner writes them from task ICR-009-IO.
+
+`energy_loss_km2_s2, candidates, occupied_cells, occupancy_sum, occupancy_sq_sum, lonely_particles, overfull_cells, gmax_exceeded, deep_collisions`
+
+- `energy_loss_km2_s2` is a float in km² s⁻² (per unit superparticle mass). All the others are integers.
+- Each value counts since the previous row, as `collisions_since_last` does. A value is zero when it does not apply to the collision model (for example `deep_collisions` with `model = "stochastic"`), and all are zero without collisions.
+- Derived values: mean occupancy of an occupied cell = `occupancy_sum / occupied_cells`; particle-weighted occupancy (the mean number of particles in the cell of a particle) = `occupancy_sq_sum / occupancy_sum`.
+- A file written before ICR-009-IO has none of these columns. It reads as zero (the default of a missing column).
+
 ## 8a. `chaos.csv` (added by ICR-003; additive to version 1)
 
 Written by `fring-run` at the end of a run that has a `[diagnostics.chaos]` table. Without the table the file does not exist. Plain CSV with the same rules as `stats.csv` (header row, shortest round-trip floats, `NaN`), one row per particle in particle order. Columns, all required:

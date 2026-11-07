@@ -60,7 +60,7 @@ Verified against all six `philox4x32` vectors of Random123 (`crates/fring-model/
 - Output cadence is in steps (`frame_every_steps`), not seconds, so there is no rounding of output times.
 - The step count is `ceil(duration / step)`: the run covers at least the requested duration.
 - No physical constants in the run config. They come from `params/` (`[run] params_dir`).
-- The collision fields follow PLAN section 7.5. Task K1 may change them with an ICR.
+- The collision fields follow PLAN section 7.5. Task K1 may change them with an ICR. ICR-009 (accepted 2026-11-07) did: `model = "stochastic"` has three cell sizes (`cell_radial_km`, `cell_azimuthal_km`, `cell_vertical_km`) and `every_steps` (default 1) instead of one `cell_size_km` (`crates/fring-collide/SPEC.md` sections 5.1 and 7).
 
 ### 6. Dependencies
 
