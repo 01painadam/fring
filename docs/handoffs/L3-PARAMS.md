@@ -1,5 +1,5 @@
 # L3-PARAMS: GR03b moon masses as a variant file
-Role: A1  Branch: ws/a1-l3-params  Status: review
+Role: A1  Branch: ws/a1-l3-params  Status: done
 Updated: 2026-11-07
 
 ## Goal and acceptance criteria
@@ -24,3 +24,5 @@ A0 reviews and opens the PR. A4-ANALYSIS (A8) then needs an optional argument to
 
 ## Decisions made (link ADRs)
 - None.
+
+Done: PR #44 merged (db282d5) after the A0 review and green CI.

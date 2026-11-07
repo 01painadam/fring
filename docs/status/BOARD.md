@@ -69,25 +69,28 @@ Rules (full text in `AGENTS.md` and `CLAUDE.md`):
 | W2-MOONLET | Web: moonlet scenario (orbital radius, packing radius, velocity mode; 180° from Prometheus) and a view that turns with the moonlet centre (ICR-008; added by AJ) | A7 | done | ws/a7-w2-moonlet | Gate G3 |
 | K1 | `fring-collide/SPEC.md` and the shared statistical tests (A0 approves, AJ confirms; Opus) | A4 | done | ws/a4-k1 | Gate G3 |
 | ICR-009-IMPL | Implement ICR-009 with amendments A1 to A3: three cell sizes and `every_steps` in `[collisions]`, `CollisionStats` in `StepStats`, `fring-collide` as a dependency of `fring-cpu` and `fring-gpu`, CI wasm32 line, column list in `docs/snapshot-format.md` (A5 reviews the `fring-io` and `fring-run` test changes) | A0 | done | ws/a0-icr-009-impl | K1 |
-| ICR-009-IO | `fring-run` writes the `CollisionStats` fields to `stats.csv` (ICR-009) | A5 | review | ws/a5-icr-009-io | ICR-009-IMPL |
-| K1-REFS | Open the five references of `fring-collide/SPEC.md` (Bird 1994, Bridges et al. 1984, Carnahan and Starling 1969, Haff 1983, van Noije and Ernst 1998); cite the Bridges et al. power-law values in `params/sources.md` | A1 | todo | | K1 |
-| A5-ANALYSIS | A2-ANALYSIS follow-ups: h/4 test for `eccentric_band`, `closest` on `eccentric_band`, second apse phase at 30 years | A8 | todo | | Gate G3 |
+| ICR-009-IO | `fring-run` writes the `CollisionStats` fields to `stats.csv` (ICR-009) | A5 | done | ws/a5-icr-009-io | ICR-009-IMPL |
+| K1-REFS | Open the five references of `fring-collide/SPEC.md` (Bird 1994, Bridges et al. 1984, Carnahan and Starling 1969, Haff 1983, van Noije and Ernst 1998); cite the Bridges et al. power-law values in `params/sources.md` | A1 | done | ws/a1-k1-refs | K1 |
+| A5-ANALYSIS | A2-ANALYSIS follow-ups: h/4 test for `eccentric_band`, `closest` on `eccentric_band`, second apse phase at 30 years | A8 | doing | ws/a8-a5-analysis | Gate G3 |
 | E1-ICR | Write ICR-004: flag and freeze on the CPU, radius rule twin to `fring-model/src/physics/`, sub-stepping trigger and scheme, REBOUND comparison set | A2 | todo | | Gate G3, A5-ANALYSIS |
-| L3-PARAMS | GR03b moon masses as a variant file in `params/` (nominal values unchanged) | A1 | todo | | Gate G3 |
+| L3-PARAMS | GR03b moon masses as a variant file in `params/` (nominal values unchanged) | A1 | done | ws/a1-l3-params | Gate G3 |
 | A4-ANALYSIS | L3 deciding run: moon Lyapunov rate with the GR03b masses; GR03 method on our masses | A8 | todo | | L3-PARAMS |
-| K2 | Stochastic collision model on CPU | A4 | todo | | K1, ICR-009-IMPL |
+| K2 | Stochastic collision model on CPU | A4 | done | ws/a4-k2 | K1, ICR-009-IMPL |
 | E1-REF | REBOUND (IAS15) reference for particles within 1 R_H of Prometheus (from the spec only) | A6 | todo | | E1-ICR |
 | E1-CPU | ICR-004 and per-particle sub-stepping in the CPU backend | A2 | todo | | E1-ICR |
-| K3 | Hard-sphere collision model on CPU (cell list) | A4 | todo | | K1, ICR-009-IMPL |
-| D1 | Co-moving arc domain with azimuthal wrapping | A3 | todo | | Gate G3 |
-| K5-BIN | GPU binning: counting sort by cell at each step, with a Rust twin | A3 | todo | | K1, ICR-009-IMPL |
+| K3 | Hard-sphere collision model on CPU (cell list) | A4 | doing | ws/a4-k3 | K1, ICR-009-IMPL |
+| K2-CPU | CPU backend runs the stochastic model (K2) every `every_steps` steps and reports `CollisionStats`; `fring-run` accepts `model = "stochastic"` (A5 part) | A2 + A5 | todo | | K2 |
+| K3-CPU | CPU backend runs the hard-sphere model (K3) at every step and reports `CollisionStats`; `fring-run` accepts `model = "hard_sphere"` (A5 part) | A2 + A5 | todo | | K3 |
+| D1 | Co-moving arc domain with azimuthal wrapping | A3 | doing | ws/a3-d1 | Gate G3 |
+| D1-CPU | CPU backend wraps particles into the arc after each step (D1 `physics::arc`), with an energy test; `fring-run` accepts `domain.kind = "arc"` (A5 part) | A2 + A5 | todo | | D1 |
+| K5-BIN | GPU binning: counting sort by cell at each step, with a Rust twin | A3 | done | ws/a3-k5-bin | K1, ICR-009-IMPL |
 | E1-GPU | ICR-004 and per-particle sub-stepping in WGSL, with Rust twins | A3 | todo | | E1-CPU |
 | K5 | Stochastic collisions in WGSL (`shaders/collide/`) | A4 | todo | | K2, K5-BIN |
-| K4 | Cross-check stochastic and hard-sphere models in a small arc (A6 reviews the report) | A4 | todo | | K2, K3, ICR-009-IO |
-| D2 | Arc error test, full ring versus arc, Δθ in {5°, 10°, 30°} | A6 | todo | | D1 |
+| K4 | Cross-check stochastic and hard-sphere models in a small arc (A6 reviews the report) | A4 | todo | | K2, K3, ICR-009-IO, K2-CPU, K3-CPU, D1, D1-CPU |
+| D2 | Arc error test, full ring versus arc, Δθ in {5°, 10°, 30°} | A6 | todo | | D1, D1-CPU |
 | A3-ANALYSIS | 30-year chaos map over the full band with sub-stepping (the run must complete) | A8 | todo | | E1-GPU |
 | B2 | `fring-bench` again with collisions and sub-stepping on; budget check for S1 | A5 | todo | | K5, E1-GPU |
-| Gate G4 | Collision models validated; arc size chosen; close encounters handled; cost measured | AJ | todo | | K1, K1-REFS, ICR-009-IMPL, ICR-009-IO, K2, K3, K4, K5, K5-BIN, D1, D2, E1-CPU, E1-GPU, A3-ANALYSIS, B2 |
+| Gate G4 | Collision models validated; arc size chosen; close encounters handled; cost measured | AJ | todo | | K1, K1-REFS, ICR-009-IMPL, ICR-009-IO, K2, K3, K2-CPU, K3-CPU, K4, K5, K5-BIN, D1, D1-CPU, D2, E1-CPU, E1-GPU, A3-ANALYSIS, B2 |
 
 ## Phase 5: science runs
 

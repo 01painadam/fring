@@ -1,5 +1,5 @@
 # K1-REFS: open the five references of fring-collide/SPEC.md
-Role: A1  Branch: ws/a1-k1-refs  Status: review
+Role: A1  Branch: ws/a1-k1-refs  Status: done
 Updated: 2026-11-07
 
 ## Goal and acceptance criteria
@@ -30,3 +30,5 @@ A0 re-runs the checks and opens the pull request. Then L3-PARAMS.
 
 ## Decisions made (link ADRs)
 - None.
+
+Done: PR #43 merged (5aca745) after the A0 review and green CI.
