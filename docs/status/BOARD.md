@@ -75,7 +75,7 @@ Rules (full text in `AGENTS.md` and `CLAUDE.md`):
 | E1-ICR | Write ICR-004: flag and freeze on the CPU, radius rule twin to `fring-model/src/physics/`, sub-stepping trigger and scheme, REBOUND comparison set | A2 | todo | | Gate G3, A5-ANALYSIS |
 | L3-PARAMS | GR03b moon masses as a variant file in `params/` (nominal values unchanged) | A1 | done | ws/a1-l3-params | Gate G3 |
 | A4-ANALYSIS | L3 deciding run: moon Lyapunov rate with the GR03b masses; GR03 method on our masses | A8 | todo | | L3-PARAMS |
-| K2 | Stochastic collision model on CPU | A4 | review | ws/a4-k2 | K1, ICR-009-IMPL |
+| K2 | Stochastic collision model on CPU | A4 | done | ws/a4-k2 | K1, ICR-009-IMPL |
 | E1-REF | REBOUND (IAS15) reference for particles within 1 R_H of Prometheus (from the spec only) | A6 | todo | | E1-ICR |
 | E1-CPU | ICR-004 and per-particle sub-stepping in the CPU backend | A2 | todo | | E1-ICR |
 | K3 | Hard-sphere collision model on CPU (cell list) | A4 | doing | ws/a4-k3 | K1, ICR-009-IMPL |
@@ -83,7 +83,7 @@ Rules (full text in `AGENTS.md` and `CLAUDE.md`):
 | K3-CPU | CPU backend runs the hard-sphere model (K3) at every step and reports `CollisionStats`; `fring-run` accepts `model = "hard_sphere"` (A5 part) | A2 + A5 | todo | | K3 |
 | D1 | Co-moving arc domain with azimuthal wrapping | A3 | doing | ws/a3-d1 | Gate G3 |
 | D1-CPU | CPU backend wraps particles into the arc after each step (D1 `physics::arc`), with an energy test; `fring-run` accepts `domain.kind = "arc"` (A5 part) | A2 + A5 | todo | | D1 |
-| K5-BIN | GPU binning: counting sort by cell at each step, with a Rust twin | A3 | review | ws/a3-k5-bin | K1, ICR-009-IMPL |
+| K5-BIN | GPU binning: counting sort by cell at each step, with a Rust twin | A3 | done | ws/a3-k5-bin | K1, ICR-009-IMPL |
 | E1-GPU | ICR-004 and per-particle sub-stepping in WGSL, with Rust twins | A3 | todo | | E1-CPU |
 | K5 | Stochastic collisions in WGSL (`shaders/collide/`) | A4 | todo | | K2, K5-BIN |
 | K4 | Cross-check stochastic and hard-sphere models in a small arc (A6 reviews the report) | A4 | todo | | K2, K3, ICR-009-IO, K2-CPU, K3-CPU, D1, D1-CPU |

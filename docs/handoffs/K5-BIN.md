@@ -1,5 +1,5 @@
 # K5-BIN: GPU binning by cell (counting sort), with a Rust twin
-Role: A3  Branch: ws/a3-k5-bin  Status: review (A0 re-runs the checks and opens the pull request)
+Role: A3  Branch: ws/a3-k5-bin  Status: done
 Updated: 2026-11-07
 
 ## Goal and acceptance criteria
@@ -67,3 +67,5 @@ cargo check -p fring-gpu --target wasm32-unknown-unknown
 ## Open questions / blockers
 - None. For A4 (K5): the SPEC says the cell velocity statistics use ubar etc.; binning gives only the cells. SPEC 5.1 still says "the config today has one `cell_size_km`" (A4 updates it in K2).
 - The bin pass cost is 3 to 7 WH steps at every_steps = 1; the scatter is the part to optimise if it matters (for example by sorting the particles by cell in memory every few hundred steps so the scatter is local). Not done: not asked.
+
+Done: PR #47 merged (19cb5c5) after the A0 review and green CI. Open: the fring-bench variant (A5).
