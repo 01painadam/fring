@@ -100,7 +100,8 @@ pub fn check_supported(config: &RunConfig) -> Result<(), RunError> {
     }
     match config.collisions {
         Collisions::None => Ok(()),
-        _ => no("a collisions.model other than \"none\"", "K2 to K4"),
+        Collisions::Stochastic { .. } => no("collisions.model = \"stochastic\"", "K2"),
+        Collisions::HardSphere { .. } => no("collisions.model = \"hard_sphere\"", "K3"),
     }
 }
 
