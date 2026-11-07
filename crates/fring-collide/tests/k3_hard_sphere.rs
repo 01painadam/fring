@@ -170,7 +170,14 @@ fn check_against_brute_force(s_km: f64, pos: &[Vec3<f64>], t_s: f64, n0: f64, wh
     // Ids in another order than the indices, and some inactive particles.
     let ids: Vec<u32> = (0..pos.len() as u32).map(|i| 100_000 - 3 * i).collect();
     let active: Vec<bool> = (0..pos.len()).map(|i| i % 7 != 3).collect();
-    let found = m.find_pairs(&d, t_s, &ids, Some(&active), |i| pos[i]);
+    let found: Vec<(u32, u32)> = m
+        .find_pairs(&d, t_s, &ids, Some(&active), |i| pos[i])
+        .iter()
+        .map(|p| {
+            assert_eq!(p.shift, 0);
+            (p.i, p.j)
+        })
+        .collect();
     let want = brute_force(pos, &ids, &active, 2.0 * s_km);
     assert_eq!(found, want, "{what}, t = {t_s}");
     want.len()
@@ -274,6 +281,7 @@ fn a_pair_across_the_wrap_collides() {
             let pairs = m.find_pairs(&d, t, &ids, None, |i| {
                 Vec3::new(st[i][0], st[i][1], st[i][2])
             });
+            let pairs: Vec<(u32, u32)> = pairs.iter().map(|p| (p.i, p.j)).collect();
             assert_eq!(pairs, vec![(0, 1)], "t = {t}, separation {sep}");
             let tally = m.collide_step(&d, t, 356.0, &ids, None, &mut st);
             assert_eq!(tally.collisions, 1);
