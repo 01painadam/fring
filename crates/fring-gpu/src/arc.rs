@@ -160,3 +160,80 @@ pub fn wrap_ds<const M: u8>(
         ok: false,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use fring_model::Vec3;
+
+    const M4: u8 = crate::wf32::model::M4;
+
+    fn geom() -> ArcGeometry {
+        ArcGeometry::new(10f64.to_radians(), 0.3, 1.1756e-4).unwrap()
+    }
+
+    #[test]
+    fn the_layout_is_in_the_free_words_of_a_row() {
+        // pack_table fills words 0 to 32 of a row; 33 to 35 are free.
+        const { assert!(PSI_COS == 33 && PSI_SIN == 34 && PSI_SIN < ROW) };
+        let g = geom();
+        let mut table = vec![0f32; 3 * ROW];
+        set_kick_angles(&mut table[..ROW], &g, 1.0e6, 356.0, 10, 1);
+        let t = 1.0e6 + 10.5 * 356.0;
+        let (c, s) = g.centre_cos_sin(t);
+        assert_eq!(table[PSI_COS], c as f32);
+        assert_eq!(table[PSI_SIN], s as f32);
+        assert!(table[..33].iter().all(|x| *x == 0.0));
+        let ex = extra_rows(&g, 1.0e6, 356.0, 10, 1);
+        let (c, s) = g.centre_cos_sin(1.0e6 + 11.0 * 356.0);
+        assert_eq!((ex[PSI_COS], ex[PSI_SIN]), (c as f32, s as f32));
+        let (cw, sw) = g.width_cos_sin();
+        assert!((f64::from(ex[ROW]) + f64::from(ex[ROW + 1]) - cw).abs() < 1e-15);
+        assert!((f64::from(ex[ROW + 2]) + f64::from(ex[ROW + 3]) - sw).abs() < 1e-15);
+        let (c0, s0) = g.centre_cos_sin(1.0e6 + 10.0 * 356.0);
+        assert_eq!((ex[ROW + 6], ex[ROW + 7]), (c0 as f32, s0 as f32));
+    }
+
+    /// The DS twin against the f64 wrap, for k = 0, +-1, +-2 and a failure.
+    #[test]
+    fn the_twin_agrees_with_the_f64_wrap() {
+        let g = geom();
+        let t = 5.0e8;
+        let psi = g.centre_cos_sin(t);
+        let psi32 = (psi.0 as f32, psi.1 as f32);
+        let consts = ArcConsts::<M4>::new(&g);
+        let w = g.width_rad();
+        let mid = g.centre_at_rad(t);
+        for (off, k) in [
+            (0.0, 0),
+            (0.45 * w, 0),
+            (1.0 * w, -1),
+            (-1.0 * w, 1),
+            (1.9 * w, -2),
+            (-2.1 * w, 2),
+            (3.0 * w, 99),
+        ] {
+            let lon: f64 = mid + off;
+            let (p, v) = (
+                Vec3::new(140_000.0 * lon.cos(), 140_000.0 * lon.sin(), 3.0),
+                Vec3::new(-16.4 * lon.sin(), 16.4 * lon.cos(), 0.001),
+            );
+            let st = crate::spike::state_from_f64::<M4>(p, v);
+            let tw = wrap_ds::<M4>([st[0], st[1], st[2]], [st[3], st[4], st[5]], psi32, &consts);
+            let rf = g.wrap(p, v, t);
+            if k == 99 {
+                assert!(!tw.ok && rf.is_none());
+                continue;
+            }
+            let rf = rf.unwrap();
+            assert!(tw.ok);
+            assert_eq!(tw.dirs[0] + tw.dirs[1], rf.k);
+            assert_eq!(rf.k, k);
+            let d = |a: Ds<M4>, b: f64| (f64::from(a.hi) + f64::from(a.lo) - b).abs();
+            assert!(d(tw.p[0], rf.pos_km.x) < 1e-8, "x");
+            assert!(d(tw.p[1], rf.pos_km.y) < 1e-8, "y");
+            assert!(d(tw.v[0], rf.vel_km_s.x) < 1e-11, "vx");
+            assert!(d(tw.v[1], rf.vel_km_s.y) < 1e-11, "vy");
+        }
+    }
+}

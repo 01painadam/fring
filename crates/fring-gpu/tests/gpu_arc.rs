@@ -336,6 +336,7 @@ fn arc_run_is_the_full_ring_run_rotated_by_whole_widths() {
     for (w_deg, c_deg, mode) in [
         (10.0_f64, 20.0_f64, Mode::Dp),
         (5.0, -170.0, Mode::D),
+        (5.0, -170.0, Mode::Dp),
         (30.0, 175.0, Mode::Dp),
     ] {
         let geom = ArcGeometry::new(w_deg.to_radians(), c_deg.to_radians(), n0).unwrap();
@@ -378,6 +379,7 @@ fn arc_run_is_the_full_ring_run_rotated_by_whole_widths() {
         }
         let (mut max_off, mut max_dp, mut max_dv, mut max_de, mut max_dl) =
             (0f64, 0f64, 0f64, 0f64, 0f64);
+        let mut by_m = [0f64; 4];
         let (mut ring_de, mut ring_dl) = (0f64, 0f64);
         let (mut moved, mut max_m) = (0usize, 0i64);
         for i in 0..pr.len() {
@@ -393,6 +395,7 @@ fn arc_run_is_the_full_ring_run_rotated_by_whole_widths() {
             let rp = Vec3::new(c * p0.x - s * p0.y, s * p0.x + c * p0.y, p0.z);
             let rv = Vec3::new(c * v0.x - s * v0.y, s * v0.x + c * v0.y, v0.z);
             max_dp = max_dp.max((p1 - rp).norm());
+            by_m[(m.abs() as usize).min(3)] = by_m[(m.abs() as usize).min(3)].max((p1 - rp).norm());
             max_dv = max_dv.max((v1 - rv).norm());
             // Drift of E and Lz from the initial state: the arc run against the ring run.
             let (pi, vi) = (
@@ -414,12 +417,23 @@ fn arc_run_is_the_full_ring_run_rotated_by_whole_widths() {
             pr.len(),
             max_off.max(0.0)
         );
+        println!("  position difference by |m| = 0, 1, 2, 3: {:?}", by_m);
         assert!(max_off < 1e-6, "all particles are inside the arc");
         assert!(moved > pr.len() / 10, "enough wraps to test");
+        // Tolerance: 4 times the rounding floor (+ 1e-6 km, 1e-9 km/s). The arc run
+        // and the ring run use different f32 rounding of the kick (the state is
+        // rotated), so they differ by the same amount as a ring run from a rotated
+        // state. The floor is that difference measured; D1 adds only the DS error of
+        // a wrap (1e-14 relative, 1e-9 km). Mode D has about 100 times the noise of
+        // mode D+ (f32 J2 term), which is why the floor is not a fixed number. The
+        // measured ratio arc/floor is 1.0 to 2.5 (see the handoff D1).
         assert!(
             max_dp < 4.0 * floor_p + 1e-6 && max_dv < 4.0 * floor_v + 1e-9,
             "same orbit up to rotation"
         );
+        // Tolerance: the drift of E and Lz of the arc run may be 2 times that of the
+        // ring run plus 3e-13 (about 3 wraps per particle times 1.3e-14 each,
+        // with margin).
         assert!(
             max_de < 2.0 * ring_de + 3e-13 && max_dl < 2.0 * ring_dl + 3e-13,
             "the wraps add no energy or Lz drift"
@@ -471,6 +485,11 @@ fn arc_of_360_degrees_equals_the_full_ring() {
          largest difference {dp:.2e} km, {dv:.2e} km/s",
         pa.len()
     );
+    // Tolerance: 1e-4 km and 1e-8 km/s. The ring and the arc kernels do the same
+    // operations, but the Metal compiler fuses the arithmetic differently in the
+    // two, so the f32 rounding of the kick differs. After 150 steps the measured
+    // difference is 9e-6 km and 1.4e-9 km/s; the limit is about 10 times that, and
+    // 1e-4 km is 7e-10 of the orbit radius, far below any physical effect.
     assert!(dp < 1e-4 && dv < 1e-8);
 }
 
@@ -542,4 +561,68 @@ fn chaos_shadows_take_the_same_rotations_as_their_particles() {
         assert!(wraps > 100, "many particles wrapped");
         assert!(max_sep < 50.0, "shadow wrapped like its particle");
     }
+}
+
+/// The arc is refused in mode C (no arc kernel there).
+#[test]
+#[ignore = "needs a GPU"]
+fn arc_is_refused_in_mode_c() {
+    let Some(_) = Gpu::new() else {
+        eprintln!("no GPU: skipped");
+        return;
+    };
+    let system = system(H_S, 10, false);
+    let (init, _) = ensemble(&system, 10);
+    let r = GpuBackend::with_options(
+        &arc_config(false, 10, 10.0, 0.0, None),
+        &system,
+        &init,
+        Options {
+            mode: Mode::C,
+            ..Default::default()
+        },
+    );
+    let msg = match r {
+        Err(e) => e.to_string(),
+        Ok(_) => panic!("mode C with an arc must fail"),
+    };
+    assert!(msg.contains("mode C"), "{msg}");
+}
+
+/// Cost of the wrap: 10^5 particles (all round the ring, so a 10 deg arc folds
+/// them), 300 steps, no moons (the cheapest kick, so the ratio is the largest), mode D+.
+#[test]
+#[ignore = "needs a GPU; prints times"]
+fn arc_cost() {
+    let Some(_) = Gpu::new() else {
+        eprintln!("no GPU: skipped");
+        return;
+    };
+    let steps = 1500;
+    let system = system(H_S, steps, false);
+    let n = 100_000;
+    let init = spread_ensemble(&system, n, 400.0);
+    let geom = ArcGeometry::new(10f64.to_radians(), 0.0, n0_of(&system)).unwrap();
+    let init_arc = fold_init(&geom, &init);
+    let mut times = Vec::new();
+    for arc in [false, true] {
+        let cfg = if arc {
+            arc_config(false, steps, 10.0, 0.0, None)
+        } else {
+            config(H_S, steps, false)
+        };
+        let i = if arc { &init_arc } else { &init };
+        let mut b = run(&cfg, &system, i, &[1], Mode::Dp, 64); // warm up
+        let t0 = std::time::Instant::now();
+        b.step(steps - 1).unwrap();
+        let _ = b.particles().unwrap();
+        times.push(t0.elapsed().as_secs_f64());
+    }
+    println!(
+        "{n} particles, {} steps: full ring {:.3} s, arc {:.3} s (x{:.3})",
+        steps - 1,
+        times[0],
+        times[1],
+        times[1] / times[0]
+    );
 }
