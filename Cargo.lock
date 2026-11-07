@@ -234,6 +234,7 @@ dependencies = [
 name = "fring-cpu"
 version = "0.1.0"
 dependencies = [
+ "fring-collide",
  "fring-model",
  "rayon",
  "serde",
@@ -244,6 +245,7 @@ dependencies = [
 name = "fring-gpu"
 version = "0.1.0"
 dependencies = [
+ "fring-collide",
  "fring-cpu",
  "fring-model",
  "pollster",

@@ -9,6 +9,7 @@ repository.workspace = true
 license.workspace = true
 
 [dependencies]
+fring-collide.workspace = true
 fring-model.workspace = true
 rayon.workspace = true
 

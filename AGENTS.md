@@ -134,6 +134,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --all
 cargo check -p fring-model --target wasm32-unknown-unknown   # fring-model must build for the web
 cargo check -p fring-gpu --target wasm32-unknown-unknown     # fring-gpu too (ICR-005: blocking items are native-only)
+cargo check -p fring-collide --target wasm32-unknown-unknown # fring-collide too (ICR-009: fring-cpu and fring-gpu depend on it)
 ```
 
 CI (`.github/workflows/ci.yml`) runs `cargo fmt --check`, clippy, the tests and the wasm32 check on macOS for each pull request and each push to `main`.
