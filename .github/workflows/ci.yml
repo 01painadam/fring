@@ -38,8 +38,8 @@ jobs:
       - name: Test
         run: cargo test --workspace
 
-      - name: fring-model, fring-io, fring-gpu and fring-web build for wasm32
-        run: cargo check -p fring-model -p fring-io -p fring-gpu -p fring-web --target wasm32-unknown-unknown
+      - name: fring-model, fring-io, fring-collide, fring-gpu and fring-web build for wasm32
+        run: cargo check -p fring-model -p fring-io -p fring-collide -p fring-gpu -p fring-web --target wasm32-unknown-unknown
 
       # web.rs is compiled only for wasm32, so the host clippy step does not see it.
       - name: fring-web clippy for wasm32

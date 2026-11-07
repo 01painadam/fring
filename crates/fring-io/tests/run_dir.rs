@@ -80,6 +80,7 @@ fn disk_run_dir_roundtrip() {
         steps_total: 2,
         collisions_since_last: 3,
         max_rel_energy_error: Some(1e-12),
+        ..StepStats::default()
     }];
     dir.write_stats_file(&rows).unwrap();
     assert_eq!(dir.read_stats_file().unwrap(), rows);
