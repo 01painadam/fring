@@ -1,6 +1,6 @@
 # ICR-009-IO: `fring-run` writes the `CollisionStats` fields to `stats.csv`
-Role: A5  Branch: ws/a5-icr-009-io  Status: review
-Updated: 2026-11-07 18:35
+Role: A5  Branch: ws/a5-icr-009-io  Status: done
+Updated: 2026-11-07 18:50
 
 ## Goal and acceptance criteria
 From `docs/interfaces/ICR-009.md` and `docs/snapshot-format.md` section 8 ("Collision columns"):
@@ -21,11 +21,11 @@ From `docs/interfaces/ICR-009.md` and `docs/snapshot-format.md` section 8 ("Coll
 - Definition of done: all pass. Log `runs/logs/icr-009-io-dod.log` (git-ignored): fmt, clippy, `cargo test --workspace` (261 passed, 0 failed, 44 ignored), the CI wasm32 line, fring-web wasm32 clippy.
 
 ## Next step (one concrete action)
-A0 review is done (PR #41 comment 6708830313). Merge when CI is green on the head commit. After the merge, set the board row to `done` and this file to Status: done.
+None. Task done: PR #41 merged (3fc452f) after the A0 review (PR #41 comment 6708830313) and green CI on d5affa7. K4 now waits only for K2 and K3.
 
 ## How to verify the current state
 ```sh
-git status -sb                                    # ws/a5-icr-009-io
+git log --oneline -1 main                         # includes 3fc452f (merge of PR #41)
 cargo test -p fring-io --test stats               # 9 passed
 cargo test -p fring-run refuses                   # 1 passed
 ```
