@@ -81,6 +81,9 @@ pub struct Tally {
     pub energy_loss_sq_km4_s4: f64,
     /// Cells with W σ g_max Δt / V_c > 1 (stochastic) or pairs with P > 1.
     pub overfull: u64,
+    /// Candidates with |g| > g_max, accepted with probability 1 (stochastic
+    /// models with the no-time-counter method, `SPEC.md` 5.3).
+    pub gmax_exceeded: u64,
     /// Collisions with overlap depth > 0.2 s (hard spheres).
     pub deep_collisions: u64,
 }
@@ -101,6 +104,7 @@ impl AddAssign for Tally {
         self.energy_loss_km2_s2 += o.energy_loss_km2_s2;
         self.energy_loss_sq_km4_s4 += o.energy_loss_sq_km4_s4;
         self.overfull += o.overfull;
+        self.gmax_exceeded += o.gmax_exceeded;
         self.deep_collisions += o.deep_collisions;
     }
 }
@@ -742,9 +746,10 @@ pub fn t7_haff<M: BoxModel>(
     let epsilon = 0.9;
     let law = Restitution::Constant { epsilon };
     let setup = match (kind, sample) {
-        (ModelKind::Stochastic, Sample::Full) => Setup::stochastic(30, 2.0, 0.02, law, 71),
+        // Full: about 7.2 × 10⁴ particles, so SE ≈ 0.51 % (limit 0.6 %).
+        (ModelKind::Stochastic, Sample::Full) => Setup::stochastic(33, 2.0, 0.02, law, 71),
         (ModelKind::Stochastic, Sample::Quick) => Setup::stochastic(16, 2.5, 0.02, law, 71),
-        (ModelKind::HardSphere, Sample::Full) => Setup::hard_sphere(54_000, 0.01, law, 71),
+        (ModelKind::HardSphere, Sample::Full) => Setup::hard_sphere(72_000, 0.01, law, 71),
         (ModelKind::HardSphere, Sample::Quick) => Setup::hard_sphere(4000, 0.01, law, 71),
     };
     let mut state = setup.initial_state(0);
