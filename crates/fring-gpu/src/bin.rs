@@ -426,7 +426,7 @@ pub fn cell_ds(prm: &[f32], ny: u32, alpha: Dsm, p: [Dsm; 3]) -> (Binned, [f64; 
         y += half;
         if y.hi < 0.0 && y.hi > -slack {
             y += d;
-        } else if !(y.hi < 0.0) && !negp(y - d) && (y - d).hi < slack {
+        } else if y.hi >= 0.0 && !negp(y - d) && (y - d).hi < slack {
             y -= d;
         }
     }
