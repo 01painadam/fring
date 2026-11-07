@@ -206,8 +206,10 @@ impl BoxModel for HardSphere {
                 continue;
             }
             // Back to the contact along the straight relative path: |d − g τ| = 2s, τ > 0.
+            // τ = (b + √disc) / |g|², written without the cancellation of b + √disc (b < 0).
             let gg = g.norm_squared();
-            let tau = (b + (b * b - gg * (d.norm_squared() - contact * contact)).sqrt()) / gg;
+            let inside = contact * contact - d.norm_squared();
+            let tau = inside / ((b * b + gg * inside).sqrt() - b);
             let dc = if tau <= dt_s { d - g * tau } else { d };
             let n_hat = dc / dc.norm();
             if let Some(imp) = pair::collide(g, n_hat, &self.params.restitution) {
