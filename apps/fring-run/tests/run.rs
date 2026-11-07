@@ -228,6 +228,15 @@ fn refuses_features_that_are_not_built_yet() {
             ),
             "K2",
         ),
+        (
+            replace(
+                &base,
+                "model = \"none\"",
+                "model = \"hard_sphere\"\nparticle_radius_km = 1.0e-5\n\
+                 [collisions.restitution]\nlaw = \"constant\"\nepsilon = 0.5",
+            ),
+            "K3",
+        ),
     ];
     for (text, task) in cases {
         let tmp = Tmp::new();
