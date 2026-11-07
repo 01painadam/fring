@@ -72,7 +72,7 @@ Rules (full text in `AGENTS.md` and `CLAUDE.md`):
 | ICR-009-IO | `fring-run` writes the `CollisionStats` fields to `stats.csv` (ICR-009) | A5 | done | ws/a5-icr-009-io | ICR-009-IMPL |
 | K1-REFS | Open the five references of `fring-collide/SPEC.md` (Bird 1994, Bridges et al. 1984, Carnahan and Starling 1969, Haff 1983, van Noije and Ernst 1998); cite the Bridges et al. power-law values in `params/sources.md` | A1 | done | ws/a1-k1-refs | K1 |
 | A5-ANALYSIS | A2-ANALYSIS follow-ups: h/4 test for `eccentric_band`, `closest` on `eccentric_band`, second apse phase at 30 years | A8 | done | ws/a8-a5-analysis | Gate G3 |
-| E1-ICR | Write ICR-004: flag and freeze on the CPU, radius rule twin to `fring-model/src/physics/`, sub-stepping trigger and scheme, REBOUND comparison set | A2 | todo | | Gate G3, A5-ANALYSIS |
+| E1-ICR | Write ICR-004: flag and freeze on the CPU, radius rule twin to `fring-model/src/physics/`, sub-stepping trigger and scheme, REBOUND comparison set | A2 | doing | ws/a2-e1-icr | Gate G3, A5-ANALYSIS |
 | L3-PARAMS | GR03b moon masses as a variant file in `params/` (nominal values unchanged) | A1 | done | ws/a1-l3-params | Gate G3 |
 | A4-ANALYSIS | L3 deciding run: moon Lyapunov rate with the GR03b masses; GR03 method on our masses | A8 | todo | | L3-PARAMS |
 | K2 | Stochastic collision model on CPU | A4 | done | ws/a4-k2 | K1, ICR-009-IMPL |
