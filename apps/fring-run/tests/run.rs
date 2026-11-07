@@ -222,10 +222,11 @@ fn refuses_features_that_are_not_built_yet() {
             replace(
                 &base,
                 "model = \"none\"",
-                "model = \"stochastic\"\nparticle_radius_km = 0.001\nweight = 1.0e9\ncell_size_km = 1.0\n\
+                "model = \"stochastic\"\nparticle_radius_km = 1.0e-5\nweight = 8.0e8\n\
+                 cell_radial_km = 0.05\ncell_azimuthal_km = 10.0\ncell_vertical_km = 0.04\n\
                  [collisions.restitution]\nlaw = \"constant\"\nepsilon = 0.5",
             ),
-            "K1",
+            "K2",
         ),
     ];
     for (text, task) in cases {
