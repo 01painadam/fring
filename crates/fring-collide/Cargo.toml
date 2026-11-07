@@ -8,8 +8,18 @@ publish.workspace = true
 repository.workspace = true
 license.workspace = true
 
+[features]
+# The shared statistical tests and the slow reference models (SPEC 11). Off by
+# default, so that fring-cpu, fring-gpu and the web build do not compile them.
+# This crate's own tests turn it on through the dev-dependency below; K3 and K5
+# do the same in the dev-dependencies of their crates.
+testkit = []
+
 [dependencies]
 fring-model.workspace = true
+
+[dev-dependencies]
+fring-collide = { path = ".", features = ["testkit"] }
 
 [lints]
 workspace = true

@@ -125,7 +125,7 @@ impl BoxModel for AllPairs {
                     let g = vel_km_s[i] - vel_km_s[j];
                     let p_pair = factor * g.norm();
                     if p_pair > 1.0 {
-                        tally.overfull += 1;
+                        tally.stats.overfull_cells += 1;
                     }
                     // Counter: the first particle of the pair and the place of the second.
                     let block = |draw: u16| {
@@ -136,7 +136,7 @@ impl BoxModel for AllPairs {
                             draw,
                         })
                     };
-                    tally.candidates += 1;
+                    tally.stats.candidates += 1;
                     let w = block(2 * b as u16);
                     if u01_f64(w[0], w[1]) >= p_pair {
                         continue;
@@ -219,7 +219,7 @@ impl BoxModel for HardSphere {
                 vel_km_s[j] = uj;
                 tally.add_collision(imp.energy_loss_km2_s2);
                 if contact - d.norm() > 0.1 * contact {
-                    tally.deep_collisions += 1;
+                    tally.stats.deep_collisions += 1;
                 }
             }
         }
