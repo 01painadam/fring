@@ -1,6 +1,6 @@
 # Collision specification
 
-Owner: A4. Task K1. Status: **draft 0.1, for A0 review and AJ's confirmation.** Items marked **[AJ]** wait for AJ's choice (section 13).
+Owner: A4. Task K1. Status: **draft 0.2, for A0 review and AJ's confirmation.** AJ chose the four options of section 13 on 2026-11-07.
 
 This file is a shared interface (`AGENTS.md`). The stochastic model on the CPU (K2), the hard-sphere model on the CPU (K3), the stochastic model on the GPU (K5) and the cross-check (K4) all follow it. To change it after AJ confirms it, write an ICR.
 
@@ -15,7 +15,7 @@ This file is a shared interface (`AGENTS.md`). The stochastic model on the CPU (
 
 In scope: the collision operator, the two models, where they act in the time step, their random numbers, diagnostics and tests.
 
-Not in v1 **[AJ, Q1]**:
+Not in v1 (AJ, Q1):
 
 - particle spin and surface friction (tangential restitution is 1),
 - a size distribution (all particles have one radius s and one weight W),
@@ -67,7 +67,7 @@ Rust reference: `fring_collide::pair::collide` (K1). The WGSL twin (K5) must agr
 
 The cell of a particle comes from its local coordinates (PLAN 4.2; `physics::frames`): x = ρ − a₀ (radial), y = a₀ φ (along the reference circle, φ the longitude in the rotating frame), z (vertical).
 
-- Three cell sizes: L_x (radial), L_y (azimuthal), L_z (vertical) **[AJ, Q2]**. The config today has one `cell_size_km`; ICR-009 asks for three.
+- Three cell sizes: L_x (radial), L_y (azimuthal), L_z (vertical) (AJ, Q2). The config today has one `cell_size_km`; ICR-009 asks for three.
 - Cell index: (⌊x / L_x⌋, ⌊(φ mod 2π) a₀ / L_y⌋, ⌊z / L_z⌋), with φ mod 2π in [0, 2π).
 - L_y is adjusted so that a whole number of cells fills the domain: n_y = round(D / L_y,config), L_y = D / n_y, where D = 2π a₀ for the full ring or the arc length for the arc domain (D1). No cell crosses the wrap.
 - Cell volume V_c = L_x L_y L_z.
@@ -129,7 +129,7 @@ Philox stream `Stream::COLLISIONS` (`fring_model::rng`). For a cell:
 - f64 uniforms: `u01_f64(hi, lo)` on the two words. f32 uniforms (GPU): `u01_f32` of the first word.
 - `draw` has 16 bits, so a cell can have at most 32,767 candidates in one step. More is an error (the cells are too large).
 
-**Determinism [AJ, Q4]:** the same config and seed on the same backend give bit-identical results. On the GPU the cell members must be in particle-id order before pair selection (K5-BIN). The CPU and the GPU do not have to agree bit for bit (rounding in the acceptance test differs); they agree statistically (K5).
+**Determinism (AJ, Q4):** the same config and seed on the same backend give bit-identical results. On the GPU the cell members must be in particle-id order before pair selection (K5-BIN). The CPU and the GPU do not have to agree bit for bit (rounding in the acceptance test differs); they agree statistically (K5).
 
 ### 5.6 Limits that a run reports
 
@@ -154,7 +154,7 @@ From `[collisions.restitution]` (`fring_model::config::Restitution`), with vₙ 
 ## 7. Place in the time step
 
 - The collision step acts on the synchronised state at the end of an integrator step (after the full drift-kick-drift, and after all sub-steps of E1). It does not act inside a step.
-- **[AJ, Q3]** It acts every k integrator steps (`every_steps`, default 1), with Δt_c = k h. The hard-sphere model always uses k = 1.
+- It acts every k integrator steps (`every_steps`, default 1; AJ, Q3), with Δt_c = k h. The hard-sphere model always uses k = 1.
 - In the arc domain (D1), the wrap happens before the cells are found.
 
 At 150 steps per orbit and k = 1, h = 356 s. For an optical depth τ, the collision frequency of a particle in a thin layer is about 2.55 τ Ω (appendix A), so about 16 τ collisions per orbit: 4.8 per orbit and 0.032 per step for τ = 0.3. So k = 1 is well inside the 0.1 limit of section 5.6, and k = 2 or 3 is possible.
@@ -163,10 +163,12 @@ At 150 steps per orbit and k = 1, h = 356 s. For an optical depth τ, the collis
 
 - Real particles: W = 1, radius s.
 - At the end of each integrator step, find all pairs with |rᵢ − rⱼ| < 2s, with a cell list of cell edge ≥ 2s in local coordinates (each pair once; across the y wrap).
-- For each overlapping pair: n̂ = (rᵢ − rⱼ) / |rᵢ − rⱼ|, g = vᵢ − vⱼ (inertial; for a touching pair the frame does not change gₙ, because the rotation term Ω × Δr is normal to n̂). Collide (section 4) only if gₙ < 0.
-- Order: pairs sorted by (min id, max id); each pair at most once per step; gₙ is computed again with the current velocities when the pair is processed.
+- For each overlapping pair, with d = rᵢ − rⱼ and g = vᵢ − vⱼ (inertial; for a touching pair the frame does not change gₙ, because the rotation term Ω × Δr is normal to n̂): skip the pair if d · g ≥ 0 (it separates).
+- **Contact normal.** Go back along the straight relative path to the contact: τ > 0 with |d − g τ| = 2s, that is τ = (d·g + √((d·g)² − |g|² (|d|² − 4s²))) / |g|². If τ ≤ h, n̂ = (d − g τ) / |d − g τ|; else (the pair overlapped before this step) n̂ = d / |d|. Then collide (section 4). The relative path over one step is straight to a very good approximation (the tidal acceleration across 2s is tiny), and the contact normal removes a bias: with n̂ = d / |d| a pair that is found deep inside the overlap gets a too grazing normal, so too little energy loss.
+- Order: pairs sorted by (min id, max id); each pair at most once per step; d · g is computed again with the current velocities when the pair is processed.
 - No position correction. An overlapping pair that separates is left alone.
-- Overlap depth δ = 2s − |rᵢ − rⱼ|. A collision with δ > 0.2 s (10 % of the contact distance) counts as **deep**. A run with more than 1 % deep collisions has too large a step for its speeds: about c h must be ≲ 0.1 × 2s.
+- Overlap depth δ = 2s − |rᵢ − rⱼ|. A collision with δ > 0.2 s (10 % of the contact distance) counts as **deep**. A run with more than 1 % deep collisions has too large a step for its speeds.
+- **Step size.** A pair whose relative path crosses the contact sphere inside one step (chord shorter than |g| h) is not found. For the impact parameter uniform over the disc, the missed fraction is about (|g| h / 4s)² for each g; averaged over collisions it is 1.57 (⟨g⟩ h / 4s)². So ⟨g⟩ h = 0.1 s (the setup of the K1 tests) misses 0.1 %, and ⟨g⟩ h = 0.4 s misses 1.6 %.
 
 ## 9. Diagnostics
 
@@ -183,7 +185,7 @@ Per stats interval, each model reports (ICR-009 adds them to `StepStats`):
 
 **What peculiar velocities do not remove.** The core has a forced eccentricity e = 0.00235. Its streamline is tilted against the reference circle by up to e: across L_y it moves radially by e L_y, and its velocity changes by about e Ω L_y. Per 10 km of L_y: 23.5 m and 2.8 mm s⁻¹. So use e L_y ≤ L_x / 2 and e Ω L_y ≤ 0.3 c. For L_x = 50 m and c = 1 cm s⁻¹, both give L_y ≲ 10 km. (Cells that follow the core's streamline would remove this; not in v1.)
 
-**Occupancy.** In a 5° arc (12,237 km) with 10⁶ superparticles there are 81.7 per km of arc; in the full ring (881,044 km) only 1.1 per km. For a Gaussian core with w_x = 300 m, L_x = 50 m, L_z = H/2 and L_y = 10 km, the particle-weighted occupancy is about 817 × 50/(√(4π) 300) × 0.5/√(4π) ≈ 5.4. So a resolved core needs the arc domain, and 10⁷ superparticles (occupancy about 54) are much better than 10⁶. **[AJ, Q2]** asks about a column cell, which raises the occupancy.
+**Occupancy.** In a 5° arc (12,237 km) with 10⁶ superparticles there are 81.7 per km of arc; in the full ring (881,044 km) only 1.1 per km. For a Gaussian core with w_x = 300 m, L_x = 50 m, L_z = H/2 and L_y = 10 km, the particle-weighted occupancy is about 817 × 50/(√(4π) 300) × 0.5/√(4π) ≈ 5.4. So a resolved core needs the arc domain, and 10⁷ superparticles (occupancy about 54) are much better than 10⁶. Column cells (x and y only) would raise the occupancy about 7 times; AJ chose box cells for v1 (Q2), so column cells would need an ICR.
 
 **Superparticle weight.** Only W σ enters the stochastic model. For a core of width 1 km and τ = 0.3, the number of real particles of radius 1 cm is τ × width × circumference / (π s²) = 0.3 × 1 × 881,044 / (π × 10⁻¹⁰) ≈ 8.4 × 10¹⁴, so W ≈ 8 × 10⁸ for 10⁶ superparticles in the full ring.
 
@@ -195,7 +197,9 @@ The tests are in `fring_collide::testkit` (K1). Each model runs them through one
 
 **Box.** A periodic cube with no forces. Positions are uniform, velocities are Maxwellian with dispersion c and zero mean. Positions stream freely (x += u Δt, then wrap). The stochastic model divides the box into cells; the hard-sphere model uses its cell list. A box test calls the model with box positions as local coordinates and box velocities as peculiar velocities.
 
-**Sample-size rule (M17).** Fixed seeds. Each statistical test asserts a minimum sample so that the standard error (SE) is at most one fifth of its tolerance, and prints the sample size, the measured value, the theory value and the SE.
+**Sample-size rule (M17).** Fixed seeds. Each statistical test asserts a minimum sample so that the standard error (SE) is at most one fifth of its tolerance, and prints the sample size, the measured value, the theory value and the SE. These are the **full** tests; they take seconds to minutes in release mode, so they are `#[ignore]` and run with `--release -- --ignored`. Each also has a **quick** form for every `cargo test` (SE ≤ tolerance / 2, error within 5 SE), which finds large mistakes only.
+
+**Setups** (`testkit::Setup`; c = 1 cm s⁻¹ at the start in all of them). Stochastic: cubic cells of 1 km, a step in which a particle moves 0.1 cell, and W chosen so that a particle collides with probability 0.01 to 0.02 per step (0.05 in T9). Hard spheres: s = 1 m, ⟨g⟩ h = 0.1 s, filling factor D = 0.005 (T4, T6), 0.01 (T7, T9) or 0.05 (T5, where D does not enter the theory).
 
 | ID | Test | Theory | Tolerance |
 |---|---|---|---|
@@ -203,27 +207,29 @@ The tests are in `fring_collide::testkit` (K1). Each model runs them through one
 | K1-T2 | Impact geometry, 10⁶ draws for fixed g | cos² θ and ψ / 2π uniform on (0, 1); \|n̂\| = 1 | Kolmogorov-Smirnov statistic below the 0.1 % critical value (1.95 / √N) for each; \|n̂\| − 1 ≤ 10⁻¹⁴ |
 | K1-T3 | Restitution laws | Section 6 | Exact values at chosen points; ε = 1 at and below v_c; continuous at v_c |
 | K1-T4 | Collision rate in a box, ε = 1 | Events per step = Σ_cells ½ N_c (N_c − 1) W σ ⟨g⟩ Δt / V_c, ⟨g⟩ = 4c/√π. Hard spheres: ½ N (N − 1) σ ⟨g⟩ χ Δt / V with χ = (1 − D/2)/(1 − D)³ and D ≤ 0.005 | 2 % (PLAN section 10). Stochastic: mean occupancy 2, 5 and 20 (2 catches the N_c² mistake, which is 50 % high there) |
-| K1-T5 | Energy loss per collision against ε. New Maxwellian for each trial, at most 1 % of particles collide per trial | Constant ε: (1 − ε²) c² per collision (appendix A), for ε in {0, 0.5, 0.9, 1}. One power-law case: the integral of appendix A, by quadrature | 2 %; ε = 1 gives 0 exactly. The tally agrees with the change of kinetic energy to 10⁻¹⁰ |
-| K1-T6 | Momentum and energy over a box run (10³ steps) | Total momentum constant; ε = 1: energy constant | Momentum: ≤ 4 ε_mach max\|u\| × collisions per component. Energy (ε = 1): 10⁻¹² relative |
-| K1-T7 | Homogeneous cooling, ε = 0.9 | Haff (1983): T(t) = T₀ / (1 + t / t₀)², t₀ = 6 / ((1 − ε²) ω₀), ω₀ = n σ 4c₀/√π. The non-Gaussian correction is 0.3 % at ε = 0.9 (van Noije and Ernst 1998) | 2 % on T at t = t₀ and t = 3 t₀ |
+| K1-T5 | Energy loss per collision against ε. New Maxwellian for each trial, at most 1 % of particles collide per trial | Constant ε: (1 − ε²) c² per collision (appendix A), for ε in {0, 0.5, 0.9, 1}. One power-law case: the integral of appendix A, by quadrature | 2 %; ε = 1 gives 0 exactly |
+| K1-T6 | Momentum and energy over a box run (10³ steps) | Total momentum constant; ε = 1: energy constant | Momentum: ≤ 4 ε_mach max\|u\| × collisions per component. Energy: ε = 1, 10⁻¹² relative; ε = 0.5, K₀ − K_end = Σ ΔK (the tally) to 10⁻¹⁰ relative |
+| K1-T7 | Homogeneous cooling, ε = 0.9. The step grows as 1/c, so each step has about the same number of collisions | Haff (1983): d(c²)/dt = −(1/3)(1 − ε²) ω c², so T(t) = T₀ / (1 + t / t₀)² with t₀ = 6 / ((1 − ε²) ω₀) and ω₀ = n σ 4c₀/√π (× χ for hard spheres). The theory is integrated over the same steps; for the stochastic model with the pairs of each cell at each step. The non-Gaussian correction is 0.3 % at ε = 0.9 (van Noije and Ernst 1998) | 3 % on T / T₀ at t = t₀ (T / T₀ = 1/4). SE from Σ ΔK² / K₀. The full form needs about 10⁵ particles (SE ≈ 1.4 / √N of T(t₀)) |
 | K1-T8 | Frames (production path, each backend) | (a) a particle on a circular equatorial orbit has u = 0; (b) a cold ring of circular orbits stays cold with collisions on; (c) cell index at the y wrap, at negative x and z, and n_y L_y = D | (a) \|u\| ≤ 10⁻¹³ km s⁻¹ (f64); (b) after 10 orbits the peculiar velocity dispersion with collisions is within 10⁻¹² km s⁻¹ of the run without; (c) exact |
 | K1-T9 | Determinism | Same seed: same velocities, bit for bit. Another seed: other velocities, and K1-T4 still passes | Exact |
 
 The GPU (K5) runs K1-T1 (through the WGSL twin), T4 to T7 and T9 on its own path, and T8 on the GPU state. "CPU and GPU agree statistically" means: each GPU result is within its tolerance, and each CPU and GPU pair of results is within 4 combined SE.
 
-K1 also adds an all-pairs reference model (each pair in a cell collides with probability P_ij; slow, test-only). The testkit must pass with it, so a failing K2, K3 or K5 points to the model, not the test.
+K1 also adds two slow reference models (`testkit::reference`, test use only): `AllPairs` (each pair of a cell collides with probability P_ij, without the NTC method) and `HardSphere` (section 8 in the box). The testkit passes with both, so a failing K2, K3 or K5 points to the model, not the test. K1-T8 (b) needs the integrator, so K2 and K5 write it.
 
 ## 12. Precision
 
 - CPU: f64 throughout.
 - GPU: the speed of a particle is 16.5 km s⁻¹ and one f32 step at that speed is 1.9 mm s⁻¹, which is as large as the peculiar velocities. So the GPU must compute uᵢ = vᵢ − v_circ φ̂ᵢ from the double-single state (error ≤ 10⁻³ c of the run), and add Δu to the double-single velocity. uᵢ, g and Δu may be f32. The same holds for the cell coordinates: f32 resolves ρ only to 15.6 m at 140,222 km, so x = ρ − a₀ and y come from the double-single position.
 
-## 13. Open questions for AJ
+## 13. AJ decisions (2026-11-07)
 
-- **Q1, physics scope.** Recommended: smooth identical spheres, no spin or friction, one size, no Enskog factor (section 2). Alternatives: add friction and spin now (needs a spin state per particle, 3 more floats), or a size distribution now (weights and radii per particle).
-- **Q2, cell shape.** Recommended: box cells with three sizes L_x, L_y, L_z (ICR-009). Alternative: column cells (L_x, L_y only) with the rate computed from each cell's measured thickness, about 7 times higher occupancy but it assumes a Gaussian vertical profile in each cell. Or keep one cube size (as now), which forces L_y = L_x and gives too few particles per cell.
-- **Q3, collision cadence.** Recommended: `every_steps`, default 1. Alternative: every step only.
-- **Q4, determinism.** Recommended: required on each backend (the GPU sorts cell members by id). Alternative: statistics only, which makes K5-BIN cheaper but a GPU bug harder to reproduce.
+AJ chose the recommended option of each question in the Claude Code session of 2026-11-07.
+
+- **Q1, physics scope: smooth identical spheres.** No spin or friction, one size, no Enskog factor (section 2). Not chosen: friction and spin (a spin state per particle), a size distribution (weight and radius per particle).
+- **Q2, cell shape: box cells with three sizes** L_x, L_y, L_z (ICR-009). Not chosen: column cells (about 7 times the occupancy, but a Gaussian vertical profile is assumed in each cell); one cube size (too few particles per cell).
+- **Q3, collision cadence: `every_steps`, default 1.** Not chosen: every step only.
+- **Q4, determinism: required on each backend.** The GPU sorts cell members by id. Not chosen: statistics only.
 
 ## 14. Interface changes
 
