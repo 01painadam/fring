@@ -10,9 +10,13 @@
 //! - [`spike`]: the precision options A, B, B+, C, D (Rust twins of
 //!   `shaders/spike.wgsl`).
 //! - [`spike_gpu`]: the same options on the GPU.
+//!
+//! Task K5-BIN: [`bin`] sorts the particles by collision cell (hashed
+//! buckets, counting sort) with a Rust twin.
 
 #[cfg(not(target_arch = "wasm32"))]
 pub mod backend;
+pub mod bin;
 pub mod chaos;
 pub mod ds;
 pub mod gpu;
