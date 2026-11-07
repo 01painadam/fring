@@ -85,7 +85,7 @@ fn spread_ensemble(
 ) -> fring_model::InitialState {
     let field = SaturnField::<f64>::from_params(&system.saturn);
     let mut p = fring_model::Particles::with_capacity(n);
-    let mut rng = Rng(0x0DDB_A11_C0FF_EE01);
+    let mut rng = Rng(0x00DD_BA11_C0FF_EE01);
     for i in 0..n {
         let (_, e, inc) = ORBIT_TYPES[i % 3];
         let el = fring_model::physics::EpicycleElements {
