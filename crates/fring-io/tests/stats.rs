@@ -8,24 +8,28 @@ fn rows() -> Vec<StepStats> {
             steps_total: 0,
             collisions_since_last: 0,
             max_rel_energy_error: None,
+            ..StepStats::default()
         },
         StepStats {
             time_s: 0.1 + 0.2,
             steps_total: u64::MAX,
             collisions_since_last: 12345,
             max_rel_energy_error: Some(1.2345678901234567e-13),
+            ..StepStats::default()
         },
         StepStats {
             time_s: 1e300,
             steps_total: 5,
             collisions_since_last: 1,
             max_rel_energy_error: Some(f64::NAN),
+            ..StepStats::default()
         },
         StepStats {
             time_s: -5e-324,
             steps_total: 6,
             collisions_since_last: 2,
             max_rel_energy_error: Some(f64::INFINITY),
+            ..StepStats::default()
         },
     ]
 }

@@ -25,7 +25,7 @@ pub mod system;
 pub mod units;
 pub mod vec3;
 
-pub use backend::{Backend, ChaosReport, StepStats};
+pub use backend::{Backend, ChaosReport, CollisionStats, StepStats};
 pub use config::RunConfig;
 pub use error::{Error, Result};
 pub use particles::{InitialState, ParticleView, Particles};

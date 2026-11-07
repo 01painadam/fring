@@ -80,10 +80,51 @@ pub struct StepStats {
     pub time_s: f64,
     /// Steps done since the start of the run.
     pub steps_total: u64,
-    /// Collisions since the previous call to [`Backend::stats`].
+    /// Collisions (accepted pairs) since the previous call to
+    /// [`Backend::stats`]. This is the only count of accepted pairs
+    /// (ICR-009, amendment A1).
     pub collisions_since_last: u64,
     /// Largest |ΔE / E| of any particle since the start of the run, where E
     /// is the energy per unit mass in Saturn's field. `None` when the backend
     /// does not track it (energy is not conserved when moons are present).
     pub max_rel_energy_error: Option<f64>,
+    /// Collision diagnostics since the previous call to [`Backend::stats`]
+    /// (ICR-009). All zero when the run has no collisions.
+    pub collision: CollisionStats,
+}
+
+/// Collision diagnostics (`crates/fring-collide/SPEC.md` section 9, ICR-009).
+///
+/// Every field counts since the previous call to [`Backend::stats`]. "Over
+/// collision steps" means a sum over each collision step in that interval
+/// (one collision step every `every_steps` integrator steps). A field that
+/// does not apply to the collision model stays zero.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct CollisionStats {
+    /// Kinetic energy lost in collisions, Σ ¼ (1 − ε²) gₙ² over the accepted
+    /// pairs, per unit superparticle mass, in km² s⁻² (gₙ: normal component
+    /// of the relative velocity, km/s).
+    pub energy_loss_km2_s2: f64,
+    /// Stochastic: candidate pairs tested.
+    pub candidates: u64,
+    /// Stochastic: cells with at least one particle, summed over collision
+    /// steps.
+    pub occupied_cells: u64,
+    /// Stochastic: Σ N_c over occupied cells and collision steps (N_c: the
+    /// number of superparticles in a cell).
+    pub occupancy_sum: u64,
+    /// Stochastic: Σ N_c² over occupied cells and collision steps.
+    pub occupancy_sq_sum: u64,
+    /// Stochastic: particles in cells with N_c < 2 (so no partner), summed
+    /// over collision steps.
+    pub lonely_particles: u64,
+    /// Stochastic: cells with W σ g_max Δt_c / V_c > 1, summed over collision
+    /// steps (SPEC 5.6).
+    pub overfull_cells: u64,
+    /// Stochastic: candidates with |g| > g_max, accepted with probability 1
+    /// (SPEC 5.3; ICR-009, amendment A2).
+    pub gmax_exceeded: u64,
+    /// Hard-sphere: collisions with overlap depth δ > 0.2 s, with s the
+    /// particle radius (SPEC 8).
+    pub deep_collisions: u64,
 }
