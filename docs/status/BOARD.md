@@ -68,7 +68,7 @@ Rules (full text in `AGENTS.md` and `CLAUDE.md`):
 |---|---|---|---|---|---|
 | W2-MOONLET | Web: moonlet scenario (orbital radius, packing radius, velocity mode; 180° from Prometheus) and a view that turns with the moonlet centre (ICR-008; added by AJ) | A7 | done | ws/a7-w2-moonlet | Gate G3 |
 | K1 | `fring-collide/SPEC.md` and the shared statistical tests (A0 approves, AJ confirms; Opus) | A4 | done | ws/a4-k1 | Gate G3 |
-| ICR-009-IMPL | Implement ICR-009 with amendments A1 to A3: three cell sizes and `every_steps` in `[collisions]`, `CollisionStats` in `StepStats`, `fring-collide` as a dependency of `fring-cpu` and `fring-gpu`, CI wasm32 line, column list in `docs/snapshot-format.md` (A5 reviews the `fring-io` and `fring-run` test changes) | A0 | review | ws/a0-icr-009-impl | K1 |
+| ICR-009-IMPL | Implement ICR-009 with amendments A1 to A3: three cell sizes and `every_steps` in `[collisions]`, `CollisionStats` in `StepStats`, `fring-collide` as a dependency of `fring-cpu` and `fring-gpu`, CI wasm32 line, column list in `docs/snapshot-format.md` (A5 reviews the `fring-io` and `fring-run` test changes) | A0 | done | ws/a0-icr-009-impl | K1 |
 | ICR-009-IO | `fring-run` writes the `CollisionStats` fields to `stats.csv` (ICR-009) | A5 | todo | | ICR-009-IMPL |
 | K1-REFS | Open the five references of `fring-collide/SPEC.md` (Bird 1994, Bridges et al. 1984, Carnahan and Starling 1969, Haff 1983, van Noije and Ernst 1998); cite the Bridges et al. power-law values in `params/sources.md` | A1 | todo | | K1 |
 | A5-ANALYSIS | A2-ANALYSIS follow-ups: h/4 test for `eccentric_band`, `closest` on `eccentric_band`, second apse phase at 30 years | A8 | todo | | Gate G3 |
