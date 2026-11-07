@@ -7,6 +7,12 @@ use fring_model::config::{
 
 const EXAMPLE: &str = include_str!("data/example-run.toml");
 
+/// The `[collisions]` example of ICR-009, without `every_steps` (default 1).
+/// It replaces `model = "none"` in `EXAMPLE`.
+const STOCHASTIC: &str = "model = \"stochastic\"\nparticle_radius_km = 1.0e-5\nweight = 8.0e8\n\
+                          cell_radial_km = 0.05\ncell_azimuthal_km = 10.0\ncell_vertical_km = 0.04\n\
+                          [collisions.restitution]\nlaw = \"constant\"\nepsilon = 0.5";
+
 fn example() -> RunConfig {
     RunConfig::from_toml_str(EXAMPLE).expect("example config must be valid")
 }
@@ -86,11 +92,7 @@ fn every_variant_parses_and_round_trips() {
              eccentricity = 0.0024\napse_longitude_deg = 0.0",
             "kind = \"clump\"\nsemi_major_axis_km = 140220.0\nlongitude_deg = 90.0\nsigma_km = 2.0",
         ),
-        (
-            "model = \"none\"",
-            "model = \"stochastic\"\nparticle_radius_km = 0.001\nweight = 1.0e9\ncell_size_km = 1.0\n\
-             [collisions.restitution]\nlaw = \"constant\"\nepsilon = 0.5",
-        ),
+        ("model = \"none\"", STOCHASTIC),
         (
             "model = \"none\"",
             "model = \"hard_sphere\"\nparticle_radius_km = 0.001\n\
@@ -118,13 +120,18 @@ fn every_variant_parses_and_round_trips() {
         seen[2].particles.distribution,
         Distribution::Clump { .. }
     ));
-    assert!(matches!(
+    assert_eq!(
         seen[3].collisions,
         Collisions::Stochastic {
-            restitution: Restitution::Constant { epsilon },
-            ..
-        } if epsilon == 0.5
-    ));
+            particle_radius_km: 1.0e-5,
+            weight: 8.0e8,
+            cell_radial_km: 0.05,
+            cell_azimuthal_km: 10.0,
+            cell_vertical_km: 0.04,
+            every_steps: 1,
+            restitution: Restitution::Constant { epsilon: 0.5 },
+        }
+    );
     assert!(matches!(
         seen[4].collisions,
         Collisions::HardSphere {
@@ -278,6 +285,59 @@ fn out_of_range_values_are_errors() {
             RunConfig::from_toml_str(&EXAMPLE.replacen(from, to, 1)),
             needle,
         );
+    }
+}
+
+/// ICR-009: three cell sizes, each finite and > 0; `every_steps` ≥ 1 with
+/// default 1; the old single `cell_size_km` is an unknown field.
+#[test]
+fn stochastic_cells_and_cadence_are_checked() {
+    let stochastic = |from: &str, to: &str| {
+        assert!(
+            STOCHASTIC.contains(from),
+            "test setup: {from:?} not in STOCHASTIC"
+        );
+        EXAMPLE.replacen("model = \"none\"", &STOCHASTIC.replacen(from, to, 1), 1)
+    };
+
+    let every = "cell_vertical_km = 0.04\nevery_steps = 3";
+    let c = RunConfig::from_toml_str(&stochastic("cell_vertical_km = 0.04", every)).unwrap();
+    assert!(matches!(
+        c.collisions,
+        Collisions::Stochastic { every_steps: 3, .. }
+    ));
+    let again = RunConfig::from_toml_str(&c.to_toml_string().unwrap()).unwrap();
+    assert_eq!(again, c);
+
+    let cases = [
+        (
+            "cell_radial_km = 0.05",
+            "cell_radial_km = 0.0",
+            "cell_radial_km",
+        ),
+        (
+            "cell_azimuthal_km = 10.0",
+            "cell_azimuthal_km = -10.0",
+            "cell_azimuthal_km",
+        ),
+        (
+            "cell_vertical_km = 0.04",
+            "cell_vertical_km = inf",
+            "cell_vertical_km",
+        ),
+        (
+            "cell_vertical_km = 0.04",
+            "cell_vertical_km = 0.04\nevery_steps = 0",
+            "every_steps",
+        ),
+        (
+            "cell_radial_km = 0.05",
+            "cell_radial_km = 0.05\ncell_size_km = 1.0",
+            "cell_size_km",
+        ),
+    ];
+    for (from, to, needle) in cases {
+        assert_config_error(RunConfig::from_toml_str(&stochastic(from, to)), needle);
     }
 }
 

@@ -285,31 +285,48 @@ pub enum MoonletVelocity {
     Circular,
 }
 
-/// `[collisions]` section, selected by `model` (`docs/PLAN.md` section 7.5).
-/// Task K1 may refine these fields through an interface change request.
+/// `[collisions]` section, selected by `model` (`docs/PLAN.md` section 7.5,
+/// `crates/fring-collide/SPEC.md`, ICR-009).
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "model", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Collisions {
     /// No collisions: test particles (`model = "none"`).
     None,
-    /// Stochastic superparticle model (`model = "stochastic"`).
+    /// Stochastic superparticle model (`model = "stochastic"`). The cells are
+    /// boxes in local guiding-centre coordinates (SPEC 5.1).
     Stochastic {
         /// Radius s of one real particle in km.
         particle_radius_km: f64,
         /// Number W of real particles that one superparticle represents.
         weight: f64,
-        /// Edge length of a collision cell in local coordinates, in km.
-        cell_size_km: f64,
+        /// Radial cell size L_x in km.
+        cell_radial_km: f64,
+        /// Azimuthal cell size L_y in km. The backend uses D / round(D / L_y),
+        /// with D the azimuthal length of the domain, so that whole cells
+        /// fill the domain (SPEC 5.1).
+        cell_azimuthal_km: f64,
+        /// Vertical cell size L_z in km.
+        cell_vertical_km: f64,
+        /// One collision step every this many integrator steps (≥ 1, default
+        /// 1). The collision time step is `every_steps` × `time.step_s`
+        /// (SPEC 7).
+        #[serde(default = "default_every_steps")]
+        every_steps: u64,
         /// Normal coefficient of restitution (`[collisions.restitution]`).
         restitution: Restitution,
     },
     /// Hard-sphere model with real overlap detection (`model = "hard_sphere"`).
+    /// It acts at every integrator step.
     HardSphere {
         /// Particle radius in km.
         particle_radius_km: f64,
         /// Normal coefficient of restitution (`[collisions.restitution]`).
         restitution: Restitution,
     },
+}
+
+fn default_every_steps() -> u64 {
+    1
 }
 
 /// Normal coefficient of restitution ε(vₙ), selected by `law`.
@@ -530,12 +547,21 @@ impl Collisions {
             Collisions::Stochastic {
                 particle_radius_km,
                 weight,
-                cell_size_km,
+                cell_radial_km,
+                cell_azimuthal_km,
+                cell_vertical_km,
+                every_steps,
                 restitution,
             } => {
                 positive("collisions.particle_radius_km", particle_radius_km)?;
                 positive("collisions.weight", weight)?;
-                positive("collisions.cell_size_km", cell_size_km)?;
+                positive("collisions.cell_radial_km", cell_radial_km)?;
+                positive("collisions.cell_azimuthal_km", cell_azimuthal_km)?;
+                positive("collisions.cell_vertical_km", cell_vertical_km)?;
+                require(
+                    every_steps >= 1,
+                    "collisions.every_steps must be at least 1".to_string(),
+                )?;
                 restitution.validate()
             }
             Collisions::HardSphere {
