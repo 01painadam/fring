@@ -33,7 +33,7 @@ use crate::wf32::model;
 use crate::wh::{self, HostTable, Mode};
 use crate::wh_gpu::{DEFAULT_WORKGROUP, NO_FAILURE, WhKernels, unbound};
 use fring_model::physics::{
-    EpicycleElements, KickTable, SaturnField, epicycle_state, interpolate_moons,
+    ArcGeometry, EpicycleElements, KickTable, SaturnField, epicycle_state, interpolate_moons,
 };
 use fring_model::{
     Backend, ChaosReport, Error, InitialState, MoonState, ParticleView, Particles, Result,
@@ -147,12 +147,29 @@ impl GpuBackend {
         let kernels = WhKernels::new(&gpu, wg)?;
         startup_check(&kernels, opts.mode, system, init.time_s, step_s)?;
 
+        // Task D1: a co-moving arc domain. Particles made all round the ring
+        // are folded into the arc first (a rotation by whole widths).
+        let field = SaturnField::<f64>::from_params(&system.saturn);
+        let arc = ArcGeometry::from_domain_in_field(
+            &config.domain,
+            &field,
+            config.frame.reference_semi_major_axis_km,
+        )?;
+        let folded;
+        let init = if let Some(g) = &arc {
+            folded = fold_into_arc(g, init)?;
+            &folded
+        } else {
+            init
+        };
+        let p = &init.particles;
+
         let block_steps = opts
             .block_steps
             .unwrap_or_else(|| (TARGET_PARTICLE_STEPS / n.max(1)).clamp(8, MAX_BLOCK_STEPS))
             .clamp(1, MAX_BLOCK_STEPS);
         let chaos_cfg = config.diagnostics.as_ref().and_then(|d| d.chaos);
-        let stepper = GpuStepper::new(
+        let mut stepper = GpuStepper::new(
             &gpu,
             &kernels,
             system,
@@ -162,6 +179,10 @@ impl GpuBackend {
             opts.mode,
             chaos_cfg,
         )?;
+
+        if let Some(geom) = arc {
+            stepper.set_arc(geom)?;
+        }
 
         let d = gpu.device();
         let mk = |size: u64, usage: wgpu::BufferUsages| {
@@ -175,7 +196,6 @@ impl GpuBackend {
         let read = wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST;
         let acc_stage = chaos_cfg.map(|_| mk((crate::chaos::ACC_PLANES * cap * 8) as u64, read));
 
-        let field = SaturnField::<f64>::from_params(&system.saturn);
         let energy0 = if eph.tracks.is_empty() {
             (0..n)
                 .map(|i| field.specific_energy(p.position_km(i), p.velocity_km_s(i)))
@@ -444,6 +464,25 @@ impl Backend for GpuBackend {
             ..Default::default()
         })
     }
+}
+
+/// The initial state with every particle folded into the arc (task D1).
+fn fold_into_arc(g: &ArcGeometry, init: &InitialState) -> Result<InitialState> {
+    let mut particles = Particles::with_capacity(init.particles.len());
+    for i in 0..init.particles.len() {
+        let w = g
+            .fold(
+                init.particles.position_km(i),
+                init.particles.velocity_km_s(i),
+                init.time_s,
+            )
+            .ok_or_else(|| Error::Input(format!("particle {i} has no finite position")))?;
+        particles.push(init.particles.id[i], w.pos_km, w.vel_km_s);
+    }
+    Ok(InitialState {
+        time_s: init.time_s,
+        particles,
+    })
 }
 
 /// The second start-up check of ADR 0006: one short block of the real kernel
