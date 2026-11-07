@@ -1,0 +1,238 @@
+{
+  "$schema": "https://vega.github.io/schema/vega-lite/v5.20.1.json",
+  "config": {
+    "view": {
+      "continuousHeight": 300,
+      "continuousWidth": 300,
+      "strokeWidth": 0
+    }
+  },
+  "data": {
+    "name": "data-e7e757d6fec48c6ea32b2179d27cf4f6"
+  },
+  "datasets": {
+    "data-e7e757d6fec48c6ea32b2179d27cf4f6": [
+      {
+        "bin": "0",
+        "orbits": "e = 0.00235",
+        "value": 0.8244,
+        "what": "share with an encounter < 6.3 R_H"
+      },
+      {
+        "bin": "1",
+        "orbits": "e = 0.00235",
+        "value": 0.864,
+        "what": "share with an encounter < 6.3 R_H"
+      },
+      {
+        "bin": "2",
+        "orbits": "e = 0.00235",
+        "value": 0.8428,
+        "what": "share with an encounter < 6.3 R_H"
+      },
+      {
+        "bin": "10",
+        "orbits": "e = 0.00235",
+        "value": 0.1948,
+        "what": "share with an encounter < 6.3 R_H"
+      },
+      {
+        "bin": "20",
+        "orbits": "e = 0.00235",
+        "value": 0.8372,
+        "what": "share with an encounter < 6.3 R_H"
+      },
+      {
+        "bin": "21",
+        "orbits": "e = 0.00235",
+        "value": 0.8332,
+        "what": "share with an encounter < 6.3 R_H"
+      },
+      {
+        "bin": "0",
+        "orbits": "e = 0 (control)",
+        "value": 0.0108,
+        "what": "share with an encounter < 6.3 R_H"
+      },
+      {
+        "bin": "1",
+        "orbits": "e = 0 (control)",
+        "value": 0.0,
+        "what": "share with an encounter < 6.3 R_H"
+      },
+      {
+        "bin": "2",
+        "orbits": "e = 0 (control)",
+        "value": 0.0,
+        "what": "share with an encounter < 6.3 R_H"
+      },
+      {
+        "bin": "10",
+        "orbits": "e = 0 (control)",
+        "value": 0.0,
+        "what": "share with an encounter < 6.3 R_H"
+      },
+      {
+        "bin": "20",
+        "orbits": "e = 0 (control)",
+        "value": 0.0,
+        "what": "share with an encounter < 6.3 R_H"
+      },
+      {
+        "bin": "21",
+        "orbits": "e = 0 (control)",
+        "value": 0.0004,
+        "what": "share with an encounter < 6.3 R_H"
+      },
+      {
+        "bin": "0",
+        "orbits": "e = 0.00235",
+        "value": 0.8616,
+        "what": "chaotic fraction (10 yr)"
+      },
+      {
+        "bin": "1",
+        "orbits": "e = 0.00235",
+        "value": 0.9056,
+        "what": "chaotic fraction (10 yr)"
+      },
+      {
+        "bin": "2",
+        "orbits": "e = 0.00235",
+        "value": 0.8848,
+        "what": "chaotic fraction (10 yr)"
+      },
+      {
+        "bin": "10",
+        "orbits": "e = 0.00235",
+        "value": 0.8296,
+        "what": "chaotic fraction (10 yr)"
+      },
+      {
+        "bin": "20",
+        "orbits": "e = 0.00235",
+        "value": 0.8532,
+        "what": "chaotic fraction (10 yr)"
+      },
+      {
+        "bin": "21",
+        "orbits": "e = 0.00235",
+        "value": 0.8472,
+        "what": "chaotic fraction (10 yr)"
+      },
+      {
+        "bin": "0",
+        "orbits": "e = 0 (control)",
+        "value": 0.45,
+        "what": "chaotic fraction (10 yr)"
+      },
+      {
+        "bin": "1",
+        "orbits": "e = 0 (control)",
+        "value": 0.4024,
+        "what": "chaotic fraction (10 yr)"
+      },
+      {
+        "bin": "2",
+        "orbits": "e = 0 (control)",
+        "value": 0.3816,
+        "what": "chaotic fraction (10 yr)"
+      },
+      {
+        "bin": "10",
+        "orbits": "e = 0 (control)",
+        "value": 0.3228,
+        "what": "chaotic fraction (10 yr)"
+      },
+      {
+        "bin": "20",
+        "orbits": "e = 0 (control)",
+        "value": 0.5576,
+        "what": "chaotic fraction (10 yr)"
+      },
+      {
+        "bin": "21",
+        "orbits": "e = 0 (control)",
+        "value": 0.5952,
+        "what": "chaotic fraction (10 yr)"
+      }
+    ]
+  },
+  "facet": {
+    "column": {
+      "field": "what",
+      "title": null,
+      "type": "nominal"
+    }
+  },
+  "spec": {
+    "encoding": {
+      "color": {
+        "field": "orbits",
+        "scale": {
+          "domain": [
+            "e = 0.00235",
+            "e = 0 (control)"
+          ],
+          "range": [
+            "#D55E00",
+            "#0072B2"
+          ]
+        },
+        "title": null,
+        "type": "nominal"
+      },
+      "tooltip": [
+        {
+          "field": "bin",
+          "type": "nominal"
+        },
+        {
+          "field": "orbits",
+          "type": "nominal"
+        },
+        {
+          "field": "what",
+          "type": "nominal"
+        },
+        {
+          "field": "value",
+          "type": "quantitative"
+        }
+      ],
+      "x": {
+        "field": "bin",
+        "sort": [
+          "0",
+          "1",
+          "2",
+          "10",
+          "20",
+          "21"
+        ],
+        "title": "Bin (25 km from 140,150 km; 10 = 140,400, 20 = 140,650)",
+        "type": "nominal"
+      },
+      "xOffset": {
+        "field": "orbits",
+        "type": "nominal"
+      },
+      "y": {
+        "field": "value",
+        "scale": {
+          "domain": [
+            0,
+            1
+          ]
+        },
+        "title": null,
+        "type": "quantitative"
+      }
+    },
+    "height": 180,
+    "mark": {
+      "type": "bar"
+    },
+    "width": 260
+  }
+}
