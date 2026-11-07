@@ -1,6 +1,6 @@
 # ICR-009-IO: `fring-run` writes the `CollisionStats` fields to `stats.csv`
 Role: A5  Branch: ws/a5-icr-009-io  Status: review
-Updated: 2026-11-07 18:20
+Updated: 2026-11-07 18:35
 
 ## Goal and acceptance criteria
 From `docs/interfaces/ICR-009.md` and `docs/snapshot-format.md` section 8 ("Collision columns"):
@@ -21,7 +21,7 @@ From `docs/interfaces/ICR-009.md` and `docs/snapshot-format.md` section 8 ("Coll
 - Definition of done: all pass. Log `runs/logs/icr-009-io-dod.log` (git-ignored): fmt, clippy, `cargo test --workspace` (261 passed, 0 failed, 44 ignored), the CI wasm32 line, fring-web wasm32 clippy.
 
 ## Next step (one concrete action)
-A0 reviews the pull request. After the merge, set the board row to `done` and this file to Status: done.
+A0 review is done (PR #41 comment 6708830313). Merge when CI is green on the head commit. After the merge, set the board row to `done` and this file to Status: done.
 
 ## How to verify the current state
 ```sh
@@ -31,8 +31,8 @@ cargo test -p fring-run refuses                   # 1 passed
 ```
 
 ## Open questions / blockers
-- AJ: keep column names without a `collision_` prefix? Default yes (A0 decision, as in `docs/snapshot-format.md`). Changing them is still cheap until K2 writes runs with collisions.
+- None.
 
 ## Decisions made (link ADRs)
-- Column name = field name, no prefix (A0, ICR-009-IMPL).
+- Column name = field name, no `collision_` prefix (A0, ICR-009-IMPL; AJ confirmed "No prefix" on 2026-11-07).
 - `STATS_VERSION` stays 1: the columns are additive (`docs/snapshot-format.md` section 8).
