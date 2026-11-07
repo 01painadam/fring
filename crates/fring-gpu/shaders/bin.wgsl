@@ -1,5 +1,5 @@
 // Binning by cell (task K5-BIN): counting sort of the particles into hashed
-// buckets, then a sort of each bucket by (cell key, particle id). Append to
+// buckets, then a ranking of the members of each bucket by (cell key, id). Append to
 // ds.wgsl. Rust twin: crates/fring-gpu/src/bin.rs (same operations in the same
 // order; the integer parts are exact).
 //
@@ -34,7 +34,8 @@
 // 7: keys: key of particle i (vec2<u32>), cap entries.
 // 8: sorted: particle ids in bucket order and, inside a bucket, in (key, id)
 //    order; entries from the number of binned particles on are 0xFFFFFFFF.
-// 9: skeys: key of sorted[p].
+// 9: skeys: key of sorted[p]. Before bin_emit its .x holds the ids in the
+//    order of the atomic scatter (scratch).
 
 @group(0) @binding(0) var<storage, read> st: array<vec2<f32>>;
 @group(0) @binding(1) var<storage, read> status: array<u32>;
@@ -249,8 +250,9 @@ fn scan_add(@builtin(global_invocation_id) id: vec3<u32>, @builtin(num_workgroup
     if (j < mpad()) { start[j] = start[j] + start[mpad() + j / SCAN_BLOCK]; }
 }
 
-// Position inside the bucket from a count that runs down (the order of the
-// positions is not fixed; bin_sort fixes it).
+// Places each particle in its bucket with a count that runs down. The order
+// inside a bucket is not fixed (atomics); bin_rank fixes it. The ids go to
+// skeys[pos].x, which bin_emit overwrites at the end.
 @compute @workgroup_size(64)
 fn bin_scatter(@builtin(global_invocation_id) id: vec3<u32>, @builtin(num_workgroups) nw: vec3<u32>) {
     let i = index_of(id, nw);
@@ -259,7 +261,7 @@ fn bin_scatter(@builtin(global_invocation_id) id: vec3<u32>, @builtin(num_workgr
     if (k.x == NONE && k.y == NONE) { return; }
     let b = hash_key(k) & mask();
     let pos = start[b] + atomicSub(&counts[b], 1u) - 1u;
-    sorted[pos] = i;
+    skeys[pos].x = i;
 }
 
 fn key_less(a: u32, b: u32) -> bool {
@@ -270,27 +272,26 @@ fn key_less(a: u32, b: u32) -> bool {
     return a < b;
 }
 
-// One thread per bucket: insertion sort by (key, id). A bucket has the
-// members of a few cells, so it is short; the cost is quadratic in the
-// largest bucket.
+// One thread per binned particle: its place in the bucket is the number of
+// members of the bucket that come before it in the order (key, id). The
+// order is total (ids differ), so the places are 0, 1, ... and the result does
+// not depend on the order of the atomics. The cost is quadratic in the size of
+// the bucket but spread over one thread per member (a single thread that
+// insertion-sorts a bucket of 16384 took 17 s).
 @compute @workgroup_size(64)
-fn bin_sort(@builtin(global_invocation_id) id: vec3<u32>, @builtin(num_workgroups) nw: vec3<u32>) {
-    let b = index_of(id, nw);
-    if (b >= n_buckets()) { return; }
+fn bin_rank(@builtin(global_invocation_id) id: vec3<u32>, @builtin(num_workgroups) nw: vec3<u32>) {
+    let p = index_of(id, nw);
+    if (p >= n_particles()) { return; }
+    if (p >= start[n_buckets()]) { return; }
+    let e = skeys[p].x;
+    let b = hash_key(keys[e]) & mask();
     let s = start[b];
-    let e = start[b + 1u];
-    for (var k = s + 1u; k < e; k++) {
-        let v = sorted[k];
-        var j = k;
-        loop {
-            if (j <= s) { break; }
-            let u = sorted[j - 1u];
-            if (!key_less(v, u)) { break; }
-            sorted[j] = u;
-            j = j - 1u;
-        }
-        sorted[j] = v;
+    let last = start[b + 1u];
+    var rank = 0u;
+    for (var j = s; j < last; j++) {
+        if (key_less(skeys[j].x, e)) { rank++; }
     }
+    sorted[s + rank] = e;
 }
 
 @compute @workgroup_size(64)

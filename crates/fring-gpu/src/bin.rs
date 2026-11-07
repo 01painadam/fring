@@ -18,8 +18,8 @@
 //! the core). The key (ix, iy, iz) is packed in two `u32` words (22, 21 and 21
 //! bits, ordered like the triple). The key is hashed into one of M buckets
 //! (M = the next power of two ≥ the number of particles), the particles are
-//! counted and placed by a counting sort over the buckets, and each bucket is
-//! sorted by (key, id). Then every cell is one run of equal keys in
+//! counted and placed by a counting sort over the buckets, and each member of
+//! a bucket is put at its rank in (key, id) order. Then every cell is one run of equal keys in
 //! `sorted`/`sorted_keys`, with its members in id order (SPEC 5.5, Q4), and
 //! the result does not depend on the order of the atomic operations.
 //!
@@ -45,7 +45,9 @@
 //! kernels.
 
 use crate::ds::Ds;
+use crate::gpu::Gpu;
 use crate::wf32::model;
+use crate::wh_gpu::grid;
 use fring_model::config::{Collisions, Domain};
 use fring_model::{Error, Real, Result, RunConfig};
 use std::f64::consts::{PI, TAU};
@@ -311,10 +313,7 @@ fn ds_atan_small(t: Dsm) -> Dsm {
     let u = t * t;
     let uh = u.hi;
     let p = uh.mul_add(
-        uh.mul_add(
-            uh.mul_add(uh.mul_add(uh.mul_add(-C15, C13), -C11), C9),
-            -C7,
-        ),
+        uh.mul_add(uh.mul_add(uh.mul_add(uh.mul_add(-C15, C13), -C11), C9), -C7),
         C5,
     );
     let tail = (uh * uh) * p;
@@ -348,13 +347,13 @@ pub fn cell_ds(prm: &[f32], ny: u32, alpha: Dsm, p: [Dsm; 3]) -> (Binned, [f64; 
     let twopi = ds_at(prm, 3, 0);
     let mut psi = phi - alpha;
     if negp(psi) {
-        psi = psi + twopi;
+        psi += twopi;
     }
     if negp(psi) {
-        psi = psi + twopi;
+        psi += twopi;
     }
     if !negp(psi - twopi) {
-        psi = psi - twopi;
+        psi -= twopi;
     }
     let a0 = ds_at(prm, 1, 0);
     let y = a0 * psi;
@@ -448,7 +447,10 @@ pub struct BinOutput {
 /// exclusive prefix sum, scatter (here in index order), sort of each bucket
 /// by (key, id), emit. `m` buckets (a power of two).
 pub fn bin_twin(cells: &[Binned], m: usize) -> BinOutput {
-    assert!(m.is_power_of_two(), "the number of buckets is a power of two");
+    assert!(
+        m.is_power_of_two(),
+        "the number of buckets is a power of two"
+    );
     let n = cells.len();
     let keys: Vec<[u32; 2]> = cells.iter().map(|&b| key_of(b)).collect();
     let bucket = |k: [u32; 2]| (hash_key(k) as usize) & (m - 1);
@@ -539,6 +541,470 @@ pub fn runs(out: &BinOutput) -> Vec<(Cell, Vec<u32>)> {
     v
 }
 
+/// The WGSL source: DS library and the binning kernels.
+pub const BIN_WGSL: &str = concat!(
+    include_str!("../shaders/ds.wgsl"),
+    include_str!("../shaders/bin.wgsl")
+);
+/// Counts per workgroup of the scan (`SCAN_BLOCK` in the shader).
+const SCAN_BLOCK: usize = 1024;
+/// Info words after the bucket counts.
+const INFO_WORDS: usize = 8;
+/// Workgroup size of the per-particle and per-bucket kernels.
+const BIN_WG: u32 = 64;
+
+/// The passes of one bin pass, in order. Any prefix of the list is a valid
+/// partial pass (for timing); only all of them give the result.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Stage {
+    /// Zero the counts and the info words.
+    Clear,
+    /// Cell key of each particle; count the particles of each bucket.
+    Keys,
+    /// Exclusive scan of the counts inside blocks of 1024.
+    ScanLocal,
+    /// Scan of the block totals (one workgroup).
+    ScanSums,
+    /// Add the block offsets: bucket starts.
+    ScanAdd,
+    /// Place each particle in its bucket (atomic).
+    Scatter,
+    /// Place each particle in its bucket by its rank in (key, id) order, one
+    /// thread per particle.
+    Rank,
+    /// Sorted keys, the number binned, the empty tail.
+    Emit,
+}
+
+impl Stage {
+    /// All passes in order.
+    pub const ALL: [Stage; 8] = [
+        Stage::Clear,
+        Stage::Keys,
+        Stage::ScanLocal,
+        Stage::ScanSums,
+        Stage::ScanAdd,
+        Stage::Scatter,
+        Stage::Rank,
+        Stage::Emit,
+    ];
+
+    fn entry(self) -> &'static str {
+        match self {
+            Stage::Clear => "bin_clear",
+            Stage::Keys => "bin_keys",
+            Stage::ScanLocal => "scan_local",
+            Stage::ScanSums => "scan_sums",
+            Stage::ScanAdd => "scan_add",
+            Stage::Scatter => "bin_scatter",
+            Stage::Rank => "bin_rank",
+            Stage::Emit => "bin_emit",
+        }
+    }
+}
+
+/// Bins the particles of a state buffer by cell on the GPU (see the module
+/// documentation). It records its passes into the caller's command encoder
+/// and never waits for the GPU, so it also builds for wasm32. The blocking
+/// helpers that read results back are native only.
+///
+/// The state is the 6-plane DS buffer of [`crate::stepper::GpuStepper`]
+/// (inertial, Saturn-centred) at the time given to [`Self::encode`]; the
+/// status buffer gives the drop reasons.
+pub struct GpuBinner {
+    gpu: Gpu,
+    geom: BinGeometry,
+    n: usize,
+    m: usize,
+    mpad: usize,
+    nb: usize,
+    pipelines: Vec<wgpu::ComputePipeline>,
+    layout: wgpu::BindGroupLayout,
+    prm_buf: wgpu::Buffer,
+    ctl_buf: wgpu::Buffer,
+    state: wgpu::Buffer,
+    status: wgpu::Buffer,
+    counts: wgpu::Buffer,
+    start: wgpu::Buffer,
+    keys: wgpu::Buffer,
+    sorted: wgpu::Buffer,
+    skeys: wgpu::Buffer,
+}
+
+fn le_bytes_f32(w: &[f32]) -> Vec<u8> {
+    w.iter().flat_map(|x| x.to_le_bytes()).collect()
+}
+
+impl GpuBinner {
+    /// A binner for the `n` particles of `state` and `status` (`cap` entries
+    /// per plane, `8 + cap` status words) with the grid `geom`. `buckets` is
+    /// M, a power of two; `None` takes the next power of two ≥ `n` (2²⁴ for
+    /// 10⁷ particles: the counts take 64 MiB). A test may pass a small M to
+    /// force different cells into one bucket.
+    ///
+    /// The caller must have run the DS self-test ([`crate::probe::SelfTest`]).
+    ///
+    /// # Errors
+    /// [`Error::Config`] if M is not a power of two or is too large for a
+    /// dispatch (more than 65535 × 1024 − 1 buckets), [`Error::Backend`] if
+    /// a buffer does not fit the limits of the device or the buffers given
+    /// are too small.
+    pub fn new(
+        gpu: &Gpu,
+        state: &wgpu::Buffer,
+        status: &wgpu::Buffer,
+        n: usize,
+        cap: usize,
+        geom: BinGeometry,
+        buckets: Option<usize>,
+    ) -> Result<Self> {
+        let m = buckets.unwrap_or_else(|| n.max(1).next_power_of_two());
+        if !m.is_power_of_two() {
+            return Err(Error::Config(format!(
+                "binning: the number of buckets {m} is not a power of two"
+            )));
+        }
+        let mpad = (m + 1).next_multiple_of(SCAN_BLOCK);
+        let nb = mpad / SCAN_BLOCK;
+        if nb > 65535 || cap < n || u32::try_from(mpad + INFO_WORDS + nb).is_err() {
+            return Err(Error::Config(format!(
+                "binning: {m} buckets for {n} particles (capacity {cap}) is too many"
+            )));
+        }
+        let need_state = (6 * cap * 8) as u64;
+        let need_status = (4 * (8 + cap)) as u64;
+        if state.size() < need_state || status.size() < need_status {
+            return Err(Error::Backend(format!(
+                "binning: the state buffer ({} bytes) or the status buffer ({} bytes) is smaller than \
+                 {need_state} or {need_status} bytes for capacity {cap}",
+                state.size(),
+                status.size()
+            )));
+        }
+        let sizes = [
+            (4 * (mpad + INFO_WORDS)) as u64,
+            (4 * (mpad + nb)) as u64,
+            (8 * cap) as u64,
+            (4 * cap) as u64,
+        ];
+        let limit = gpu
+            .limits
+            .max_storage_buffer_binding_size
+            .min(gpu.limits.max_buffer_size);
+        if sizes.iter().any(|&s| s > limit) || gpu.limits.max_storage_buffers_per_shader_stage < 7 {
+            return Err(Error::Backend(format!(
+                "binning {n} particles into {m} buckets needs buffers of {sizes:?} bytes and 7 storage \
+                 buffers; {} allows {limit} bytes and {} buffers",
+                gpu.info.name, gpu.limits.max_storage_buffers_per_shader_stage
+            )));
+        }
+        let d = gpu.device();
+        let q = gpu.queue();
+        let mk = |size: u64, usage: wgpu::BufferUsages| {
+            d.create_buffer(&wgpu::BufferDescriptor {
+                label: None,
+                size: size.max(16),
+                usage,
+                mapped_at_creation: false,
+            })
+        };
+        let rw = wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC;
+        let uni = wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST;
+        let prm_buf = mk((PRM_WORDS * 4) as u64, uni);
+        q.write_buffer(&prm_buf, 0, &le_bytes_f32(&params(&geom)));
+        let ctl_buf = mk(32, uni);
+        let ctl: [u32; 8] = [
+            n as u32,
+            cap as u32,
+            (m - 1) as u32,
+            geom.ny,
+            mpad as u32,
+            nb as u32,
+            m as u32,
+            0,
+        ];
+        let ctl_bytes: Vec<u8> = ctl.iter().flat_map(|x| x.to_le_bytes()).collect();
+        q.write_buffer(&ctl_buf, 0, &ctl_bytes);
+        let counts = mk(sizes[0], rw);
+        let start = mk(sizes[1], rw);
+        let keys = mk(sizes[2], rw);
+        let sorted = mk(sizes[3], rw);
+        let skeys = mk(sizes[2], rw);
+
+        let module = d.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("bin"),
+            source: wgpu::ShaderSource::Wgsl(BIN_WGSL.into()),
+        });
+        let st = |ro| wgpu::BufferBindingType::Storage { read_only: ro };
+        let entry = |binding: u32, ty: wgpu::BufferBindingType| wgpu::BindGroupLayoutEntry {
+            binding,
+            visibility: wgpu::ShaderStages::COMPUTE,
+            ty: wgpu::BindingType::Buffer {
+                ty,
+                has_dynamic_offset: false,
+                min_binding_size: None,
+            },
+            count: None,
+        };
+        let u = wgpu::BufferBindingType::Uniform;
+        let layout = d.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("bin"),
+            entries: &[
+                entry(0, st(true)),
+                entry(1, st(true)),
+                entry(2, u),
+                entry(3, u),
+                entry(4, u),
+                entry(5, st(false)),
+                entry(6, st(false)),
+                entry(7, st(false)),
+                entry(8, st(false)),
+                entry(9, st(false)),
+            ],
+        });
+        let pipeline_layout = d.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("bin"),
+            bind_group_layouts: &[Some(&layout)],
+            immediate_size: 0,
+        });
+        let pipelines = Stage::ALL
+            .iter()
+            .map(|s| {
+                d.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+                    label: Some(s.entry()),
+                    layout: Some(&pipeline_layout),
+                    module: &module,
+                    entry_point: Some(s.entry()),
+                    compilation_options: Default::default(),
+                    cache: None,
+                })
+            })
+            .collect();
+        Ok(Self {
+            gpu: gpu.clone(),
+            geom,
+            n,
+            m,
+            mpad,
+            nb,
+            pipelines,
+            layout,
+            prm_buf,
+            ctl_buf,
+            state: state.clone(),
+            status: status.clone(),
+            counts,
+            start,
+            keys,
+            sorted,
+            skeys,
+        })
+    }
+
+    /// A binner for the particles of `stepper`.
+    ///
+    /// # Errors
+    /// As [`Self::new`].
+    pub fn for_stepper(
+        gpu: &Gpu,
+        stepper: &crate::stepper::GpuStepper,
+        geom: BinGeometry,
+    ) -> Result<Self> {
+        Self::new(
+            gpu,
+            stepper.state_buffer(),
+            stepper.status_buffer(),
+            stepper.len(),
+            stepper.capacity(),
+            geom,
+            None,
+        )
+    }
+
+    /// Records a whole bin pass for the state at `time_s` (seconds since the
+    /// start of the run) into `encoder`: the passes of [`Stage::ALL`] in one
+    /// compute pass. The caller submits. `time_s` is used for the rotating
+    /// frame (α = n₀ t + φ₀ in f64, passed as DS); each call has its own
+    /// small uniform buffer, so several calls can share one submission.
+    pub fn encode(&self, encoder: &mut wgpu::CommandEncoder, time_s: f64) {
+        self.encode_stages(encoder, time_s, Stage::ALL.len());
+    }
+
+    /// As [`Self::encode`] with only the first `stages` passes of
+    /// [`Stage::ALL`] (the cost of a prefix; the result is complete only with
+    /// all of them).
+    pub fn encode_stages(&self, encoder: &mut wgpu::CommandEncoder, time_s: f64, stages: usize) {
+        let d = self.gpu.device();
+        let alpha = Dsm::split(self.geom.alpha_rad(time_s));
+        let tdyn = d.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("bin tdyn"),
+            size: 16,
+            usage: wgpu::BufferUsages::UNIFORM,
+            mapped_at_creation: true,
+        });
+        {
+            let mut v = tdyn.get_mapped_range_mut(..).expect("range");
+            v.copy_from_slice(&le_bytes_f32(&[alpha.hi, alpha.lo, 0.0, 0.0]));
+        }
+        tdyn.unmap();
+        fn e(binding: u32, b: &wgpu::Buffer) -> wgpu::BindGroupEntry<'_> {
+            wgpu::BindGroupEntry {
+                binding,
+                resource: b.as_entire_binding(),
+            }
+        }
+        let bind = d.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("bin"),
+            layout: &self.layout,
+            entries: &[
+                e(0, &self.state),
+                e(1, &self.status),
+                e(2, &self.prm_buf),
+                e(3, &self.ctl_buf),
+                e(4, &tdyn),
+                e(5, &self.counts),
+                e(6, &self.start),
+                e(7, &self.keys),
+                e(8, &self.sorted),
+                e(9, &self.skeys),
+            ],
+        });
+        let g = |count: usize| grid(count.max(1), BIN_WG);
+        let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+            label: Some("bin"),
+            timestamp_writes: None,
+        });
+        pass.set_bind_group(0, &bind, &[]);
+        for (k, stage) in Stage::ALL.iter().enumerate().take(stages) {
+            let (x, y) = match stage {
+                Stage::Clear => g(self.mpad + INFO_WORDS),
+                Stage::Keys | Stage::Scatter | Stage::Rank | Stage::Emit => g(self.n),
+                Stage::ScanLocal => (self.nb as u32, 1),
+                Stage::ScanSums => (1, 1),
+                Stage::ScanAdd => g(self.mpad),
+            };
+            pass.set_pipeline(&self.pipelines[k]);
+            pass.dispatch_workgroups(x, y, 1);
+        }
+    }
+
+    /// The grid.
+    pub fn geometry(&self) -> &BinGeometry {
+        &self.geom
+    }
+
+    /// Number of buckets M.
+    pub fn buckets(&self) -> usize {
+        self.m
+    }
+
+    /// `sorted`: `n` `u32` ids (usage `STORAGE | COPY_SRC`); see the module
+    /// documentation.
+    pub fn sorted_buffer(&self) -> &wgpu::Buffer {
+        &self.sorted
+    }
+
+    /// `sorted_keys`: `n` keys of two `u32` (hi, lo).
+    pub fn sorted_keys_buffer(&self) -> &wgpu::Buffer {
+        &self.skeys
+    }
+
+    /// `bucket_start`: M + 1 `u32` words at the start of this buffer (more
+    /// words follow; they are scratch).
+    pub fn bucket_start_buffer(&self) -> &wgpu::Buffer {
+        &self.start
+    }
+
+    /// The key of each particle, in particle order (`cap` keys of two `u32`).
+    pub fn particle_keys_buffer(&self) -> &wgpu::Buffer {
+        &self.keys
+    }
+
+    /// The counts buffer: M bucket counts (spent after the pass), zeros up to
+    /// word `info_offset_words()`, then the info words: number binned, number
+    /// not binned, number out of range.
+    pub fn info_buffer(&self) -> &wgpu::Buffer {
+        &self.counts
+    }
+
+    /// Word offset of the info words in [`Self::info_buffer`].
+    pub fn info_offset_words(&self) -> usize {
+        self.mpad
+    }
+
+    /// Reads `words` `u32` of `buf` from word `offset` (blocking; for tests
+    /// and tools).
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn read_words(&self, buf: &wgpu::Buffer, offset: usize, words: usize) -> Vec<u32> {
+        let d = self.gpu.device();
+        let size = (4 * words).max(4) as u64;
+        let stage = d.create_buffer(&wgpu::BufferDescriptor {
+            label: None,
+            size,
+            usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let mut enc = d.create_command_encoder(&Default::default());
+        enc.copy_buffer_to_buffer(buf, (4 * offset) as u64, &stage, 0, size);
+        self.gpu.queue().submit([enc.finish()]);
+        stage.map_async(wgpu::MapMode::Read, .., |r| r.expect("map failed"));
+        d.poll(wgpu::PollType::wait_indefinitely()).expect("poll");
+        let v: Vec<u32> = {
+            let view = stage.get_mapped_range(..).expect("range");
+            view.as_chunks::<4>()
+                .0
+                .iter()
+                .take(words)
+                .map(|b| u32::from_le_bytes(*b))
+                .collect()
+        };
+        stage.unmap();
+        v
+    }
+
+    /// Reads the result of the last pass (blocking; for tests and tools).
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn read_output(&self) -> BinOutput {
+        let info = self.read_words(&self.counts, self.mpad, 3);
+        let sorted = self.read_words(&self.sorted, 0, self.n);
+        let sk = self.read_words(&self.skeys, 0, 2 * self.n);
+        BinOutput {
+            sorted,
+            sorted_keys: sk.chunks(2).map(|c| [c[0], c[1]]).collect(),
+            bucket_start: self.read_words(&self.start, 0, self.m + 1),
+            n_binned: info[0],
+            n_not_binned: info[1],
+            n_out_of_range: info[2],
+        }
+    }
+
+    /// Reads the key of each of the `n` particles (blocking).
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn read_particle_keys(&self) -> Vec<[u32; 2]> {
+        let w = self.read_words(&self.keys, 0, 2 * self.n);
+        w.chunks(2).map(|c| [c[0], c[1]]).collect()
+    }
+
+    /// Runs the first `stages` passes in one submission and waits; returns the
+    /// wall time from submit to the end (blocking; for tests and the bench).
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn run_timed(&self, time_s: f64, stages: usize) -> std::time::Duration {
+        let mut enc = self
+            .gpu
+            .device()
+            .create_command_encoder(&Default::default());
+        self.encode_stages(&mut enc, time_s, stages);
+        let cmd = enc.finish();
+        let t0 = std::time::Instant::now();
+        self.gpu.queue().submit([cmd]);
+        self.gpu
+            .device()
+            .poll(wgpu::PollType::wait_indefinitely())
+            .expect("poll");
+        t0.elapsed()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -572,7 +1038,11 @@ mod tests {
     #[test]
     fn key_packing_round_trips_and_orders_like_the_triple() {
         let cs = [
-            Cell { ix: 0, iy: 0, iz: 0 },
+            Cell {
+                ix: 0,
+                iy: 0,
+                iz: 0,
+            },
             Cell {
                 ix: -MAX_IX,
                 iy: MAX_NY - 1,
@@ -708,11 +1178,7 @@ mod tests {
             let g = geometry(domain, phi0);
             let alpha = g.alpha_rad(t_s);
             let prm = params(&g);
-            let (u0, u1, u2) = (
-                uniform(1, 1, n),
-                uniform(1, 2, n),
-                uniform(1, 3, n),
-            );
+            let (u0, u1, u2) = (uniform(1, 1, n), uniform(1, 2, n), uniform(1, 3, n));
             for i in 0..n {
                 // x within +-100 km, y over the domain and beyond (arc: out of
                 // range particles too), z within +-1 km: many cells at all
@@ -787,7 +1253,11 @@ mod tests {
             -1e-5, -1e-6, -1e-7, -1e-8, -1e-9, 0.0, 1e-9, 1e-8, 1e-7, 1e-6, 1e-5,
         ];
         let (mut mismatches, mut total) = (0usize, 0usize);
-        for (domain, phi0, t_s) in [(TAU * A0, 0.0, 0.0), (TAU * A0, 0.0, 7.0e7), (12_237.0, 0.3, 1e6)] {
+        for (domain, phi0, t_s) in [
+            (TAU * A0, 0.0, 0.0),
+            (TAU * A0, 0.0, 7.0e7),
+            (12_237.0, 0.3, 1e6),
+        ] {
             let g = geometry(domain, phi0);
             let alpha = g.alpha_rad(t_s);
             let prm = params(&g);
@@ -816,7 +1286,10 @@ mod tests {
                         if bf != bd {
                             mismatches += 1;
                             let near = edge_distance_km(&g, lf)[axis];
-                            assert!(near <= delta, "axis {axis} offset {off}: edge distance {near}");
+                            assert!(
+                                near <= delta,
+                                "axis {axis} offset {off}: edge distance {near}"
+                            );
                         }
                         if off.abs() >= 1e-6 {
                             assert_eq!(bf, bd, "axis {axis} offset {off} case {j}");
@@ -873,11 +1346,21 @@ mod tests {
                 let p = [rho * phi.cos(), rho * phi.sin(), 0.0123];
                 let (bf, bd) = check(alpha, p);
                 assert_eq!(bf, bd);
-                assert_eq!(bf, Binned::Cell(Cell { ix: 0, iy: want, iz: 0 }));
+                assert_eq!(
+                    bf,
+                    Binned::Cell(Cell {
+                        ix: 0,
+                        iy: want,
+                        iz: 0
+                    })
+                );
             }
         }
         // A bad state: the origin; a huge distance.
-        assert_eq!(check(0.0, [0.0, 0.0, 0.0]), (Binned::NotBinned, Binned::NotBinned));
+        assert_eq!(
+            check(0.0, [0.0, 0.0, 0.0]),
+            (Binned::NotBinned, Binned::NotBinned)
+        );
         // Out of range: x beyond the key.
         let far = A0 + 1.0e5 * 0.05 * 41.0; // ix = 4.1e6 > 2^21
         let (bf, bd) = check(0.0, [far, 0.0, 0.0]);
@@ -941,18 +1424,30 @@ mod tests {
             assert_eq!(got, want, "n {n} spread {spread} m {m}");
             assert_eq!(
                 out.n_binned as usize,
-                cells.iter().filter(|b| matches!(b, Binned::Cell(_))).count()
+                cells
+                    .iter()
+                    .filter(|b| matches!(b, Binned::Cell(_)))
+                    .count()
             );
             assert_eq!(out.bucket_start[m], out.n_binned);
             assert_eq!(
                 out.n_not_binned as usize,
                 cells.iter().filter(|b| **b == Binned::NotBinned).count()
             );
-            assert!(out.sorted[out.n_binned as usize..].iter().all(|&i| i == NO_ID));
+            assert!(
+                out.sorted[out.n_binned as usize..]
+                    .iter()
+                    .all(|&i| i == NO_ID)
+            );
             // Inside a bucket the order is (key, id).
             for b in 0..m {
-                let (s, e) = (out.bucket_start[b] as usize, out.bucket_start[b + 1] as usize);
-                let w: Vec<_> = (s..e).map(|p| (out.sorted_keys[p], out.sorted[p])).collect();
+                let (s, e) = (
+                    out.bucket_start[b] as usize,
+                    out.bucket_start[b + 1] as usize,
+                );
+                let w: Vec<_> = (s..e)
+                    .map(|p| (out.sorted_keys[p], out.sorted[p]))
+                    .collect();
                 assert!(w.windows(2).all(|x| x[0] < x[1]));
                 assert!(w.iter().all(|&(k, _)| hash_key(k) as usize & (m - 1) == b));
             }
@@ -968,7 +1463,14 @@ mod tests {
         assert!(runs(&o).is_empty());
         let o = bin_twin(&[], 1);
         assert_eq!(o.n_binned, 0);
-        let one = vec![Binned::Cell(Cell { ix: -2, iy: 9, iz: 4 }); 5000];
+        let one = vec![
+            Binned::Cell(Cell {
+                ix: -2,
+                iy: 9,
+                iz: 4
+            });
+            5000
+        ];
         let o = bin_twin(&one, 8192);
         let r = runs(&o);
         assert_eq!(r.len(), 1);
