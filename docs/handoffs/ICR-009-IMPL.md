@@ -1,6 +1,6 @@
 # ICR-009-IMPL: implement ICR-009 with amendments A1 to A3
-Role: A0  Branch: ws/a0-icr-009-impl  Status: doing
-Updated: 2026-11-07 16:30
+Role: A0  Branch: ws/a0-icr-009-impl  Status: review
+Updated: 2026-11-07 16:50
 
 ## Goal and acceptance criteria
 From `docs/status/BOARD.md` and `docs/interfaces/ICR-009.md` (section "A0 decision"): three cell sizes and `every_steps` in `[collisions]`, `CollisionStats` in `StepStats`, `fring-collide` as a dependency of `fring-cpu` and `fring-gpu`, the CI wasm32 line, the column list in `docs/snapshot-format.md`. A5 reviews the `fring-io` and `fring-run` test changes. Blocks K2, K3 and K5-BIN.
@@ -14,7 +14,7 @@ From `docs/status/BOARD.md` and `docs/interfaces/ICR-009.md` (section "A0 decisi
 - `docs/snapshot-format.md` section 8: collision columns (names equal to the field names, in struct order, at the end). `docs/adr/0001-fring-model-interfaces.md`: one line that ICR-009 replaced `cell_size_km`.
 
 ## Next step (one concrete action)
-When the full Definition of done passes (log `runs/logs/icr-009-impl-dod.log`), push the branch, open the PR (plain-language summary, A5 asked to review the `fring-io` and `fring-run` test changes), set the board row to `review`.
+PR #39 is open. When CI is green and A5 has looked at the `fring-io` and `fring-run` test changes, A0 merges it and sets ICR-009-IMPL to `done` (memory: PR edit permission). Then K2, K3, K5-BIN and ICR-009-IO can start.
 
 ## How to verify the current state
 ```sh
@@ -30,4 +30,5 @@ grep -rn cell_size_km crates apps            # only crates/fring-collide/SPEC.md
 
 ## Decisions made (link ADRs)
 - `every_steps` default by `#[serde(default = "default_every_steps")]`, so a config without it is valid and means every step.
+- Full Definition of done passed on `50f2334` (log `runs/logs/icr-009-impl-dod.log`, git-ignored): fmt, clippy (host and fring-web wasm32), wasm32 check, `cargo test --workspace` 56 binaries, 0 failed.
 - A5 test literals use `..StepStats::default()` (the rule of ADR 0001 line 73), not an explicit `collision:` field, so later `StepStats` fields do not break them again.
