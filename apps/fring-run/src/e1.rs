@@ -18,6 +18,7 @@ use crate::{RunError, read_text, select_moons, setup};
 use fring_cpu::CpuBackend;
 use fring_model::params::{moon_radii_from_toml_str, moons_from_toml_str, saturn_from_toml_str};
 use fring_model::physics::{DEFAULT_INTERVAL_S, build_ephemeris, interpolate_moons};
+use fring_model::rng::{Counter, Philox, Stream, box_muller};
 use fring_model::units::SECONDS_PER_JULIAN_YEAR;
 use fring_model::{Backend, InitialState, Particles, RunConfig, System, Vec3};
 use std::fmt::Write as _;
@@ -238,6 +239,48 @@ pub fn format_frozen(layer: u8, rows: &[Frozen]) -> String {
         );
     }
     s
+}
+
+// ---------------------------------------------------------------- perturbation
+
+/// Hill radius of Prometheus used by E1-REF layer 2 (`e1_l2.json`), km.
+pub const R_HILL_KM: f64 = 63.300_144_434_718_87;
+
+/// Adds to each start position an offset of length `length_km` in a random
+/// direction (isotropic, from the seeded Philox RNG, stream `ANALYSIS`,
+/// counter index = particle id). With `length_km == 0` nothing changes.
+pub fn perturb_positions(p: &mut Particles, length_km: f64, seed: u64) {
+    if length_km == 0.0 {
+        return;
+    }
+    let rng = Philox::from_seed(seed);
+    for i in 0..p.len() {
+        let c = |draw| Counter {
+            index: p.id[i],
+            step: 0,
+            stream: Stream::ANALYSIS,
+            draw,
+        };
+        let (a, b) = (rng.uniform_f64(c(0)), rng.uniform_f64(c(1)));
+        let (g0, g1) = box_muller(a[0], a[1]);
+        let (g2, _) = box_muller(b[0], b[1]);
+        let norm = (g0 * g0 + g1 * g1 + g2 * g2).sqrt();
+        p.x_km[i] += length_km * g0 / norm;
+        p.y_km[i] += length_km * g1 / norm;
+        p.z_km[i] += length_km * g2 / norm;
+    }
+}
+
+/// Counts inside 1, 3 and 6.3 R_H of Prometheus and the chaotic fraction
+/// (mean MEGNO at least 5, ADR 0008) of a layer 2 result.
+pub fn l2_summary(rows: &[L2Row]) -> ([usize; 3], f64) {
+    let n = |k: f64| {
+        rows.iter()
+            .filter(|r| r.min_prometheus_km < k * R_HILL_KM)
+            .count()
+    };
+    let chaotic = rows.iter().filter(|r| r.megno_mean >= 5.0).count();
+    ([n(1.0), n(3.0), n(6.3)], chaotic as f64 / rows.len() as f64)
 }
 
 // ---------------------------------------------------------------- config
@@ -672,6 +715,33 @@ pub fn layer2<B: Backend>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn perturbation() {
+        let mut base = Particles::default();
+        for i in 0..20u32 {
+            base.push(
+                i,
+                Vec3::new(1.0e5 + f64::from(i), -2.0e4, 3.0),
+                Vec3::new(0.1, 16.0, 0.0),
+            );
+        }
+        let mut zero = base.clone();
+        perturb_positions(&mut zero, 0.0, 7);
+        assert_eq!(zero, base, "x = 0 must change nothing");
+        let (mut a, mut b, mut c) = (base.clone(), base.clone(), base.clone());
+        perturb_positions(&mut a, 1e-6, 7);
+        perturb_positions(&mut b, 1e-6, 7);
+        perturb_positions(&mut c, 1e-6, 8);
+        assert_eq!(a, b);
+        assert_ne!(a, c);
+        for i in 0..20 {
+            let d = a.position_km(i) - base.position_km(i);
+            let len = (d.x * d.x + d.y * d.y + d.z * d.z).sqrt();
+            assert!((len - 1e-6).abs() < 1e-9, "length {len}");
+            assert_eq!(a.velocity_km_s(i), base.velocity_km_s(i));
+        }
+    }
 
     #[test]
     fn exact_steps() {

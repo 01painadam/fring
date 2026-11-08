@@ -14,13 +14,16 @@ fring-e1: run the CPU backend on the E1-REF files (layer 1, layer 2)
 
 USAGE:
     fring-e1 <layer1|layer2|all> [--refdir <dir>] [--params <dir>] [--out <dir>]
-             [--variants plain,substep,loss] [--ids <n>] [--l2-step <s>] [--l2-stride <k>] [--quiet]
+             [--variants plain,substep,loss] [--ids <n>] [--l2-step <s>] [--l2-stride <k>]
+             [--l2-perturb-km <x> --l2-seed <k>] [--quiet]
 
 Defaults: --refdir validation/reference, --params params, --out runs/e1,
 --variants plain,substep. --ids n runs only the first n ids (tests).
 --l2-step s sets the nominal layer 2 step (default 356.2537; the step is then
 adjusted so that the end time is exact). Only for noise studies.
 --l2-stride k measures the closest distance from every k-th step only (default 1).
+--l2-perturb-km x --l2-seed k add a random offset of length x km to each layer 2
+start position (seeded Philox, keyed by k and the id); x = 0 changes nothing.
 Files: <out>/<variant>/l1_wh.csv, l2_wh.csv, frozen_l1.csv, frozen_l2.csv;
 <out>/moons_diff.csv. Compare with validation/scripts/e1_compare.py.
 ";
@@ -34,6 +37,8 @@ struct Opts {
     ids: Option<usize>,
     nominal_step_s: f64,
     l2_stride: u64,
+    perturb_km: f64,
+    seed: u64,
     quiet: bool,
 }
 
@@ -54,6 +59,8 @@ fn parse() -> Result<Opts, String> {
         ids: None,
         nominal_step_s: e1::NOMINAL_STEP_S,
         l2_stride: 1,
+        perturb_km: 0.0,
+        seed: 0,
         quiet: false,
     };
     while let Some(f) = a.next() {
@@ -78,6 +85,16 @@ fn parse() -> Result<Opts, String> {
                 o.l2_stride = val("--l2-stride")?
                     .parse()
                     .map_err(|e| format!("--l2-stride: {e}"))?
+            }
+            "--l2-perturb-km" => {
+                o.perturb_km = val("--l2-perturb-km")?
+                    .parse()
+                    .map_err(|e| format!("--l2-perturb-km: {e}"))?
+            }
+            "--l2-seed" => {
+                o.seed = val("--l2-seed")?
+                    .parse()
+                    .map_err(|e| format!("--l2-seed: {e}"))?
             }
             "--quiet" | "-q" => o.quiet = true,
             _ => return Err(format!("unknown argument {f:?}")),
@@ -124,6 +141,7 @@ fn go(o: &Opts) -> Result<(), RunError> {
             l2.vy_km_s.truncate(n);
             l2.vz_km_s.truncate(n);
         }
+        e1::perturb_positions(&mut l2, o.perturb_km, o.seed);
         let j: serde_json_days::Days =
             serde_json_days::parse(&read(&o.refdir.join("e1_l2.json"))?)?;
         days = j.0;
@@ -193,12 +211,16 @@ fn go(o: &Opts) -> Result<(), RunError> {
             );
             write(&dir.join("l2_wh.csv"), &e1::format_l2(&r.rows, &head))?;
             write(&dir.join("frozen_l2.csv"), &e1::format_frozen(2, &r.frozen))?;
+            let (c, chaotic) = e1::l2_summary(&r.rows);
             say(&format!(
-                "layer2 {}: {} ids, {} frozen, {:.1} s",
+                "layer2 {}: {} ids, {} frozen, {:.1} s; inside 1, 3, 6.3 R_H: {} {} {}; chaotic fraction {chaotic:.4}",
                 v.name(),
                 r.rows.len(),
                 r.frozen.len(),
-                t.elapsed().as_secs_f64()
+                t.elapsed().as_secs_f64(),
+                c[0],
+                c[1],
+                c[2]
             ));
         }
     }
