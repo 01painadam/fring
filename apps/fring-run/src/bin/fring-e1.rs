@@ -15,12 +15,15 @@ fring-e1: run the CPU backend on the E1-REF files (layer 1, layer 2)
 USAGE:
     fring-e1 <layer1|layer2|all> [--refdir <dir>] [--params <dir>] [--out <dir>]
              [--variants plain,substep,loss] [--ids <n>] [--l2-step <s>] [--l2-stride <k>]
-             [--l2-perturb-km <x> --l2-seed <k>] [--quiet]
+             [--l2-perturb-km <x> --l2-seed <k>]
+             [--l2-div <m>] [--l2-trace-ids i,j,k --l2-trace-every <steps>] [--quiet]
 
 Defaults: --refdir validation/reference, --params params, --out runs/e1,
 --variants plain,substep. --ids n runs only the first n ids (tests).
 --l2-step s sets the nominal layer 2 step (default 356.2537; the step is then
 adjusted so that the end time is exact). Only for noise studies.
+--l2-div m runs m times as many steps of h/m. --l2-trace-ids writes trace_l2.csv
+(state and Prometheus position every --l2-trace-every steps of h, default 243 = 1 day).
 --l2-stride k measures the closest distance from every k-th step only (default 1).
 --l2-perturb-km x --l2-seed k add a random offset of length x km to each layer 2
 start position (seeded Philox, keyed by k and the id); x = 0 changes nothing.
@@ -37,6 +40,9 @@ struct Opts {
     ids: Option<usize>,
     nominal_step_s: f64,
     l2_stride: u64,
+    l2_div: u64,
+    trace_ids: Vec<u32>,
+    trace_every: u64,
     perturb_km: f64,
     seed: u64,
     quiet: bool,
@@ -59,6 +65,9 @@ fn parse() -> Result<Opts, String> {
         ids: None,
         nominal_step_s: e1::NOMINAL_STEP_S,
         l2_stride: 1,
+        l2_div: 1,
+        trace_ids: Vec::new(),
+        trace_every: 243,
         perturb_km: 0.0,
         seed: 0,
         quiet: false,
@@ -95,6 +104,22 @@ fn parse() -> Result<Opts, String> {
                 o.seed = val("--l2-seed")?
                     .parse()
                     .map_err(|e| format!("--l2-seed: {e}"))?
+            }
+            "--l2-div" => {
+                o.l2_div = val("--l2-div")?
+                    .parse()
+                    .map_err(|e| format!("--l2-div: {e}"))?
+            }
+            "--l2-trace-ids" => {
+                o.trace_ids = val("--l2-trace-ids")?
+                    .split(',')
+                    .map(|x| x.parse().map_err(|e| format!("--l2-trace-ids: {e}")))
+                    .collect::<Result<_, _>>()?
+            }
+            "--l2-trace-every" => {
+                o.trace_every = val("--l2-trace-every")?
+                    .parse()
+                    .map_err(|e| format!("--l2-trace-every: {e}"))?
             }
             "--quiet" | "-q" => o.quiet = true,
             _ => return Err(format!("unknown argument {f:?}")),
@@ -194,11 +219,17 @@ fn go(o: &Opts) -> Result<(), RunError> {
         }
         if do2 {
             let t = Instant::now();
+            let trace = (!o.trace_ids.is_empty()).then(|| e1::Trace {
+                ids: o.trace_ids.clone(),
+                every_steps: o.trace_every,
+            });
             let r = e1::layer2(
                 l2.clone(),
                 days,
                 o.nominal_step_s,
+                o.l2_div,
                 o.l2_stride,
+                trace.as_ref(),
                 &setup.system,
                 v,
                 e1::cpu_backend(setup.radii_km.clone()),
@@ -210,6 +241,18 @@ fn go(o: &Opts) -> Result<(), RunError> {
                 r.step_s
             );
             write(&dir.join("l2_wh.csv"), &e1::format_l2(&r.rows, &head))?;
+            if trace.is_some() {
+                let mut tx = String::from(
+                    "# id,t_s,x_km,y_km,z_km,vx_km_s,vy_km_s,vz_km_s,prom_x_km,prom_y_km,prom_z_km\n",
+                );
+                for (id, ts, st, mp) in &r.trace {
+                    tx.push_str(&format!(
+                        "{id},{ts:e},{:e},{:e},{:e},{:e},{:e},{:e},{:e},{:e},{:e}\n",
+                        st[0], st[1], st[2], st[3], st[4], st[5], mp[0], mp[1], mp[2]
+                    ));
+                }
+                write(&dir.join("trace_l2.csv"), &tx)?;
+            }
             write(&dir.join("frozen_l2.csv"), &e1::format_frozen(2, &r.frozen))?;
             let (c, chaotic) = e1::l2_summary(&r.rows);
             say(&format!(
