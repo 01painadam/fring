@@ -53,6 +53,14 @@ struct Wrap {
 }
 
 impl Wrap {
+    /// True if the 27 neighbour cells of any cell are all different, and the
+    /// vertical index does not wrap: then the neighbours are the 9 columns
+    /// (dx, dy) with 3 neighbouring cells each. Fewer than three cells along
+    /// an axis make neighbours repeat; the slow path removes the repeats.
+    fn neighbours_are_distinct(&self) -> bool {
+        self.vertical.is_none() && self.azimuthal >= 3 && self.radial.is_none_or(|m| m >= 3)
+    }
+
     /// The cell and its 26 neighbours, each once, in key order.
     fn neighbours(&self, key: CellKey) -> Vec<CellKey> {
         let wrap = |i: i64, n: Option<i64>| n.map_or(i, |n| i.rem_euclid(n));
@@ -74,6 +82,33 @@ impl Wrap {
         out.dedup();
         out
     }
+}
+
+/// Index of the first key that is not less than `target`, for sorted `keys`.
+/// `hint` is the answer for a nearby target: when the target moved forward
+/// the search gallops from `hint` (cost grows with the distance moved), else
+/// it is a binary search below `hint`.
+fn lower_bound_from(keys: &[CellKey], hint: usize, target: &CellKey) -> usize {
+    let n = keys.len();
+    let hint = hint.min(n);
+    if hint > 0 && keys[hint - 1] >= *target {
+        return keys[..hint - 1].partition_point(|k| k < target);
+    }
+    // All keys before `lo` are less than the target.
+    let mut lo = hint;
+    let mut step = 1_usize;
+    let hi = loop {
+        let h = lo.saturating_add(step);
+        if h >= n {
+            break n;
+        }
+        if keys[h] >= *target {
+            break h;
+        }
+        lo = h + 1;
+        step *= 2;
+    };
+    lo + keys[lo..hi].partition_point(|k| k < target)
 }
 
 /// A close pair of particles, as indices into the caller's arrays, with
@@ -103,20 +138,57 @@ fn pairs_in_cells(
     close: impl Fn(usize, usize) -> Option<i8>,
 ) -> Vec<Pair> {
     let mut pairs = Vec::new();
-    for (c, &key) in keys.iter().enumerate() {
-        for nb in wrap.neighbours(key) {
-            let Ok(c2) = keys.binary_search(&nb) else {
-                continue;
-            };
-            for &i in cells.members(c) {
-                for &j in cells.members(c2) {
-                    // A pair in two cells A ≠ B is seen from A and from B, but
-                    // only one of the two orders has ids[i] < ids[j].
-                    if ids[i as usize] < ids[j as usize]
-                        && let Some(shift) = close(i as usize, j as usize)
+    let mut visit = |c: usize, c2: usize| {
+        for &i in cells.members(c) {
+            for &j in cells.members(c2) {
+                // A pair in two cells A ≠ B is seen from A and from B, but
+                // only one of the two orders has ids[i] < ids[j].
+                if ids[i as usize] < ids[j as usize]
+                    && let Some(shift) = close(i as usize, j as usize)
+                {
+                    pairs.push(Pair { i, j, shift });
+                }
+            }
+        }
+    };
+    if wrap.neighbours_are_distinct() {
+        // Fast path: the 9 columns (dx, dy) of 3 cells each. The 3 cells of a
+        // column are next to each other in the sorted keys, and for one
+        // column the target moves forward with c (except at the wrap), so a
+        // cursor per column replaces 27 binary searches over all keys.
+        let mut cursor = [0_usize; 9];
+        for (c, &key) in keys.iter().enumerate() {
+            let mut n = 0;
+            for dx in -1..=1_i64 {
+                for dy in -1..=1_i64 {
+                    let col = CellKey {
+                        radial: wrap
+                            .radial
+                            .map_or(key.radial + dx, |m| (key.radial + dx).rem_euclid(m)),
+                        azimuthal: (i64::from(key.azimuthal) + dy)
+                            .rem_euclid(i64::from(wrap.azimuthal))
+                            as u32,
+                        vertical: key.vertical - 1,
+                    };
+                    let mut p = lower_bound_from(keys, cursor[n], &col);
+                    cursor[n] = p;
+                    while p < keys.len()
+                        && keys[p].radial == col.radial
+                        && keys[p].azimuthal == col.azimuthal
+                        && keys[p].vertical <= key.vertical + 1
                     {
-                        pairs.push(Pair { i, j, shift });
+                        visit(c, p);
+                        p += 1;
                     }
+                    n += 1;
+                }
+            }
+        }
+    } else {
+        for (c, &key) in keys.iter().enumerate() {
+            for nb in wrap.neighbours(key) {
+                if let Ok(c2) = keys.binary_search(&nb) {
+                    visit(c, c2);
                 }
             }
         }
