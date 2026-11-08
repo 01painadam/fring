@@ -77,7 +77,7 @@ Rules (full text in `AGENTS.md` and `CLAUDE.md`):
 | A4-ANALYSIS | L3 deciding run: moon Lyapunov rate with the GR03b masses; GR03 method on our masses | A8 | done | ws/a8-a4-analysis (PR #58; masses do not explain the factor 1.4) | L3-PARAMS |
 | K2 | Stochastic collision model on CPU | A4 | done | ws/a4-k2 | K1, ICR-009-IMPL |
 | E1-REF | REBOUND (IAS15) reference for particles within 1 R_H of Prometheus (from the spec only) | A6 | done | ws/a6-e1-ref (PR #59; WHFast stand-in: no power at h) | E1-ICR |
-| E1-REF-2 | `e1_compare.py` for ICR-004 amendment 2, part 3: the limits apply to the run without sub-stepping, a run with sub-stepping is reported with no limit, no power check; `AGENTS.md` command line updated by A0 (added by A0 2026-11-08) | A6 | review | ws/a6-e1-ref-2 (PR #63) | E1-REF |
+| E1-REF-2 | `e1_compare.py` for ICR-004 amendment 2, part 3: the limits apply to the run without sub-stepping, a run with sub-stepping is reported with no limit, no power check; `AGENTS.md` command line updated by A0 (added by A0 2026-11-08) | A6 | done | ws/a6-e1-ref-2 (PR #63) | E1-REF |
 | E1-CPU | ICR-004 and per-particle sub-stepping in the CPU backend | A2 | done | ws/a2-e1-cpu (PR #60; ICR-004 amendment 2: sub-stepping off by default, not on the GPU) | E1-ICR |
 | K3 | Hard-sphere collision model on CPU (cell list) | A4 | done | ws/a4-k3 | K1, ICR-009-IMPL |
 | K2-CPU | CPU backend runs the stochastic model (K2) every `every_steps` steps and reports `CollisionStats`; `fring-run` accepts `model = "stochastic"` (A5 part) | A2 + A5 | doing | ws/a2-k2-cpu (A2 part; A5 part after E1-RUN) | K2 |
