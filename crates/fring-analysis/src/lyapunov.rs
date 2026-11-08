@@ -331,6 +331,56 @@ pub fn run_all(
         .collect()
 }
 
+/// The GR03 rate (task A4-ANALYSIS): least-squares fit of
+/// `L(t) = lambda t + b ln t + a` to the points with `lo <= t <= hi` and
+/// `t > 0` (years). The `b ln t` term is the Kepler shear (GR03a sec 2.2: the
+/// no-chaos curve is "constant + (log t)/t" for `L/t`). Returns
+/// `(lambda, b)` in 1/yr and dimensionless, or `None` with fewer than 4 points.
+pub fn gr_fit(t: &[f64], l: &[f64], lo: f64, hi: f64) -> Option<(f64, f64)> {
+    let mut m = [[0.0f64; 4]; 3];
+    let mut n = 0;
+    for (&ti, &li) in t.iter().zip(l) {
+        if ti <= 0.0 || ti < lo || ti > hi {
+            continue;
+        }
+        let x = [ti, ti.ln(), 1.0];
+        for i in 0..3 {
+            for j in 0..3 {
+                m[i][j] += x[i] * x[j];
+            }
+            m[i][3] += x[i] * li;
+        }
+        n += 1;
+    }
+    if n < 4 {
+        return None;
+    }
+    // Gaussian elimination with partial pivoting.
+    for c in 0..3 {
+        let piv = (c..3).max_by(|&a, &b| m[a][c].abs().total_cmp(&m[b][c].abs()))?;
+        m.swap(c, piv);
+        if m[c][c].abs() < 1e-300 {
+            return None;
+        }
+        for r in 0..3 {
+            if r != c {
+                let f = m[r][c] / m[c][c];
+                for k in c..4 {
+                    m[r][k] -= f * m[c][k];
+                }
+            }
+        }
+    }
+    Some((m[0][3] / m[0][0], m[1][3] / m[1][1]))
+}
+
+/// The GR03 anchored rate: `c` of the curve `c + (ln t)/t` that passes through
+/// the last point of `L/t`, so `c = L(T)/T - ln(T)/T` (1/yr).
+pub fn gr_anchor(t: &[f64], l: &[f64]) -> f64 {
+    let (tt, ll) = (t[t.len() - 1], l[l.len() - 1]);
+    ll / tt - tt.ln() / tt
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -396,5 +446,24 @@ mod tests {
         let p = run_pair_tangent(&saturn, &moons, &cfg, 0).unwrap();
         let y = *p.megno_mean.last().unwrap();
         assert!(y > 1.5 && y < 3.0, "mean MEGNO {y}");
+    }
+
+    /// The GR03 fit recovers lambda from a synthetic L = lambda t + b ln t + a.
+    #[test]
+    fn gr_fit_recovers_rate() {
+        let t: Vec<f64> = (1..=400).map(|k| 0.25 * f64::from(k)).collect();
+        let l: Vec<f64> = t.iter().map(|x| 0.3 * x + 2.0 * x.ln() + 1.0).collect();
+        let (lam, b) = gr_fit(&t, &l, 0.0, 100.0).unwrap();
+        assert!((lam - 0.3).abs() < 1e-9 && (b - 2.0).abs() < 1e-7, "{lam} {b}");
+        let (lam1, _) = gr_fit(&t, &l, 1.0, 100.0).unwrap();
+        assert!((lam1 - 0.3).abs() < 1e-9);
+        // Pure shear: L = ln(t) + 1 gives lambda = 0 from the fit.
+        let l0: Vec<f64> = t.iter().map(|x| x.ln() + 1.0).collect();
+        let (lam0, b0) = gr_fit(&t, &l0, 0.0, 100.0).unwrap();
+        assert!(lam0.abs() < 1e-9 && (b0 - 1.0).abs() < 1e-7);
+        // The anchored rate of L = c t + ln t is c.
+        let la: Vec<f64> = t.iter().map(|x| 0.3 * x + x.ln()).collect();
+        assert!((gr_anchor(&t, &la) - 0.3).abs() < 1e-12);
+        assert!(gr_fit(&t[..3], &l[..3], 0.0, 100.0).is_none());
     }
 }
