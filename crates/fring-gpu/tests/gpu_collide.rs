@@ -789,3 +789,109 @@ fn k1_t6_budget_with_bulk_velocity_on_the_gpu() {
         t6(eps, Vec3::new(16.5, -3.0, 1.0));
     }
 }
+
+// ------------------------------------------------- kernel against its twin --
+
+/// `col_cells` against `cell_twin`, cell by cell. Setup: 8^3 cells, about 5
+/// particles per cell, a collision probability of 0.3 per step (so some cells
+/// have several collisions in one step and the later candidates see the changed
+/// velocities). Exact: the number of candidates (summed over all cells, and
+/// per step), occupancy sums. With a tolerance: the velocity change of each
+/// particle (f32 against f32; a cell is "equal" if all its particles agree to
+/// 1e-4 c, which allows a different rounding of an f32 acceptance test only
+/// when it does not flip).
+#[test]
+#[ignore = "needs a GPU"]
+fn cell_kernel_equals_its_twin() {
+    use fring_gpu::collide::cell_twin;
+    use fring_model::rng::Philox;
+    let Some(gpu) = gpu() else {
+        return;
+    };
+    let law = Restitution::Constant { epsilon: 0.5 };
+    let setup = Setup::stochastic(8, 5.0, 0.3, law, 77);
+    let params = CollideParams {
+        particle_radius_km: setup.params.particle_radius_km,
+        weight: setup.params.weight,
+        restitution: law,
+        seed: setup.params.seed,
+    };
+    let rng = Philox::from_seed(params.seed);
+    let k_rate = params.rate_factor(setup.dt_s, setup.cells.cell_volume_km3());
+    let mut model = GpuBox::new(&gpu, setup.params);
+    let (mut cells_total, mut cells_equal, mut cand_gpu, mut cand_twin) = (0u64, 0u64, 0u64, 0u64);
+    let (mut coll_gpu, mut coll_twin, mut worst_equal) = (0u64, 0u64, 0f64);
+    for trial in 0..20u64 {
+        let mut state = setup.initial_state(trial);
+        setup.stream(&mut state, setup.dt_s);
+        let before = state.vel_km_s.clone();
+        let step = 100 + trial;
+        let t = model.collide(
+            &setup.cells,
+            &state.pos_km,
+            &mut state.vel_km_s,
+            step,
+            setup.dt_s,
+        );
+        let c = dispersion(&before);
+        // Group by cell, ids ascending.
+        let mut order: Vec<(usize, usize)> = state
+            .pos_km
+            .iter()
+            .enumerate()
+            .map(|(i, &p)| (setup.cells.cell_of(p), i))
+            .collect();
+        order.sort_unstable();
+        let mut cand = 0u64;
+        for run in order.chunk_by(|a, b| a.0 == b.0) {
+            let ids: Vec<usize> = run.iter().map(|r| r.1).collect();
+            if ids.len() < 2 {
+                continue;
+            }
+            let mean = ids.iter().fold(Vec3::zero(), |a, &i| a + before[i]) / ids.len() as f64;
+            let mut w: Vec<Vec3<f32>> = ids
+                .iter()
+                .map(|&i| {
+                    let d = before[i] - mean;
+                    Vec3::new(d.x as f32, d.y as f32, d.z as f32)
+                })
+                .collect();
+            let w0 = w.clone();
+            let ct = cell_twin(&rng, &law, k_rate, ids[0] as u32, step, &mut w);
+            cand += u64::from(ct.candidates);
+            coll_twin += u64::from(ct.collisions);
+            let err = ids
+                .iter()
+                .enumerate()
+                .map(|(q, &i)| {
+                    let dg = state.vel_km_s[i] - before[i];
+                    let dt_ = Vec3::new(
+                        f64::from(w[q].x - w0[q].x),
+                        f64::from(w[q].y - w0[q].y),
+                        f64::from(w[q].z - w0[q].z),
+                    );
+                    (dg - dt_).norm()
+                })
+                .fold(0.0, f64::max);
+            cells_total += 1;
+            if err <= 1e-4 * c {
+                cells_equal += 1;
+                worst_equal = worst_equal.max(err / c);
+            }
+        }
+        cand_gpu += t.stats.candidates;
+        cand_twin += cand;
+        coll_gpu += t.collisions;
+    }
+    println!(
+        "cell kernel against twin: {cells_total} cells with 2 or more members, {cells_equal} equal to 1e-4 c \
+         (worst equal cell {worst_equal:.2e} c); candidates GPU {cand_gpu}, twin {cand_twin}; \
+         collisions GPU {coll_gpu}, twin {coll_twin}"
+    );
+    assert_eq!(cand_gpu, cand_twin, "the candidates are exact");
+    assert!(
+        cells_equal as f64 >= 0.999 * cells_total as f64,
+        "{cells_equal} of {cells_total}"
+    );
+    assert!((coll_gpu as f64 - coll_twin as f64).abs() <= 0.005 * coll_twin as f64 + 2.0);
+}
