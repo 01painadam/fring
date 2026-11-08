@@ -95,8 +95,14 @@ fn segment_min_d2_twin_hand_cases_equal_the_generic_function() {
         let twin = wh::segment_min_d2::<M4>(a, b);
         let g32 = segment_min_d2::<f32>(a, b);
         let g64 = segment_min_d2::<f64>(a.map(f64::from), b.map(f64::from));
-        assert!((f64::from(twin) - g64).abs() <= 1e-6 * g64.max(1.0), "{a:?} {b:?}");
-        assert!((f64::from(g32) - f64::from(want)).abs() <= 1e-3, "{a:?} {b:?}");
+        assert!(
+            (f64::from(twin) - g64).abs() <= 1e-6 * g64.max(1.0),
+            "{a:?} {b:?}"
+        );
+        assert!(
+            (f64::from(g32) - f64::from(want)).abs() <= 1e-3,
+            "{a:?} {b:?}"
+        );
     }
 }
 
@@ -157,7 +163,10 @@ fn advance_dropping_agrees_with_the_generic_rule_on_what_it_found() {
                         skipped += 1;
                         continue;
                     }
-                    assert!(drift_hits_moon::<f32>(a, b, rk as f32), "f32 {mode:?} {k} {j}");
+                    assert!(
+                        drift_hits_moon::<f32>(a, b, rk as f32),
+                        "f32 {mode:?} {k} {j}"
+                    );
                     assert!(
                         drift_hits_moon::<f64>(a.map(f64::from), b.map(f64::from), rk),
                         "f64 {mode:?} {k} {j}"
@@ -174,6 +183,11 @@ fn advance_dropping_agrees_with_the_generic_rule_on_what_it_found() {
             }
         }
     }
-    eprintln!("advance_dropping: {hits} hits confirmed, {clear} clear, {skipped} within 1e-5 of the radius");
-    assert!(hits >= 20 && clear >= 20, "the crafted set must exercise both outcomes");
+    eprintln!(
+        "advance_dropping: {hits} hits confirmed, {clear} clear, {skipped} within 1e-5 of the radius"
+    );
+    assert!(
+        hits >= 20 && clear >= 20,
+        "the crafted set must exercise both outcomes"
+    );
 }
