@@ -344,7 +344,13 @@ fn hs_step_timing() {
     for n in [100_000u32, 1_000_000] {
         // Dense clump (many pairs) and a wide band (almost none).
         let cases: Vec<(&str, f64, InitialState)> = vec![
-            ("clump", 0.01, clump(n, 40.0)),
+            // The same density (about 7 per km3) at both sizes; some pairs overlap
+            // at the start, which does not matter for the timing.
+            (
+                "clump",
+                0.03,
+                clump(n, 10.0 * (f64::from(n) / 1.0e5).cbrt()),
+            ),
             ("band", 0.01, {
                 let dist = Distribution::Band {
                     min_semi_major_axis_km: 140_000.0,
