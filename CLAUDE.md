@@ -8,12 +8,14 @@ The rules in `AGENTS.md` apply. This file adds instructions for Claude Code only
 
 AJ uses a Pro subscription. Usage limits are the main constraint, so:
 
-- **One main session at a time.** The main session takes one role per task (it reads the role from the task row on the board). Do not run many roles in parallel.
-- **At most one subagent at a time,** and only for these cases:
-  - A6 validation work, because it must be independent of the implementation.
-  - A read-only search of the repository that would otherwise fill the main context.
+- **One main session at a time.** The main session is A0. It runs board tasks with subagents (one agent per task, each in its own worktree) and keeps the board.
+- **Run tasks in parallel wherever possible (AJ, 2026-11-08).** Start every ready task that can run beside the others, and run their plan rounds at the same time. Limits:
+  - One agent per role at a time. Tasks of the same role edit the same files, so they run one after the other.
+  - Only tasks whose files do not overlap.
+  - A6 validation work stays independent of the implementation (see `AGENTS.md`).
+  - If usage gets near the limit, let the running agents finish and start no new ones.
 - **Do not spawn an agent for a task that the main session can do in a few steps.**
-- **Pick the next task** from `docs/status/BOARD.md`: the first `todo` task in the current phase whose blockers are `done`. If none, stop and tell AJ.
+- **Pick the next tasks** from `docs/status/BOARD.md`: the `todo` tasks in the current phase whose blockers are `done`, in board order. If none, stop and tell AJ.
 
 ## Model use
 
