@@ -3,6 +3,7 @@
 //! Primary test: the wrap changes neither E nor Lz (PLAN section 9, D1). It
 //! compares both just before and just after the wrap call, at the same time,
 //! so that no integrator error is in the numbers.
+#![allow(clippy::needless_range_loop)]
 
 use fring_cpu::CpuBackend;
 use fring_cpu::collide::CollisionState;
