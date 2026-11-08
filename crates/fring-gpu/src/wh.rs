@@ -534,6 +534,10 @@ pub struct DropOutcome {
     /// For `reason >= 2`: the squared distances of the two ends of the drift
     /// that hit, km².
     pub ends_d2_km2: [f32; 2],
+    /// For `reason >= 2`: the positions relative to the moon at the two ends
+    /// of the drift that hit, km (the input of the generic
+    /// `fring_model::physics::moon_radius::drift_hits_moon`).
+    pub hit_rel_km: [[f32; 3]; 2],
     /// Smallest squared distance to each moon over the drifts that were
     /// checked, km² (infinity for a moon never checked). Over the whole block
     /// if nothing hit, up to the hit otherwise.
@@ -564,6 +568,7 @@ pub fn advance_dropping<const M: u8>(
         reason: 0,
         segment: None,
         ends_d2_km2: [0.0; 2],
+        hit_rel_km: [[0.0; 3]; 2],
         min_d2_km2: [f32::INFINITY; MAX_MOONS],
     };
     if n == 0 {
@@ -592,6 +597,7 @@ pub fn advance_dropping<const M: u8>(
                     out.reason = 2 + j as u32;
                     out.segment = Some(seg);
                     out.ends_d2_km2 = [sq(a[j]), sq(b[j])];
+                    out.hit_rel_km = [a[j], b[j]];
                 }
             }
         }
