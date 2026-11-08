@@ -1,5 +1,5 @@
 # E1-ICR: ICR-004, lost particles and per-particle sub-stepping
-Role: A2  Branch: ws/a2-e1-icr  Status: review
+Role: A2  Branch: ws/a2-e1-icr  Status: done (ICR-004 Accepted 2026-11-08)
 Updated: 2026-11-07
 
 ## Goal and acceptance criteria
@@ -20,7 +20,7 @@ Write `docs/interfaces/ICR-004.md` (PLAN.md section 8, E1-ICR): flag and freeze 
 - **Dropped decisions that I did not take.** I did not add fields to `StepStats` or `ChaosReport` (the two `fring-io` test literals without `..` would fail, and `stats.csv` has fixed columns). Drop counts go through `Backend::dropped()` and `drops.csv`.
 
 ## Next step (one concrete action)
-A0 reviews `docs/interfaces/ICR-004.md`, asks AJ for the energy-test limit (options a, b, c in the ICR), and writes "Accepted". Then E1-CPU (A2) and E1-REF (A6) can start; E1-GPU (A3) follows E1-CPU.
+ICR-004 is Accepted (AJ chose option a for test D on 2026-11-08). Next: E1-CPU (A2) and E1-REF (A6) can start; E1-GPU (A3) follows E1-CPU.
 
 ## How to verify the current state
 - `git log --oneline origin/main..HEAD` shows the commits of this task (documents only).
@@ -28,7 +28,7 @@ A0 reviews `docs/interfaces/ICR-004.md`, asks AJ for the energy-test limit (opti
 - The measured numbers: `runs/logs/e1-icr-f.log` (main checkout of the worktree; git-ignored).
 
 ## Open questions / blockers
-- Energy-test limit (ICR "Decisions for AJ", options a to c). Recommendation (a).
+- None for this task. AJ chose option (a) for the test D limit on 2026-11-08.
 - A3 confirms the status-word layout and the table layout in E1-GPU.
 
 ## Decisions made (link ADRs)
