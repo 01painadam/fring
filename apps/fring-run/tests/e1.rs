@@ -100,8 +100,8 @@ fn layer2_smoke() {
     let r = e1::layer2(
         p.clone(),
         days,
-        e1::NOMINAL_STEP_S,
-        1,
+        e1::L2Opts::default(),
+        None,
         &s.system,
         Variant::Plain,
         e1::cpu_backend(s.radii_km.clone()),
@@ -120,8 +120,8 @@ fn layer2_smoke() {
     let r2 = e1::layer2(
         p,
         days,
-        e1::NOMINAL_STEP_S,
-        1,
+        e1::L2Opts::default(),
+        None,
         &s.system,
         Variant::Plain,
         e1::cpu_backend(s.radii_km.clone()),

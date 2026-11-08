@@ -572,8 +572,42 @@ pub fn layer1<B: Backend>(
     })
 }
 
+/// Step options of layer 2.
+#[derive(Clone, Copy, Debug)]
+pub struct L2Opts {
+    /// Nominal step in s (the step is adjusted so that the end time is exact).
+    pub nominal_step_s: f64,
+    /// Run `div` times as many steps of `h / div`.
+    pub div: u64,
+    /// Measure the closest distance from every `sample_every`-th step only.
+    pub sample_every: u64,
+}
+
+impl Default for L2Opts {
+    fn default() -> Self {
+        Self {
+            nominal_step_s: NOMINAL_STEP_S,
+            div: 1,
+            sample_every: 1,
+        }
+    }
+}
+
+/// Which particles to trace in layer 2 and how often.
+pub struct Trace {
+    /// Particle ids.
+    pub ids: Vec<u32>,
+    /// Sample every this many steps of the undivided step h.
+    pub every_steps: u64,
+}
+
+/// One trace sample: id, time (s), inertial state, Prometheus position.
+pub type TraceRow = (u32, f64, [f64; 6], [f64; 3]);
+
 /// Result of layer 2.
 pub struct L2Result {
+    /// Trace samples (empty without a `Trace`).
+    pub trace: Vec<TraceRow>,
     /// One row per particle.
     pub rows: Vec<L2Row>,
     /// Frozen particles.
@@ -596,13 +630,19 @@ fn vec3(a: Vec3<f64>) -> [f64; 3] {
 pub fn layer2<B: Backend>(
     init_particles: Particles,
     days: f64,
-    nominal_step_s: f64,
-    sample_every: u64,
+    opts: L2Opts,
+    trace: Option<&Trace>,
     system: &System,
     variant: Variant,
     mut make: impl FnMut(&RunConfig, &System, &InitialState) -> Result<B, RunError>,
 ) -> Result<L2Result, RunError> {
+    let L2Opts {
+        nominal_step_s,
+        div,
+        sample_every,
+    } = opts;
     let (n, h) = exact_step(days * 86_400.0, nominal_step_s);
+    let (n, h) = (n * div, h / div as f64);
     let count = init_particles.len();
     let text = config_text(variant, count, n, h, true);
     let config = setup(RunConfig::from_toml_str(&text))?;
@@ -657,11 +697,27 @@ pub fn layer2<B: Backend>(
     }
     let mut live = vec![true; count];
     let mut last = prev.clone();
+    let mut trace_rows: Vec<TraceRow> = Vec::new();
+    let mut record = |step: u64, st: &[[f64; 6]], mp: [f64; 3]| {
+        if let Some(t) = trace {
+            for &id in &t.ids {
+                if let Some(i) = ids.iter().position(|&x| x == id) {
+                    trace_rows.push((id, step as f64 * h, st[i], mp));
+                }
+            }
+        }
+    };
+    record(0, &prev, pp);
     for k in 0..n {
         backend
             .step(1)
             .map_err(|e| RunError::Run(format!("layer 2 step {k}: {e}")))?;
         let (cur, cp, cv) = snapshot(&mut backend)?;
+        if let Some(t) = trace
+            && (k + 1) % (t.every_steps * div) == 0
+        {
+            record(k + 1, &cur, cp);
+        }
         if let Some(d) = backend
             .dropped()
             .map_err(|e| RunError::Run(e.to_string()))?
@@ -705,6 +761,7 @@ pub fn layer2<B: Backend>(
         })
         .collect();
     Ok(L2Result {
+        trace: trace_rows,
         rows,
         frozen,
         n_steps: n,
