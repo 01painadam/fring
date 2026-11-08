@@ -457,16 +457,15 @@ impl GpuCollider {
     /// returns `CollideError` for the same cell).
     #[cfg(not(target_arch = "wasm32"))]
     pub fn read_tally(&self) -> Result<fring_collide::tally::Tally> {
-        use fring_collide::stochastic::CollideError;
         use fring_collide::tally::Tally;
         use fring_model::CollisionStats;
         let w = self.read_words(&self.tot, 0, TOT_WORDS);
         let f = |hi: u32, lo: u32| f64::from(f32::from_bits(hi)) + f64::from(f32::from_bits(lo));
         if w[9] > 0 {
             return Err(Error::Backend(format!(
-                "{} cells need more than {MAX_CANDIDATES} candidates (the cells are too large); see {}",
-                w[9],
-                std::any::type_name::<CollideError>()
+                "{} cells need more than {MAX_CANDIDATES} candidates in one step (the cells are too \
+                 large; the CPU returns CollideError for the same cell)",
+                w[9]
             )));
         }
         let stats = CollisionStats {

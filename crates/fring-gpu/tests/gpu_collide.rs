@@ -513,15 +513,15 @@ fn words_bytes(w: &[u32]) -> Vec<u8> {
     w.iter().flat_map(|x| x.to_le_bytes()).collect()
 }
 
-impl BoxModel for GpuBox {
-    fn collide(
+impl GpuBox {
+    fn try_collide(
         &mut self,
         cells: &BoxSpec,
         pos_km: &[Vec3<f64>],
         vel_km_s: &mut [Vec3<f64>],
         step: u64,
         dt_s: f64,
-    ) -> Tally {
+    ) -> fring_model::Result<Tally> {
         let n = pos_km.len();
         let cap = n.next_multiple_of(64);
         if self.inner.is_none() {
@@ -587,7 +587,7 @@ impl BoxModel for GpuBox {
             .create_command_encoder(&Default::default());
         inner.collider.encode(&mut enc, step, dt_s);
         q.submit([enc.finish()]);
-        let tally = inner.collider.read_tally().expect("tally");
+        let tally = inner.collider.read_tally();
         let w = inner
             .collider
             .read_words(&inner.state, 2 * 3 * inner.cap, 2 * 3 * inner.cap);
@@ -600,6 +600,20 @@ impl BoxModel for GpuBox {
         }
         self.last = vel_km_s.to_vec();
         tally
+    }
+}
+
+impl BoxModel for GpuBox {
+    fn collide(
+        &mut self,
+        cells: &BoxSpec,
+        pos_km: &[Vec3<f64>],
+        vel_km_s: &mut [Vec3<f64>],
+        step: u64,
+        dt_s: f64,
+    ) -> Tally {
+        self.try_collide(cells, pos_km, vel_km_s, step, dt_s)
+            .expect("collision pass")
     }
 }
 
@@ -894,4 +908,426 @@ fn cell_kernel_equals_its_twin() {
         "{cells_equal} of {cells_total}"
     );
     assert!((coll_gpu as f64 - coll_twin as f64).abs() <= 0.005 * coll_twin as f64 + 2.0);
+}
+
+// ------------------------------------- overfull cell, and binner to collider --
+
+/// A cell that needs 32,767 candidates or more is skipped on the GPU and
+/// reported as an error (the CPU returns `CollideError` for it).
+#[test]
+#[ignore = "needs a GPU"]
+fn a_cell_with_too_many_candidates_is_an_error() {
+    let Some(gpu) = gpu() else {
+        return;
+    };
+    let law = Restitution::Constant { epsilon: 0.5 };
+    // One cell with 1,000 members; W sigma dt g_max / V about 0.2, so M about 10^5.
+    let setup = Setup::stochastic(1, 1000.0, 0.02, law, 5);
+    let mut state = setup.initial_state(0);
+    let mut params = setup.params;
+    params.weight *= 50.0 * 1000.0 / 10.0;
+    let mut model = GpuBox::new(&gpu, params);
+    let r = model.try_collide(
+        &setup.cells,
+        &state.pos_km,
+        &mut state.vel_km_s,
+        1,
+        setup.dt_s,
+    );
+    let msg = r.expect_err("must fail").to_string();
+    println!("GPU: {msg}");
+    assert!(msg.contains("32767"));
+    let cpu_model = cpu(params);
+    let ids: Vec<u32> = (0..1000).collect();
+    let mut u = state.vel_km_s.clone();
+    let mut delta = vec![Vec3::zero(); 1000];
+    let r = cpu_model.process_cell(
+        setup.cells.cell_volume_km3(),
+        setup.dt_s,
+        1,
+        &ids,
+        &mut u,
+        &mut delta,
+    );
+    println!(
+        "CPU: {}",
+        r.as_ref()
+            .map(|_| "ok".to_string())
+            .unwrap_or_else(|e| e.to_string())
+    );
+    assert!(r.is_err());
+}
+
+use fring_collide::stochastic::Domain;
+use fring_gpu::bin::{BinGeometry, GpuBinner};
+use fring_gpu::stepper::GpuStepper;
+use fring_gpu::wh::Mode;
+use fring_gpu::wh_gpu::{DEFAULT_WORKGROUP, WhKernels};
+use fring_model::physics::reference_mean_motion;
+
+const CELL_KM: [f64; 3] = [20.0, 8810.0, 400.0];
+
+/// The real chain: `GpuStepper`, `GpuBinner`, `GpuCollider` on the state of the
+/// G1 ensemble, in the full ring. Returns the state before and after the
+/// collision pass (planes of DS words), the tally, and the CPU reference
+/// (`StochasticModel::collide_step` on the state before, in f64).
+struct Chain {
+    before: Vec<[f64; 6]>,
+    after: Vec<[f64; 6]>,
+    words_after: Vec<u32>,
+    tally: Tally,
+    cpu_after: Vec<[f64; 6]>,
+    cpu_tally: Tally,
+}
+
+fn chain(gpu: &Gpu, n: usize, steps: u64, params: CollideParams, kinds: Option<usize>) -> Chain {
+    let system = common::system(common::H_S, steps + 10, false);
+    let (mut init, _) = common::ensemble(&system, n);
+    if let Some(k) = kinds {
+        // Only the orbit type `k` (0 circular, 1 core, 2 stress).
+        let mut p = fring_model::Particles::with_capacity(n);
+        for i in (k..init.particles.len()).step_by(3) {
+            p.push(
+                i as u32,
+                init.particles.position_km(i),
+                init.particles.velocity_km_s(i),
+            );
+        }
+        init.particles = p;
+    }
+    let n = init.particles.len();
+    let kernels = WhKernels::new(gpu, DEFAULT_WORKGROUP).expect("kernels");
+    let mut stepper = GpuStepper::new(
+        gpu,
+        &kernels,
+        &system,
+        &init,
+        common::H_S,
+        8,
+        Mode::Dp,
+        None,
+    )
+    .expect("stepper");
+    let field = SaturnField::<f64>::from_params(&system.saturn);
+    let n0 = reference_mean_motion(&field, common::A0_KM);
+    let g = BinGeometry::new(
+        common::A0_KM,
+        n0,
+        CELL_KM,
+        std::f64::consts::TAU * common::A0_KM,
+        0.0,
+    )
+    .expect("geometry");
+    let binner = GpuBinner::for_stepper(gpu, &stepper, g).expect("binner");
+    let volume = g.lx_km * g.ly_km * g.lz_km;
+    let collider = GpuCollider::new(
+        gpu,
+        stepper.state_buffer(),
+        binner.sorted_buffer(),
+        binner.sorted_keys_buffer(),
+        n,
+        stepper.capacity(),
+        &field,
+        params,
+        volume,
+        false,
+    )
+    .expect("collider");
+    let cap = stepper.capacity();
+    let state_buf = stepper.state_buffer().clone();
+    let read = |label: &str| {
+        let w = binner.read_words(&state_buf, 0, 12 * cap);
+        let st: Vec<[f64; 6]> = (0..n)
+            .map(|i| {
+                let mut s = [0.0; 6];
+                for (c, x) in s.iter_mut().enumerate() {
+                    *x =
+                        f64::from(f(w[2 * (c * cap + i)])) + f64::from(f(w[2 * (c * cap + i) + 1]));
+                }
+                s
+            })
+            .collect();
+        let _ = label;
+        (st, w)
+    };
+    let submit = |enc: wgpu::CommandEncoder| {
+        gpu.queue().submit([enc.finish()]);
+        gpu.device()
+            .poll(wgpu::PollType::wait_indefinitely())
+            .expect("poll");
+    };
+    let mut enc = gpu.device().create_command_encoder(&Default::default());
+    stepper.encode_steps(&mut enc, steps).expect("steps");
+    binner.encode(&mut enc, stepper.time_s());
+    submit(enc);
+    let (before, _) = read("before");
+    let mut enc = gpu.device().create_command_encoder(&Default::default());
+    collider.encode(&mut enc, steps, common::H_S);
+    submit(enc);
+    let tally = collider.read_tally().expect("tally");
+    let (after, words_after) = read("after");
+    // CPU on the state before.
+    let domain = Domain::full_ring(CELL_KM[0], CELL_KM[1], CELL_KM[2], common::A0_KM, n0).unwrap();
+    let model = StochasticModel::new(
+        params.particle_radius_km,
+        params.weight,
+        params.restitution,
+        params.seed,
+    );
+    let ids: Vec<u32> = (0..n as u32).collect();
+    let mut cpu_after = before.clone();
+    let cpu_tally = model
+        .collide_step(
+            &domain,
+            &field,
+            stepper.time_s(),
+            steps,
+            common::H_S,
+            &ids,
+            None,
+            &mut cpu_after,
+        )
+        .expect("cpu step");
+    Chain {
+        before,
+        after,
+        words_after,
+        tally,
+        cpu_after,
+        cpu_tally,
+    }
+}
+
+fn ring_params(weight: f64) -> CollideParams {
+    CollideParams {
+        particle_radius_km: 1.0e-5,
+        weight,
+        restitution: Restitution::Constant { epsilon: 0.5 },
+        seed: 20_261_108,
+    }
+}
+
+/// The binner layout end to end: stepper state, binner output, collider, against
+/// `StochasticModel::collide_step` on the same state in f64, and a second run
+/// for the bit-exact determinism (K1-T9 on the production path).
+#[test]
+#[ignore = "needs a GPU"]
+fn binner_to_collider_agrees_with_the_cpu_model() {
+    let Some(gpu) = gpu() else {
+        return;
+    };
+    let params = ring_params(1.6e13);
+    let a = chain(&gpu, 30_000, 40, params, None);
+    let (g, c) = (&a.tally.stats, &a.cpu_tally.stats);
+    println!(
+        "ring chain, {} particles: GPU cells {} (CPU {}), sum N_c {} ({}), sum N_c^2 {} ({}), lonely {} ({}); \\
+         candidates {} ({}), collisions {} ({}), gmax_exceeded {} ({}), overfull {} ({}); \\
+         energy loss {:.6e} ({:.6e}) km^2/s^2",
+        a.before.len(),
+        g.occupied_cells,
+        c.occupied_cells,
+        g.occupancy_sum,
+        c.occupancy_sum,
+        g.occupancy_sq_sum,
+        c.occupancy_sq_sum,
+        g.lonely_particles,
+        c.lonely_particles,
+        g.candidates,
+        c.candidates,
+        a.tally.collisions,
+        a.cpu_tally.collisions,
+        g.gmax_exceeded,
+        c.gmax_exceeded,
+        g.overfull_cells,
+        c.overfull_cells,
+        g.energy_loss_km2_s2,
+        c.energy_loss_km2_s2
+    );
+    assert!(
+        a.cpu_tally.collisions > 100,
+        "the setup must give collisions"
+    );
+    // The cells are equal, so the occupancy sums are exact.
+    assert_eq!(
+        (
+            g.occupied_cells,
+            g.occupancy_sum,
+            g.occupancy_sq_sum,
+            g.lonely_particles
+        ),
+        (
+            c.occupied_cells,
+            c.occupancy_sum,
+            c.occupancy_sq_sum,
+            c.lonely_particles
+        ),
+        "the cells of the binner and of the CPU domain differ"
+    );
+    // Candidates differ only where f32 changes floor(M) or the rounding draw.
+    let dc = (g.candidates as f64 - c.candidates as f64).abs();
+    assert!(
+        dc <= 0.002 * c.candidates as f64 + 2.0,
+        "candidates differ by {dc}"
+    );
+    let dn = (a.tally.collisions as f64 - a.cpu_tally.collisions as f64).abs();
+    assert!(
+        dn <= 0.01 * a.cpu_tally.collisions as f64 + 3.0,
+        "collisions differ by {dn}"
+    );
+    // Velocity changes, GPU against CPU.
+    let (mut worst, mut differ, mut moved, mut dmax) = (0f64, 0usize, 0usize, 0f64);
+    for i in 0..a.before.len() {
+        let d = |s: &[[f64; 6]]| {
+            Vec3::new(
+                s[i][3] - a.before[i][3],
+                s[i][4] - a.before[i][4],
+                s[i][5] - a.before[i][5],
+            )
+        };
+        let (dg, dc) = (d(&a.after), d(&a.cpu_after));
+        if dc.norm() > 0.0 {
+            moved += 1;
+        }
+        dmax = dmax.max(dc.norm());
+        let e = (dg - dc).norm();
+        worst = worst.max(e);
+        if e > 1e-5 * dc.norm().max(1e-9) {
+            differ += 1;
+        }
+    }
+    println!(
+        "velocity changes: {moved} particles moved (largest {dmax:.3e} km/s); {differ} differ by more than 1e-5 relative; \\
+         largest GPU - CPU difference {worst:.3e} km/s"
+    );
+    assert!(differ as f64 <= 0.005 * moved as f64 + 2.0);
+    // Determinism: the same chain again gives the same words.
+    let b = chain(&gpu, 30_000, 40, params, None);
+    assert_eq!(a.words_after, b.words_after, "K1-T9: two runs differ");
+    assert_eq!(a.tally, b.tally);
+    println!("K1-T9 on the production path: two runs, state words and tally identical");
+}
+
+/// K1-T8b on the GPU (cold ring): particles on circular orbits (20,000, all in
+/// one radial cell, about 200 per cell), 10 orbits (1,500 steps of the stepper),
+/// a bin and a collision pass after every step. Compared with the same run
+/// without collisions. The bound is in `ICR-010`.
+#[test]
+#[ignore = "needs a GPU; some seconds"]
+fn cold_ring_stays_cold_on_the_gpu() {
+    let Some(gpu) = gpu() else {
+        return;
+    };
+    let steps = 1500u64;
+    let run = |collide: bool| {
+        let system = common::system(common::H_S, steps + 10, false);
+        let (init0, _) = common::ensemble(&system, 60_000);
+        let mut init = init0;
+        let mut p = fring_model::Particles::with_capacity(20_000);
+        for i in (0..init.particles.len()).step_by(3) {
+            p.push(
+                i as u32,
+                init.particles.position_km(i),
+                init.particles.velocity_km_s(i),
+            );
+        }
+        init.particles = p;
+        let n = init.particles.len();
+        let kernels = WhKernels::new(&gpu, DEFAULT_WORKGROUP).expect("kernels");
+        let mut stepper = GpuStepper::new(
+            &gpu,
+            &kernels,
+            &system,
+            &init,
+            common::H_S,
+            1,
+            Mode::Dp,
+            None,
+        )
+        .expect("stepper");
+        let field = SaturnField::<f64>::from_params(&system.saturn);
+        let n0 = reference_mean_motion(&field, common::A0_KM);
+        let g = BinGeometry::new(
+            common::A0_KM,
+            n0,
+            CELL_KM,
+            std::f64::consts::TAU * common::A0_KM,
+            0.0,
+        )
+        .expect("geometry");
+        let binner = GpuBinner::for_stepper(&gpu, &stepper, g).expect("binner");
+        let params = CollideParams {
+            particle_radius_km: 1.0e-5,
+            weight: 1.0e14,
+            restitution: Restitution::Constant { epsilon: 0.5 },
+            seed: 5,
+        };
+        let collider = GpuCollider::new(
+            &gpu,
+            stepper.state_buffer(),
+            binner.sorted_buffer(),
+            binner.sorted_keys_buffer(),
+            n,
+            stepper.capacity(),
+            &field,
+            params,
+            g.lx_km * g.ly_km * g.lz_km,
+            false,
+        )
+        .expect("collider");
+        let (mut collisions, mut candidates) = (0u64, 0u64);
+        for step in 1..=steps {
+            let mut enc = gpu.device().create_command_encoder(&Default::default());
+            stepper.encode_steps(&mut enc, 1).expect("step");
+            if collide {
+                binner.encode(&mut enc, stepper.time_s());
+                collider.encode(&mut enc, step, common::H_S);
+            }
+            gpu.queue().submit([enc.finish()]);
+            if collide && step % 50 == 0 {
+                let t = collider.read_tally().expect("tally");
+                collisions += t.collisions;
+                candidates += t.stats.candidates;
+            }
+        }
+        let cap = stepper.capacity();
+        let w = collider.read_words(stepper.state_buffer(), 0, 12 * cap);
+        let st: Vec<[f64; 6]> = (0..n)
+            .map(|i| {
+                let mut s = [0.0; 6];
+                for (c, x) in s.iter_mut().enumerate() {
+                    *x =
+                        f64::from(f(w[2 * (c * cap + i)])) + f64::from(f(w[2 * (c * cap + i) + 1]));
+                }
+                s
+            })
+            .collect();
+        (st, field, collisions, candidates)
+    };
+    let (with, field, collisions, candidates) = run(true);
+    let (without, _, _, _) = run(false);
+    // Peculiar velocity dispersion (rms of |u| over the particles) and the largest |u|.
+    let stats = |st: &[[f64; 6]]| {
+        let us: Vec<f64> = st
+            .iter()
+            .map(|a| {
+                peculiar_velocity(
+                    &field,
+                    Vec3::new(a[0], a[1], a[2]),
+                    Vec3::new(a[3], a[4], a[5]),
+                )
+                .norm()
+            })
+            .collect();
+        let rms = (us.iter().map(|u| u * u).sum::<f64>() / us.len() as f64).sqrt();
+        (rms, us.iter().cloned().fold(0.0, f64::max))
+    };
+    let ((rms_w, max_w), (rms_wo, max_wo)) = (stats(&with), stats(&without));
+    let diff = (rms_w - rms_wo).abs();
+    println!(
+        "K1-T8b on the GPU: {} particles, 10 orbits ({steps} steps); collisions counted at every 50th step: {collisions} \
+         ({candidates} candidates); rms |u| with {rms_w:.4e} without {rms_wo:.4e} km/s, difference {diff:.3e}; \
+         largest |u| with {max_w:.3e} without {max_wo:.3e} km/s (ICR-010 bound on the rms difference: 1e-8 km/s)",
+        with.len()
+    );
+    assert!(diff <= 1e-8, "the dispersion changed by {diff} km/s");
 }
