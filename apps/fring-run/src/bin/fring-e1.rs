@@ -226,9 +226,11 @@ fn go(o: &Opts) -> Result<(), RunError> {
             let r = e1::layer2(
                 l2.clone(),
                 days,
-                o.nominal_step_s,
-                o.l2_div,
-                o.l2_stride,
+                e1::L2Opts {
+                    nominal_step_s: o.nominal_step_s,
+                    div: o.l2_div,
+                    sample_every: o.l2_stride,
+                },
                 trace.as_ref(),
                 &setup.system,
                 v,

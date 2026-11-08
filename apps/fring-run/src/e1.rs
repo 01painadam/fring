@@ -572,6 +572,27 @@ pub fn layer1<B: Backend>(
     })
 }
 
+/// Step options of layer 2.
+#[derive(Clone, Copy, Debug)]
+pub struct L2Opts {
+    /// Nominal step in s (the step is adjusted so that the end time is exact).
+    pub nominal_step_s: f64,
+    /// Run `div` times as many steps of `h / div`.
+    pub div: u64,
+    /// Measure the closest distance from every `sample_every`-th step only.
+    pub sample_every: u64,
+}
+
+impl Default for L2Opts {
+    fn default() -> Self {
+        Self {
+            nominal_step_s: NOMINAL_STEP_S,
+            div: 1,
+            sample_every: 1,
+        }
+    }
+}
+
 /// Which particles to trace in layer 2 and how often.
 pub struct Trace {
     /// Particle ids.
@@ -609,14 +630,17 @@ fn vec3(a: Vec3<f64>) -> [f64; 3] {
 pub fn layer2<B: Backend>(
     init_particles: Particles,
     days: f64,
-    nominal_step_s: f64,
-    div: u64,
-    sample_every: u64,
+    opts: L2Opts,
     trace: Option<&Trace>,
     system: &System,
     variant: Variant,
     mut make: impl FnMut(&RunConfig, &System, &InitialState) -> Result<B, RunError>,
 ) -> Result<L2Result, RunError> {
+    let L2Opts {
+        nominal_step_s,
+        div,
+        sample_every,
+    } = opts;
     let (n, h) = exact_step(days * 86_400.0, nominal_step_s);
     let (n, h) = (n * div, h / div as f64);
     let count = init_particles.len();
