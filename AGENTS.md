@@ -15,8 +15,8 @@ Edit only the directories your role owns. To change anything else, write an inte
 | A0 Lead | `Cargo.toml`, `AGENTS.md`, `CLAUDE.md`, `docs/` (except `docs/literature/`), `crates/fring-model/` (except `src/physics/`), CI |
 | A1 Literature | `docs/literature/`, `params/` |
 | A2 CPU | `crates/fring-cpu/`, `crates/fring-model/src/physics/` (A0 reviews each change) |
-| A3 GPU | `crates/fring-gpu/` (except `shaders/collide/`) |
-| A4 Collisions | `crates/fring-collide/`, `crates/fring-gpu/shaders/collide/` |
+| A3 GPU | `crates/fring-gpu/` (except the A4 collision files) |
+| A4 Collisions | `crates/fring-collide/`, `crates/fring-gpu/shaders/collide/`, `crates/fring-gpu/src/collide.rs`, `crates/fring-gpu/tests/gpu_collide.rs` (K5, A0 2026-11-08) |
 | A5 I/O and runner | `crates/fring-io/`, `apps/fring-run/`, `apps/fring-bench/` |
 | A6 Validation | `validation/` |
 | A7 Web | `apps/fring-web/` |
