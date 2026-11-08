@@ -47,7 +47,7 @@ fn run_model(name: &str, collisions: &str) -> Sums {
         out: Some(out.clone()),
         quiet: true,
     });
-    let rows = result.and_then(|_| Ok(RunDir::new(out).read_stats_file().unwrap()));
+    let rows = result.map(|_| RunDir::new(out).read_stats_file().unwrap());
     let _ = std::fs::remove_dir_all(&dir);
     let rows = rows.unwrap();
     let s = Sums {
