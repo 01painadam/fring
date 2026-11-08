@@ -13,12 +13,16 @@
 //!
 //! Task K5-BIN: [`bin`] sorts the particles by collision cell (hashed
 //! buckets, counting sort) with a Rust twin.
+//!
+//! Task K5: [`collide`] runs the stochastic collisions of `fring-collide` on
+//! those cells (WGSL in `shaders/collide/`, Rust twins).
 
 pub mod arc;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod backend;
 pub mod bin;
 pub mod chaos;
+pub mod collide;
 pub mod ds;
 pub mod gpu;
 pub mod probe;
