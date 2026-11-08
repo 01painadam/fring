@@ -32,19 +32,19 @@ Test log: `k5-wire-tests.log`. Statistics test (3000 particles, eccentric band e
 | candidates | 2.146118e5 (9.2e-4) | 2.146156e5 (9.2e-4) | 0.01 SE |
 | energy loss km2/s2 | 1.235489e-5 (1.3e-3) | 1.235496e-5 (1.3e-3) | 0.00 SE |
 
-Bound: 4 combined SE (SPEC, ICR-010). Reported only: <N^2>/<N> 8.7467 against 8.7468; occupied cells 49663.5 on both (test bound 1e-3 relative, my choice for a deterministic statistic; A0 may drop it).
+Bound: 4 combined SE (SPEC, ICR-010). <N^2>/<N>: GPU 8.746713, CPU 8.746817, combined SE 6.27e-3, difference 1.04e-4 (0.02 SE). Occupied cells: 49663.5 on both, combined SE 29.1, difference 0. Both use the same rule (difference <= 4 combined SE); the SE was not zero for either, so both are asserted.
 Config choice: e = 1e-4 at a = 140,000 km gives a peculiar speed about a e n = 3e-3 km/s, 2000 times the stepper noise of circular orbits (1.6e-6 km/s). A circular band would measure the noise. SE is below 0.13% of the mean for each statistic, so the test sees a 0.5% error. The seeds change only the collision draws, so the SE does not include the spread of initial states.
 
 Cost of one collision step (bin + collide + tally read), release, M4, `k5-wire-bench.log`. Baseline = the same calls with `model = "none"`:
 
-| N | every_steps | baseline min / median ms | with collisions min / median ms | cost per collision step min / median ms |
+| N | every_steps | baseline min / median ms | with collisions min / median ms | cost per collision step: difference of minima / difference of medians, ms |
 |---|---|---|---|---|
 | 1e5 | 1 (10 x step(1)) | 6.37 / 6.70 | 19.75 / 19.95 | 1.34 / 1.32 |
 | 1e5 | 10 (1 x step(10)) | 2.37 / 2.40 | 3.75 / 3.76 | 1.38 / 1.36 |
 | 1e6 | 1 | 24.24 / 24.73 | 118.61 / 120.89 | 9.44 / 9.62 |
 | 1e6 | 10 | 10.70 / 10.75 | 20.33 / 20.38 | 9.63 / 9.63 |
 
-The two rows of each N agree within 3%, so the per-pass wait for the tally costs little. One collision step is about 6 WH steps at 10^5 (0.24 ms per step) and about 9 at 10^6 (1.07 ms per step). Open question for A4: the cost is mainly `cell.wgsl` (one thread per sorted position); a compaction of the run starts (K5 handoff) is the first thing to try if it matters. I did not split bin from collide here; K5-BIN has the bin pass alone.
+The cost column is the difference of the minima and the difference of the medians, so the first can be larger than the second. The two rows of each N agree within 3%, so the per-pass wait for the tally costs little. One collision step is about 6 WH steps at 10^5 (0.24 ms per step) and about 9 at 10^6 (1.07 ms per step). Open question for A4: the cost is mainly `cell.wgsl` (one thread per sorted position); a compaction of the run starts (K5 handoff) is the first thing to try if it matters. I did not split bin from collide here; K5-BIN has the bin pass alone.
 
 ## Next step (one concrete action)
 A0: review the pull request. A5: remove the `fring-run` refusal of `model = "stochastic"` on the GPU and add the B2 benchmark.

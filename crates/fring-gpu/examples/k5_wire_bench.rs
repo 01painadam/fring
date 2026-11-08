@@ -98,7 +98,7 @@ fn main() {
     let field = SaturnField::<f64>::from_params(&sys.saturn);
     let none = config("[collisions]\nmodel = \"none\"");
     println!(
-        "| N | every | baseline min / median ms | with collisions min / median ms | collision steps | cost per collision step min / median ms |"
+        "| N | every | baseline min / median ms | with collisions min / median ms | collision steps | cost per collision step: difference of minima / difference of medians, ms |"
     );
     println!("|---|---|---|---|---|---|");
     for n in sizes {
