@@ -31,6 +31,7 @@ pub mod kepler;
 pub mod leapfrog;
 pub mod moon_dynamics;
 pub mod moon_kick;
+pub mod moon_radius;
 pub mod wisdom_holman;
 
 pub use arc::{ArcGeometry, MAX_WRAPS, Wrapped};
@@ -53,5 +54,8 @@ pub use leapfrog::{dkd_step, leapfrog_circular_speed};
 pub use moon_dynamics::MoonSystem;
 pub use moon_kick::{
     KickTable, indirect_acceleration, kick_acceleration, moon_direct_acceleration, wh_steps_moons,
+};
+pub use moon_radius::{
+    MoonsAtKick, drift_hits_moon, hermite_moon, particle_level, segment_min_d2, substep_level,
 };
 pub use wisdom_holman::{wh_step, wh_steps};
