@@ -13,7 +13,7 @@
 // k (site k + 1) and at the end of the block (site n + 1). A particle outside
 // the wedge is rotated about z by -/+ dtheta in position and velocity (DS).
 // For chaos, the parent logs its rotations in the status buffer (after the
-// 8 + cap words: ARC_LW words per particle: the number of events, then events
+// 8 + 2 cap words: ARC_LW words per particle: the number of events, then events
 // (site << 2) | code, code 1 = rotated by -dtheta, 2 = by +dtheta) and the
 // shadow replays them, so both always take the same k.
 
@@ -92,7 +92,7 @@ fn arc_code(d: i32) -> u32 {
 // the next event to replay (role 2). Returns false if the particle needs more
 // than 2 rotations or the log is full.
 fn arc_site(i: u32, role: u32, site: u32, n: u32, p: ptr<function, V3>, v: ptr<function, V3>, cnt: ptr<function, u32>) -> bool {
-    let lb = 8u + prm_cap() + i * ARC_LW;
+    let lb = 8u + 2u * prm_cap() + i * ARC_LW;
     if (role == 2u) {
         let total = atomicLoad(&status[lb]);
         loop {
@@ -139,11 +139,13 @@ fn arc_run(id: vec3<u32>, nw: vec3<u32>, plus: bool, role: u32) {
     var p = load_p(i);
     var v = load_v(i);
     var cnt = 0u;
+    var seg = 0u;
     var ok = arc_site(i, role, 0u, n, &p, &v, &cnt);
     var o = KepD(p, v, ok);
     if (ok) { o = drift_d(p, v, half); ok = o.ok; }
     for (var k = 0u; k < n; k++) {
         if (!ok) { break; }
+        seg = k + 1u;
         var pp = o.p;
         var vv = o.v;
         if (!arc_site(i, role, k + 1u, n, &pp, &vv, &cnt)) { ok = false; break; }
@@ -160,10 +162,10 @@ fn arc_run(id: vec3<u32>, nw: vec3<u32>, plus: bool, role: u32) {
         ok = arc_site(i, role, n + 1u, n, &pe, &ve, &cnt);
         if (ok) {
             store(i, pe, ve);
-            if (role == 1u) { atomicStore(&status[8u + prm_cap() + i * ARC_LW], cnt); }
+            if (role == 1u) { atomicStore(&status[8u + 2u * prm_cap() + i * ARC_LW], cnt); }
         }
     }
-    if (!ok) { drop_particle(i, 1u); }
+    if (!ok) { drop_particle(i, 1u, seg); }
 }
 
 @compute @workgroup_size(WG_SIZE)

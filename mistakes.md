@@ -2,6 +2,13 @@
 
 Read this file at the start of a session. When a mistake costs time, add an entry so that no agent makes it twice. Newest first. Each entry: what happened, why, and the rule now.
 
+## 2026-11-08 (phase 4, E1-GPU)
+
+### M27. A0 set a cost limit in an ICR without checking an earlier measurement
+
+- **What:** in ICR-004 amendment 2, A0 moved the G6 limit "within 5 % of off" from sub-stepping to the freeze keys and the radius rule. E1-GPU measured the radius rule at 11 to 16 %. W2-DROP-GPU had already measured the same rule at −12 to −13 % on 2026-11-02, so the limit could never pass. AJ had to accept the cost afterwards ("the cost of the rule is reported, not a limit").
+- **Rule:** before you write a number into an ICR (a limit, a cost, a tolerance), search the handoffs, `docs/benchmarks.md` and `docs/results/` for an earlier measurement of the same thing, and write that value and its source next to the new limit.
+
 ## 2026-11-02 (phase 3, A2-ANALYSIS)
 
 ### M26. A job read the output of a run that was still going
