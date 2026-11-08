@@ -8,7 +8,13 @@
 //! fring-analyse apse <out_dir> <run>...
 //! fring-analyse moons <run>
 //! fring-analyse laplace <run_with_both_moons>
-//! fring-analyse lyapunov <out_dir> <n_pairs> <years> [threads d0_km renorm_years kick_km seed tag method(tangent|shadow)]
+//! fring-analyse lyapunov <out_dir> <n_pairs> <years> [threads d0_km renorm_years kick_km seed tag method(tangent|shadow) moons_file L]
+//!   moons_file (index 10): a file with the layout of params/moons.toml, e.g.
+//!     params/variants/gr03b-moons.toml; "" or absent = params/moons.toml. A given
+//!     file also prints the two GM values.
+//!   L (index 11): also write lyapunov_L<tag>.csv (L(t) of every run),
+//!     lyapunov_Lmean<tag>.csv, lyapunov_gr<tag>.csv and print the GR03 rates.
+//!     With L, fewer than 5 runs are allowed (one long trajectory).
 //! ```
 
 use fring_analysis::apse::{self, DAY_S};
@@ -842,11 +848,22 @@ fn cmd_lyapunov(a: &[String]) -> Res<()> {
     let n_pairs = num(a, 1, 100.0) as u32;
     let years = num(a, 2, 100.0);
     let threads = num(a, 3, 8.0) as usize;
-    let (saturn, all) = setup::load_params(Path::new("params"))?;
+    let (saturn, mut all) = setup::load_params(Path::new("params"))?;
+    if let Some(f) = a.get(10).filter(|f| !f.is_empty()) {
+        all = setup::load_moons_file(Path::new(f))?;
+    }
     let moons: Vec<_> = all
         .into_iter()
         .filter(|m| m.name == "prometheus" || m.name == "pandora")
         .collect();
+    if let Some(f) = a.get(10).filter(|f| !f.is_empty()) {
+        let gm = |n: &str| moons.iter().find(|m| m.name == n).map_or(f64::NAN, |m| m.gm_km3_s2);
+        println!(
+            "moons: {f}; GM prometheus = {} km3/s2, GM pandora = {} km3/s2",
+            gm("prometheus"),
+            gm("pandora")
+        );
+    }
     let cfg = LyapunovConfig {
         years,
         renorm_years: num(a, 5, 0.25),
