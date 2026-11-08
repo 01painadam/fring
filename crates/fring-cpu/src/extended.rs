@@ -72,6 +72,38 @@ fn moons_at<'a>(
     }
 }
 
+/// True if the level rule gives 0 for every moon, decided with squares only
+/// (no square root). It is a sufficient condition, so a `false` means
+/// "compute the rule". For each moon, with `d` the distance and `u` the
+/// relative speed, the conditions
+///
+/// ```text
+/// d >= Dc,   4 u dt <= d,   h² u² <= acc² d² / 4,   Dc³ = 8.6 GM h² / acc²
+/// ```
+///
+/// give `d_eff >= 3d/4` and `h² v_eff² <= h² u² + 8 GM h² / (3 d) <=
+/// (1/4 + 5/16) acc² d² = 9/16 acc² d² <= acc² d_eff²`, which is the rule for
+/// L = 0 (`8.6 > 8.53` is the margin of the second step). `far_d2` is `Dc²`
+/// for the largest GM.
+#[allow(clippy::too_many_arguments)]
+fn level_zero_certain(
+    h: f64,
+    dt: f64,
+    acc: f64,
+    far_d2: f64,
+    p: Vec3<f64>,
+    w: Vec3<f64>,
+    moon_pos: &[Vec3<f64>],
+    moon_vel: &[Vec3<f64>],
+) -> bool {
+    let (h2, acc2, dt2) = (h * h, acc * acc, dt * dt);
+    moon_pos.iter().zip(moon_vel).all(|(mp, mv)| {
+        let d2 = (p - *mp).norm_squared();
+        let u2 = (w - *mv).norm_squared();
+        d2 >= far_d2 && 16.0 * u2 * dt2 <= d2 && 4.0 * h2 * u2 <= acc2 * d2
+    })
+}
+
 /// Advances one particle (and `shadow`) through the block of `prm.table`.
 ///
 /// A live particle ends the block at the synchronised time and gets the level
@@ -162,6 +194,15 @@ pub fn advance_ext_hooked(
         prev_ok = true;
     }
 
+    // Squared distance beyond which a particle is far from every moon (see
+    // `level_zero_certain`).
+    let far_d2 = match prm.substep {
+        Some((acc, _)) => {
+            let gm_max = gm.iter().cloned().fold(0.0f64, f64::max);
+            (8.6 * gm_max * h * h / (acc * acc)).cbrt().powi(2)
+        }
+        None => 0.0,
+    };
     let mut mpos = [Vec3::zero(); MAX_MOONS];
     let mut mvel = [Vec3::zero(); MAX_MOONS];
     let mut dt = h / f64::from(1u32 << lev) * 0.5;
@@ -249,17 +290,14 @@ pub fn advance_ext_hooked(
                 },
                 None => 0,
                 Some((acc, max)) => {
-                    let at = moons_at(prm, gm, mp, mv);
-                    particle_level(
-                        h,
-                        h + hs * 0.5,
-                        bodies[0].p,
-                        bodies[0].v,
-                        &at,
-                        acc,
-                        max,
-                        None,
-                    )
+                    let dt_next = h + hs * 0.5;
+                    if level_zero_certain(h, dt_next, acc, far_d2, bodies[0].p, bodies[0].v, mp, mv)
+                    {
+                        0
+                    } else {
+                        let at = moons_at(prm, gm, mp, mv);
+                        particle_level(h, dt_next, bodies[0].p, bodies[0].v, &at, acc, max, None)
+                    }
                 }
             };
             dt = if k + 1 == n_steps {
@@ -284,4 +322,40 @@ pub fn advance_ext_hooked(
         *sh = state(&bodies[1]);
     }
     *level = next_level;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use fring_model::physics::moon_radius::substep_level;
+
+    /// The shortcut never says "level 0" where the rule gives more.
+    #[test]
+    fn level_zero_shortcut_is_sound() {
+        let (h, acc, gm): (f64, f64, f64) = (356.25, 0.1, 0.01071);
+        let far_d2 = (8.6 * gm * h * h / (acc * acc)).cbrt().powi(2);
+        let mut x = 0x9e37_79b9_7f4a_7c15u64;
+        let mut u = move || {
+            x ^= x << 13;
+            x ^= x >> 7;
+            x ^= x << 17;
+            (x >> 11) as f64 / (1u64 << 53) as f64
+        };
+        let (mut certain, mut total) = (0, 0);
+        for _ in 0..2_000_000 {
+            let d = 10f64.powf(1.0 + 3.0 * u()); // 10 to 10,000 km
+            let sp = 10f64.powf(-3.0 + 2.5 * u()); // 0.001 to 0.3 km/s
+            let (p, w) = (Vec3::new(d, 0.0, 0.0), Vec3::new(0.0, sp, 0.0));
+            let zero = Vec3::zero();
+            let dt = 1.5 * h;
+            let fast = level_zero_certain(h, dt, acc, far_d2, p, w, &[zero], &[zero]);
+            let rule = substep_level(h, d, sp, dt, 43.09, gm, acc, 4);
+            total += 1;
+            if fast {
+                certain += 1;
+                assert_eq!(rule, 0, "d {d} u {sp}");
+            }
+        }
+        assert!(certain > total / 10, "the shortcut is never used");
+    }
 }
