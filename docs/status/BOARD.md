@@ -86,7 +86,7 @@ Rules (full text in `AGENTS.md` and `CLAUDE.md`):
 | ARC-CELLS | Cell index in the arc from the signed longitude to the arc centre, clamped to the first and last cell (D1 finding 1): K2 `cell_key` and K3 pairs across the arc seam (A4); K5-BIN `cell_f64` and `cell_of` with the twin (A3) | A3 + A4 | done | ws/a3-arc-cells, ws/a4-arc-cells | D1 |
 | K5-BIN | GPU binning: counting sort by cell at each step, with a Rust twin | A3 | done | ws/a3-k5-bin | K1, ICR-009-IMPL |
 | E1-GPU | ICR-004 and per-particle sub-stepping in WGSL, with Rust twins | A3 | todo | | E1-CPU |
-| K5 | Stochastic collisions in WGSL (`shaders/collide/`) | A4 | doing | ws/a4-k5 | K2, K5-BIN, ARC-CELLS |
+| K5 | Stochastic collisions in WGSL (`shaders/collide/`) | A4 | review | ws/a4-k5 (PR #57; merge waits for AJ on ICR-010) | K2, K5-BIN, ARC-CELLS |
 | K4 | Cross-check stochastic and hard-sphere models in a small arc (A6 reviews the report) | A4 | todo | | K2, K3, ICR-009-IO, K2-CPU, K3-CPU, D1, D1-CPU, ARC-CELLS |
 | D2 | Arc error test, full ring versus arc, Δθ in {5°, 10°, 30°} | A6 | todo | | D1, D1-CPU |
 | A3-ANALYSIS | 30-year chaos map over the full band with sub-stepping (the run must complete) | A8 | todo | | E1-GPU |
