@@ -234,7 +234,7 @@ impl GpuStepper {
                 let acc_buf = mk(acc_bytes, rw); // zero: j = 0, sums 0
                 let cprm = mk(16, uni);
                 q.write_buffer(&cprm, 0, &le_bytes(&[cfg.offset_km as f32, 0.0, 0.0, 0.0]));
-                let ctl = mk(16, uni);
+                let ctl = mk(crate::wh::CONTROL_BYTES as u64, uni);
                 let ctl_words = wh::control(1, n, cap, eph.tracks.len());
                 let ctl_bytes: Vec<u8> = ctl_words.iter().flat_map(|x| x.to_le_bytes()).collect();
                 q.write_buffer(&ctl, 0, &ctl_bytes);
@@ -275,7 +275,7 @@ impl GpuStepper {
         // Two more rows after the kick rows: the moon positions at the sync
         // times of the block (the radius rule of ICR-006).
         let table = mk(((self.block_steps + 2) * ROW * 4) as u64, rw);
-        let ctl = mk(16, uni);
+        let ctl = mk(crate::wh::CONTROL_BYTES as u64, uni);
         let k = &self.kernels;
         let bind = k.bind_group(
             &self.state_buf,
@@ -366,7 +366,7 @@ impl GpuStepper {
             let rows = crate::arc::extra_rows(&a.geom, self.start_s, self.step_s, first, block);
             q.write_buffer(&slot.table, (block * ROW * 4) as u64, &le_bytes(&rows));
         }
-        let ctl = wh::control(block, self.n, self.cap, self.n_moons);
+        let ctl = wh::control_at(block, self.n, self.cap, self.n_moons, first);
         let ctl_bytes: Vec<u8> = ctl.iter().flat_map(|x| x.to_le_bytes()).collect();
         q.write_buffer(&slot.ctl, 0, &ctl_bytes);
         {
@@ -573,7 +573,7 @@ impl GpuStepper {
         &self.state_buf
     }
 
-    /// The status buffer (ICR-006), `8 + capacity` `u32` words, usage
+    /// The status buffer (ICR-006, ICR-004), `8 + 2 capacity` `u32` words, usage
     /// `STORAGE | COPY_SRC | COPY_DST`:
     /// - word 0: the smallest index of a dropped particle, or `u32::MAX` if
     ///   none was dropped (what [`crate::backend::GpuBackend`] reads);
@@ -582,7 +582,16 @@ impl GpuStepper {
     /// - words 2 to 7: the number dropped inside moon 0 to 5 (the kernels take
     ///   4 moons, so words 6 and 7 stay reserved);
     /// - word `8 + i`: the drop reason of particle `i`: 0 live, 1 unbound or
-    ///   invalid orbit, `2 + k` inside moon `k`.
+    ///   invalid orbit, `2 + k` inside moon `k`;
+    /// - word `8 + capacity + i`: the `drop_step` of particle `i` (valid when
+    ///   its reason is not 0): the 0-based global step in which the loss was
+    ///   found. The first half drift of a block and the drift after kick `k`
+    ///   belong to step `first + k`, and the last half drift of a block to its
+    ///   last step (`first + n - 1`). The CPU can give one step more for a
+    ///   loss in a drift that it merges across a block end.
+    ///
+    /// Words 0 to `8 + capacity - 1` are the layout of ICR-006 (the web reads
+    /// them). The arc log, if any, follows at `8 + 2 capacity`.
     ///
     /// The step kernels of modes D and Dp set the reason of a failed particle
     /// and then skip it. Mode C only sets word 0.

@@ -45,9 +45,16 @@ pub const fn reason_inside_moon(k: u32) -> u32 {
     2 + k
 }
 
-/// Number of `u32` words of the status buffer for `cap` particles.
+/// Number of `u32` words of the status buffer for `cap` particles: the header,
+/// the drop reasons (`8 + i`) and the `drop_step` words (`8 + cap + i`,
+/// E1-GPU). The arc log (D1) starts after them.
 pub const fn status_words(cap: usize) -> usize {
-    STATUS_HEADER_WORDS + cap
+    STATUS_HEADER_WORDS + 2 * cap
+}
+
+/// Index of the `drop_step` word of particle `i` in the status buffer.
+pub const fn drop_step_word(cap: usize, i: usize) -> usize {
+    STATUS_HEADER_WORDS + cap + i
 }
 
 /// The initial contents of the status buffer: word 0 is [`NO_FAILURE`], all
@@ -278,7 +285,7 @@ impl WhKernels {
         let uni = wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST;
         let prm_buf = mk((prm.len() * 4) as u64, uni);
         q.write_buffer(&prm_buf, 0, &bytes(prm));
-        let ctl_buf = mk(16, uni);
+        let ctl_buf = mk(crate::wh::CONTROL_BYTES as u64, uni);
         q.write_buffer(
             &ctl_buf,
             0,

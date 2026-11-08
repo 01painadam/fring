@@ -72,7 +72,7 @@ fn chaos_renorm_matches_its_rust_twin() {
         .unwrap();
     let c = fring_gpu::spike::Consts::<M4>::for_step(&sp, &[], 356.2537);
     q.write_buffer(&prm, 0, &bytes(&wh::params(&c, &[])));
-    let ctl = mk(16, uni);
+    let ctl = mk(32, uni);
     let cw: Vec<u8> = wh::control(1, n, cap, 0)
         .iter()
         .flat_map(|x| x.to_le_bytes())

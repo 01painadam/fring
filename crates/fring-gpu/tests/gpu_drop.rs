@@ -53,7 +53,7 @@ fn rule_off_state_bits_are_the_golden_bits() {
 
 #[test]
 #[ignore = "needs a GPU"]
-fn status_buffer_has_8_plus_cap_words_with_word_0_no_failure() {
+fn status_buffer_has_8_plus_2_cap_words_with_word_0_no_failure() {
     let Some(gpu) = Gpu::new() else {
         eprintln!("no GPU: skipped");
         return;
@@ -63,7 +63,8 @@ fn status_buffer_has_8_plus_cap_words_with_word_0_no_failure() {
     let (init, _) = ensemble(&system, 100);
     let st = GpuStepper::new(&gpu, &kernels, &system, &init, H_S, 7, Mode::Dp, None).unwrap();
     let b = read_buffer(&gpu, st.status_buffer());
-    assert_eq!(b.len(), 4 * (8 + st.capacity()));
+    // 8 header words, cap reasons (ICR-006), cap drop_step words (E1-GPU).
+    assert_eq!(b.len(), 4 * (8 + 2 * st.capacity()));
     assert_eq!(b[..4], u32::MAX.to_le_bytes());
     assert!(b[4..].iter().all(|x| *x == 0));
     assert!(
