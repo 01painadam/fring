@@ -108,7 +108,7 @@ pub struct CpuBackend {
 /// reason 1 and `drop_step = step - 1`, else the call returns
 /// `Error::Backend` with the lowest such particle.
 #[allow(clippy::too_many_arguments)]
-fn wrap_states(
+pub fn wrap_states(
     arc: &ArcGeometry,
     t_s: f64,
     step: u64,
