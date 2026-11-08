@@ -336,6 +336,7 @@ pub fn run_all(
 /// `t > 0` (years). The `b ln t` term is the Kepler shear (GR03a sec 2.2: the
 /// no-chaos curve is "constant + (log t)/t" for `L/t`). Returns
 /// `(lambda, b)` in 1/yr and dimensionless, or `None` with fewer than 4 points.
+#[allow(clippy::needless_range_loop)] // indices of a 3x3 matrix
 pub fn gr_fit(t: &[f64], l: &[f64], lo: f64, hi: f64) -> Option<(f64, f64)> {
     let mut m = [[0.0f64; 4]; 3];
     let mut n = 0;
@@ -454,7 +455,10 @@ mod tests {
         let t: Vec<f64> = (1..=400).map(|k| 0.25 * f64::from(k)).collect();
         let l: Vec<f64> = t.iter().map(|x| 0.3 * x + 2.0 * x.ln() + 1.0).collect();
         let (lam, b) = gr_fit(&t, &l, 0.0, 100.0).unwrap();
-        assert!((lam - 0.3).abs() < 1e-9 && (b - 2.0).abs() < 1e-7, "{lam} {b}");
+        assert!(
+            (lam - 0.3).abs() < 1e-9 && (b - 2.0).abs() < 1e-7,
+            "{lam} {b}"
+        );
         let (lam1, _) = gr_fit(&t, &l, 1.0, 100.0).unwrap();
         assert!((lam1 - 0.3).abs() < 1e-9);
         // Pure shear: L = ln(t) + 1 gives lambda = 0 from the fit.
