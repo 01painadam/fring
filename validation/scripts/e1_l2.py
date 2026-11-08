@@ -3,7 +3,8 @@
 Usage (from validation/):
   uv run python scripts/e1_l2.py time --n 20 --days 30           cost measurement (no files written)
   uv run python scripts/e1_l2.py run --n 300 --days 365.25       writes reference/e1_l2_states.csv, e1_l2_ref.csv, e1_l2.json
-  uv run python scripts/e1_l2.py check                          recompute the first chunk for 30 days and compare
+  uv run python scripts/e1_l2.py ckpt                           writes reference/e1_l2_ckpt20d.csv (chunk 0 after 20 days)
+  uv run python scripts/e1_l2.py check                          recompute chunk 0 for 20 days and compare with the ckpt file
 Chaos indicator = ADR 0008 (shadow at d0 = 1 km along the radial direction, position only, renormalised every K = 100
 steps of h = 356.2537 s, discrete MEGNO: l_j = ln(d_j / d0), S = sum (j - 1/2) l_j, Y_j = 2 S / j, mean Y = sum Y_j / j).
 Classes: regular mean Y <= 2.5, chaotic mean Y >= 5, in between uncertain.
@@ -184,6 +185,18 @@ def cmd_run(n, days, workers):
     print(f"wall {wall:.0f} s")
 
 
+CKPT_DAYS = 20.0
+
+
+def cmd_ckpt():
+    """Write the state of the particles of chunk 0 after 20 days (the same steps as the first 20 days of the long run)."""
+    st = np.loadtxt(REF / "e1_l2_states.csv", delimiter=",", comments="#")[:, 1:7]
+    _, moons = e1_ref.read_moons(REF / "e1_moons_t0.csv")
+    ids = np.arange(0, min(CHUNK, len(st)))
+    _, r = _chunk((ids, moons[0], st[ids], CKPT_DAYS, e1_ref.EPS))
+    write_ref(REF / "e1_l2_ckpt20d.csv", r, f"# E1-REF layer 2 check file: chunk 0 after {CKPT_DAYS:g} days (same IAS15 steps as the long run).\n")
+
+
 def cmd_check():
     meta = json.loads((REF / "e1_l2.json").read_text())
     ok = True
@@ -193,19 +206,13 @@ def cmd_check():
         print(f"sha256 {key}: {'ok' if same else 'DIFFERENT'}")
     st = np.loadtxt(REF / "e1_l2_states.csv", delimiter=",", comments="#")[:, 1:7]
     _, moons = e1_ref.read_moons(REF / "e1_moons_t0.csv")
-    days = 20.0
     ids = np.arange(0, min(CHUNK, len(st)))
-    _, r = _chunk((ids, moons[0], st[ids], days, e1_ref.EPS))
-    # independent second run of the same chunk: deterministic, so it must agree with itself to round-off; and the
-    # first 20 days of the committed run are not stored, so compare the integral invariants instead: the guiding a
-    # of an undisturbed particle (min_prom > 10 R_H) changes by less than 1 km over 20 days.
-    a0 = enc.geo_elements(SAT, st[ids])["a"]
-    a1 = enc.geo_elements(SAT, r["final"])["a"]
-    far = r["min_prom_km"] > 10 * RH
-    d = abs(a1 - a0)[far]
-    good = (len(d) == 0) or d.max() < 1.0
+    _, r = _chunk((ids, moons[0], st[ids], CKPT_DAYS, e1_ref.EPS))
+    c = np.loadtxt(REF / "e1_l2_ckpt20d.csv", delimiter=",", comments="#")
+    d = abs(r["final"] - c[:, 2:8]).max()
+    good = d < 1e-6  # km and km/s; the run is deterministic, so the difference is 0 on the same machine
     ok &= good
-    print(f"20-day recompute of {len(ids)} particles: {far.sum()} far from Prometheus, max |Delta a| {d.max() if len(d) else 0:.3g} km: {'ok' if good else 'FAIL'}")
+    print(f"{CKPT_DAYS:g}-day recompute of chunk 0 ({len(ids)} particles): max state difference {d:.2e} {'ok' if good else 'FAIL'}")
     print("E1 layer 2 check:", "OK" if ok else "FAILED")
     return 0 if ok else 1
 
@@ -243,7 +250,7 @@ def standin_layer2(div, out, workers):
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("cmd", choices=["time", "run", "check"])
+    ap.add_argument("cmd", choices=["time", "run", "check", "ckpt"])
     ap.add_argument("--n", type=int, default=300)
     ap.add_argument("--days", type=float, default=365.25)
     ap.add_argument("--workers", type=int, default=5)
@@ -252,5 +259,7 @@ if __name__ == "__main__":
         cmd_time(a.n, a.days, a.workers)
     elif a.cmd == "run":
         cmd_run(a.n, a.days, a.workers)
+    elif a.cmd == "ckpt":
+        cmd_ckpt()
     else:
         sys.exit(cmd_check())
