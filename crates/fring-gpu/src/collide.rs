@@ -525,3 +525,81 @@ impl GpuCollider {
         &self.state
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use fring_collide::stochastic::StochasticModel;
+
+    /// `cell_twin` (f32) against the CPU model `StochasticModel::process_cell`
+    /// (f64) on 20,000 random cells. The Philox words and the choice of i and j
+    /// are the same, so the number of candidates is the same except when f32
+    /// moves floor(M) or the rounding draw of M; the collisions agree except
+    /// where an f32 acceptance test flips.
+    #[test]
+    fn cell_twin_follows_the_cpu_model() {
+        let law = Restitution::Constant { epsilon: 0.5 };
+        let (radius, weight, seed) = (1.0e-6, 1.0e13, 99);
+        let params = CollideParams {
+            particle_radius_km: radius,
+            weight,
+            restitution: law,
+            seed,
+        };
+        let cpu = StochasticModel::new(radius, weight, law, seed);
+        let rng = Philox::from_seed(seed);
+        let k_rate = params.rate_factor(1.0, 1.0);
+        let uni = |i: u32, d: u32| {
+            let b = rng.block(Counter {
+                index: i,
+                step: 0,
+                stream: Stream::TEST,
+                draw: d as u16,
+            });
+            fring_model::rng::u01_f64(b[0], b[1]) - 0.5
+        };
+        let (mut cells, mut same_cands, mut cands, mut coll_gpu, mut coll_cpu) =
+            (0, 0, 0u64, 0u64, 0u64);
+        let mut next_id = 0u32;
+        for cell in 0..20_000u32 {
+            let nc = 2 + (cell % 30) as usize;
+            let ids: Vec<u32> = (next_id..next_id + nc as u32).collect();
+            next_id += nc as u32;
+            let u: Vec<Vec3<f64>> = (0..nc)
+                .map(|q| {
+                    let i = ids[q];
+                    Vec3::new(uni(i, 0), uni(i, 1), uni(i, 2)) * 2.0e-5
+                })
+                .collect();
+            let mean = u.iter().fold(Vec3::zero(), |a, &v| a + v) / nc as f64;
+            let mut w: Vec<Vec3<f32>> = u
+                .iter()
+                .map(|&v| {
+                    let d = v - mean;
+                    Vec3::new(d.x as f32, d.y as f32, d.z as f32)
+                })
+                .collect();
+            let t = cell_twin(&rng, &law, k_rate, ids[0], 7, &mut w);
+            let (mut uc, mut dc) = (u.clone(), vec![Vec3::zero(); nc]);
+            let c = cpu
+                .process_cell(1.0, 1.0, 7, &ids, &mut uc, &mut dc)
+                .unwrap();
+            cells += 1;
+            cands += c.stats.candidates;
+            coll_gpu += u64::from(t.collisions);
+            coll_cpu += c.collisions;
+            if u64::from(t.candidates) == c.stats.candidates {
+                same_cands += 1;
+            }
+        }
+        println!(
+            "{cells} cells: same candidate count in {same_cands}; candidates {cands}; collisions twin {coll_gpu}, CPU {coll_cpu}"
+        );
+        assert!(
+            cands > 5_000 && coll_cpu > 1_000,
+            "the setup must give collisions"
+        );
+        assert!(same_cands as f64 >= 0.999 * cells as f64);
+        assert!((coll_gpu as f64 - coll_cpu as f64).abs() <= 0.01 * coll_cpu as f64 + 2.0);
+    }
+}
