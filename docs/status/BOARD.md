@@ -74,7 +74,7 @@ Rules (full text in `AGENTS.md` and `CLAUDE.md`):
 | A5-ANALYSIS | A2-ANALYSIS follow-ups: h/4 test for `eccentric_band`, `closest` on `eccentric_band`, second apse phase at 30 years | A8 | done | ws/a8-a5-analysis | Gate G3 |
 | E1-ICR | Write ICR-004: flag and freeze on the CPU, radius rule twin to `fring-model/src/physics/`, sub-stepping trigger and scheme, REBOUND comparison set | A2 | done | ws/a2-e1-icr (PR #54; ICR-004 Accepted 2026-11-08) | Gate G3, A5-ANALYSIS |
 | L3-PARAMS | GR03b moon masses as a variant file in `params/` (nominal values unchanged) | A1 | done | ws/a1-l3-params | Gate G3 |
-| A4-ANALYSIS | L3 deciding run: moon Lyapunov rate with the GR03b masses; GR03 method on our masses | A8 | doing | ws/a8-a4-analysis | L3-PARAMS |
+| A4-ANALYSIS | L3 deciding run: moon Lyapunov rate with the GR03b masses; GR03 method on our masses | A8 | review | ws/a8-a4-analysis (PR #58) | L3-PARAMS |
 | K2 | Stochastic collision model on CPU | A4 | done | ws/a4-k2 | K1, ICR-009-IMPL |
 | E1-REF | REBOUND (IAS15) reference for particles within 1 R_H of Prometheus (from the spec only) | A6 | doing | ws/a6-e1-ref | E1-ICR |
 | E1-CPU | ICR-004 and per-particle sub-stepping in the CPU backend | A2 | doing | ws/a2-e1-cpu | E1-ICR |
