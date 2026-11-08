@@ -89,20 +89,35 @@ pub struct Summary {
     pub chaos: Option<ChaosMeta>,
 }
 
-/// Refuses what is not implemented yet, with a clear message.
+/// Refuses what the chosen backend would ignore or cannot do, with a clear
+/// message. A backend must never ignore a setting without an error.
 pub fn check_supported(config: &RunConfig) -> Result<(), RunError> {
     let no = |what: &str, task: &str| {
         Err(RunError::Setup(format!(
             "{what} is not implemented yet (task {task})"
         )))
     };
-    if matches!(config.domain, Domain::Arc { .. }) {
-        return no("domain.kind = \"arc\"", "D1");
+    let gpu = config.run.backend == BackendKind::Gpu;
+    if !gpu && matches!(config.domain, Domain::Arc { .. }) {
+        // The CPU backend would ignore the arc. D1-CPU adds the wrap.
+        return no("domain.kind = \"arc\" on the CPU backend", "D1-CPU");
     }
     match config.collisions {
         Collisions::None => Ok(()),
-        Collisions::Stochastic { .. } => no("collisions.model = \"stochastic\"", "K2"),
-        Collisions::HardSphere { .. } => no("collisions.model = \"hard_sphere\"", "K3"),
+        Collisions::Stochastic { .. } if gpu => {
+            // The GPU backend on main would ignore [collisions].
+            no(
+                "collisions.model = \"stochastic\" on the GPU backend",
+                "K5-WIRE",
+            )
+        }
+        Collisions::Stochastic { .. } => Ok(()),
+        Collisions::HardSphere { .. } if gpu => Err(RunError::Setup(
+            "collisions.model = \"hard_sphere\" is not available on the GPU backend \
+             (K3 is CPU only); use backend = \"cpu\""
+                .to_string(),
+        )),
+        Collisions::HardSphere { .. } => Ok(()),
     }
 }
 

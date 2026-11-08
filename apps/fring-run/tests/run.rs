@@ -207,42 +207,43 @@ fn small_run_without_moons_is_deterministic() {
 }
 
 #[test]
-fn refuses_features_that_are_not_built_yet() {
+fn refuses_what_a_backend_would_ignore() {
     let base = small_config();
+    let arc = |t: &str| {
+        replace(
+            t,
+            "kind = \"full_ring\"",
+            "kind = \"arc\"\nwidth_deg = 10.0\ncentre_longitude_deg = 0.0",
+        )
+    };
+    let stoch = |t: &str| {
+        replace(
+            t,
+            "model = \"none\"",
+            "model = \"stochastic\"\nparticle_radius_km = 1.0e-5\nweight = 8.0e8\n\
+             cell_radial_km = 0.05\ncell_azimuthal_km = 10.0\ncell_vertical_km = 0.04\n\
+             [collisions.restitution]\nlaw = \"constant\"\nepsilon = 0.5",
+        )
+    };
+    let hs = |t: &str| {
+        replace(
+            t,
+            "model = \"none\"",
+            "model = \"hard_sphere\"\nparticle_radius_km = 1.0e-5\n\
+             [collisions.restitution]\nlaw = \"constant\"\nepsilon = 0.5",
+        )
+    };
+    let gpu = |t: String| replace(&t, "backend = \"cpu\"", "backend = \"gpu\"");
     let cases = [
-        (
-            replace(
-                &base,
-                "kind = \"full_ring\"",
-                "kind = \"arc\"\nwidth_deg = 10.0\ncentre_longitude_deg = 0.0",
-            ),
-            "D1",
-        ),
-        (
-            replace(
-                &base,
-                "model = \"none\"",
-                "model = \"stochastic\"\nparticle_radius_km = 1.0e-5\nweight = 8.0e8\n\
-                 cell_radial_km = 0.05\ncell_azimuthal_km = 10.0\ncell_vertical_km = 0.04\n\
-                 [collisions.restitution]\nlaw = \"constant\"\nepsilon = 0.5",
-            ),
-            "K2",
-        ),
-        (
-            replace(
-                &base,
-                "model = \"none\"",
-                "model = \"hard_sphere\"\nparticle_radius_km = 1.0e-5\n\
-                 [collisions.restitution]\nlaw = \"constant\"\nepsilon = 0.5",
-            ),
-            "K3",
-        ),
+        (arc(&base), "D1-CPU"),
+        (gpu(stoch(&base)), "K5-WIRE"),
+        (gpu(hs(&base)), "K3 is CPU only"),
     ];
-    for (text, task) in cases {
+    for (text, needle) in cases {
         let tmp = Tmp::new();
         let e = run_config(&tmp, &text, "x", true).unwrap_err();
         assert!(
-            matches!(&e, RunError::Setup(m) if m.contains("not implemented") && m.contains(task)),
+            matches!(&e, RunError::Setup(m) if m.contains(needle)),
             "{e}"
         );
         assert_eq!(e.exit_code(), 2);
