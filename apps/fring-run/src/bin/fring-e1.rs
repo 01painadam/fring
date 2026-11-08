@@ -116,7 +116,8 @@ fn go(o: &Opts) -> Result<(), RunError> {
         let j: serde_json_days::Days = serde_json_days::parse(&read(&o.refdir.join("e1_l2.json"))?)?;
         days = j.0;
     }
-    let mut cover = 0.0f64;
+    // The moon-difference check reads all 36 epochs (t0 up to 350 d, plus 2 d).
+    let mut cover: f64 = 352.0 * 86_400.0;
     for r in &l1 {
         cover = cover.max(r.t0_s + e1::WINDOW_S);
     }
