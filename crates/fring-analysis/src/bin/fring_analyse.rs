@@ -8,7 +8,13 @@
 //! fring-analyse apse <out_dir> <run>...
 //! fring-analyse moons <run>
 //! fring-analyse laplace <run_with_both_moons>
-//! fring-analyse lyapunov <out_dir> <n_pairs> <years> [threads d0_km renorm_years kick_km seed tag method(tangent|shadow)]
+//! fring-analyse lyapunov <out_dir> <n_pairs> <years> [threads d0_km renorm_years kick_km seed tag method(tangent|shadow) moons_file L]
+//!   moons_file (index 10): a file with the layout of params/moons.toml, e.g.
+//!     params/variants/gr03b-moons.toml; "" or absent = params/moons.toml. A given
+//!     file also prints the two GM values.
+//!   L (index 11): also write lyapunov_L<tag>.csv (L(t) of every run),
+//!     lyapunov_Lmean<tag>.csv, lyapunov_gr<tag>.csv and print the GR03 rates.
+//!     With L, fewer than 5 runs are allowed (one long trajectory).
 //! ```
 
 use fring_analysis::apse::{self, DAY_S};
@@ -837,16 +843,132 @@ fn cmd_laplace(a: &[String]) -> Res<()> {
     Ok(())
 }
 
+/// Mean, standard deviation and error of the mean of `v`, as text.
+fn mean_se(v: &[f64]) -> String {
+    if v.len() < 2 {
+        return format!(
+            "n {} mean {:.4}",
+            v.len(),
+            v.first().copied().unwrap_or(f64::NAN)
+        );
+    }
+    format!(
+        "n {} mean {:.4} std {:.4} se {:.4}",
+        v.len(),
+        mean(v),
+        std(v),
+        std(v) / (v.len() as f64).sqrt()
+    )
+}
+
+/// The GR03 analysis (argument `L`): writes L(t) of every run, the mean L(t),
+/// and the per-run rates; prints the rates for all runs and for the chaotic group.
+#[allow(clippy::needless_range_loop)] // t and L are indexed together
+fn gr_report(out: &str, tag: &str, pairs: &[lyapunov::Pair]) -> Res<()> {
+    let t = &pairs[0].t_years;
+    let nt = t.len();
+    let years = t[nt - 1];
+    let ia = t.iter().position(|x| *x >= 30.0).unwrap_or(0);
+    let nan = |o: Option<(f64, f64)>| o.map_or(f64::NAN, |x| x.0);
+    let mut wl = create(out, &format!("lyapunov_L{tag}.csv"))?;
+    writeln!(wl, "pair,t_years,L")?;
+    let mut wg = create(out, &format!("lyapunov_gr{tag}.csv"))?;
+    writeln!(
+        wg,
+        "pair,slope_30_end,gr_fit_0_end,gr_fit_1_end,gr_anchor,chaotic"
+    )?;
+    let (mut slope, mut main, mut sens, mut anc, mut chaos) =
+        (Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new());
+    for (k, p) in pairs.iter().enumerate() {
+        for i in 0..nt {
+            writeln!(wl, "{k},{:.3},{:.5}", t[i], p.log_growth[i])?;
+        }
+        let sl = ols(&t[ia..], &p.log_growth[ia..]).0;
+        let (m, s1) = (
+            nan(lyapunov::gr_fit(t, &p.log_growth, 0.0, years)),
+            nan(lyapunov::gr_fit(t, &p.log_growth, 1.0, years)),
+        );
+        let an = lyapunov::gr_anchor(t, &p.log_growth);
+        let c = sl > 0.1;
+        writeln!(wg, "{k},{sl:.5},{m:.5},{s1:.5},{an:.5},{}", u8::from(c))?;
+        if years > 100.0 {
+            println!(
+                "  run {k}: GR fit 0 to 100 yr {:.4}, 0 to {years} yr {m:.4}, 1 to {years} yr {s1:.4}",
+                nan(lyapunov::gr_fit(t, &p.log_growth, 0.0, 100.0))
+            );
+        }
+        slope.push(sl);
+        main.push(m);
+        sens.push(s1);
+        anc.push(an);
+        chaos.push(c);
+    }
+    let mut wm = create(out, &format!("lyapunov_Lmean{tag}.csv"))?;
+    writeln!(wm, "t_years,L_mean_all,L_mean_chaotic")?;
+    let nch = chaos.iter().filter(|c| **c).count();
+    for i in 0..nt {
+        let all: f64 = pairs.iter().map(|p| p.log_growth[i]).sum::<f64>() / pairs.len() as f64;
+        let ch: f64 = pairs
+            .iter()
+            .zip(&chaos)
+            .filter(|(_, c)| **c)
+            .map(|(p, _)| p.log_growth[i])
+            .sum::<f64>()
+            / nch as f64;
+        writeln!(wm, "{:.3},{all:.5},{ch:.5}", t[i])?;
+    }
+    println!(
+        "GR03 analysis: {} runs, {nch} chaotic (slope over 30 to {years} yr above 0.1/yr), fraction {:.3}",
+        pairs.len(),
+        nch as f64 / pairs.len() as f64
+    );
+    let pick = |v: &[f64], want: Option<bool>| -> Vec<f64> {
+        v.iter()
+            .zip(&chaos)
+            .filter(|(_, c)| want.is_none_or(|w| w == **c))
+            .map(|(x, _)| *x)
+            .collect()
+    };
+    for (name, v) in [
+        ("slope of L over 30 to end", &slope),
+        ("GR fit, t > 0 to end (main)", &main),
+        ("GR fit, 1 yr to end (sensitivity)", &sens),
+        ("GR anchor c = L(T)/T - ln(T)/T", &anc),
+    ] {
+        println!("  {name}:");
+        println!("    all     {}", mean_se(&pick(v, None)));
+        println!("    chaotic {}", mean_se(&pick(v, Some(true))));
+        println!("    regular {}", mean_se(&pick(v, Some(false))));
+    }
+    Ok(())
+}
+
 fn cmd_lyapunov(a: &[String]) -> Res<()> {
     let out = &a[0];
     let n_pairs = num(a, 1, 100.0) as u32;
     let years = num(a, 2, 100.0);
     let threads = num(a, 3, 8.0) as usize;
-    let (saturn, all) = setup::load_params(Path::new("params"))?;
+    let (saturn, mut all) = setup::load_params(Path::new("params"))?;
+    if let Some(f) = a.get(10).filter(|f| !f.is_empty()) {
+        all = setup::load_moons_file(Path::new(f))?;
+    }
     let moons: Vec<_> = all
         .into_iter()
         .filter(|m| m.name == "prometheus" || m.name == "pandora")
         .collect();
+    if let Some(f) = a.get(10).filter(|f| !f.is_empty()) {
+        let gm = |n: &str| {
+            moons
+                .iter()
+                .find(|m| m.name == n)
+                .map_or(f64::NAN, |m| m.gm_km3_s2)
+        };
+        println!(
+            "moons: {f}; GM prometheus = {} km3/s2, GM pandora = {} km3/s2",
+            gm("prometheus"),
+            gm("pandora")
+        );
+    }
     let cfg = LyapunovConfig {
         years,
         renorm_years: num(a, 5, 0.25),
@@ -871,6 +993,9 @@ fn cmd_lyapunov(a: &[String]) -> Res<()> {
         t0.elapsed().as_secs_f64(),
         pairs[0].steps
     );
+    if a.get(11).map(String::as_str) == Some("L") {
+        gr_report(out, &tag, &pairs)?;
+    }
     if n_pairs < 5 {
         return Ok(());
     }
