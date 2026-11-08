@@ -76,8 +76,8 @@ Rules (full text in `AGENTS.md` and `CLAUDE.md`):
 | L3-PARAMS | GR03b moon masses as a variant file in `params/` (nominal values unchanged) | A1 | done | ws/a1-l3-params | Gate G3 |
 | A4-ANALYSIS | L3 deciding run: moon Lyapunov rate with the GR03b masses; GR03 method on our masses | A8 | done | ws/a8-a4-analysis (PR #58; masses do not explain the factor 1.4) | L3-PARAMS |
 | K2 | Stochastic collision model on CPU | A4 | done | ws/a4-k2 | K1, ICR-009-IMPL |
-| E1-REF | REBOUND (IAS15) reference for particles within 1 R_H of Prometheus (from the spec only) | A6 | review | ws/a6-e1-ref (PR #59) | E1-ICR |
-| E1-CPU | ICR-004 and per-particle sub-stepping in the CPU backend | A2 | doing | ws/a2-e1-cpu | E1-ICR |
+| E1-REF | REBOUND (IAS15) reference for particles within 1 R_H of Prometheus (from the spec only) | A6 | done | ws/a6-e1-ref (PR #59; WHFast stand-in: no power at h) | E1-ICR |
+| E1-CPU | ICR-004 and per-particle sub-stepping in the CPU backend | A2 | review | ws/a2-e1-cpu (draft PR #60; 4 ICR limits not met, sub-stepping worse in test D: AJ decides) | E1-ICR |
 | K3 | Hard-sphere collision model on CPU (cell list) | A4 | done | ws/a4-k3 | K1, ICR-009-IMPL |
 | K2-CPU | CPU backend runs the stochastic model (K2) every `every_steps` steps and reports `CollisionStats`; `fring-run` accepts `model = "stochastic"` (A5 part) | A2 + A5 | todo | | K2 |
 | K3-CPU | CPU backend runs the hard-sphere model (K3) at every step and reports `CollisionStats`; `fring-run` accepts `model = "hard_sphere"` (A5 part) | A2 + A5 | todo | | K3 |
