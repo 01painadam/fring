@@ -601,6 +601,7 @@ fn g3_freeze_with_the_arc_skips_the_frozen_particle() {
     // arc rotated during the run differ, the others have the same bits.
     let so0 = snapshot(&mut backend(&arc_cfg, &system, &init_ok, 50, Mode::Dp).unwrap());
     let mut folded = init_ok.clone();
+    #[allow(clippy::needless_range_loop)] // six parallel arrays
     for i in 0..n0 {
         folded.particles.x_km[i] = f64::from_bits(so0[i][0]);
         folded.particles.y_km[i] = f64::from_bits(so0[i][1]);

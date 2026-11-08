@@ -58,8 +58,8 @@ fn main() {
     let max_steps = 30_000u64;
     let saturn = saturn_from_toml_str(include_str!("../../../params/saturn.toml")).unwrap();
     let all = moons_from_toml_str(include_str!("../../../params/moons.toml")).unwrap();
-    let years = 5.0 * max_steps as f64 * H / (365.25 * 86_400.0);
-    let eph = build_ephemeris(&saturn, &all, 5.0 * max_steps as f64 * H + 7200.0, 1800.0).unwrap();
+    let years = 8.0 * max_steps as f64 * H / (365.25 * 86_400.0);
+    let eph = build_ephemeris(&saturn, &all, 8.0 * max_steps as f64 * H + 7200.0, 1800.0).unwrap();
     let system = System { saturn, moons: eph };
     let field = SaturnField::<f64>::from_params(&system.saturn);
     let variants: [(&str, &str, bool); 3] = [

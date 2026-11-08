@@ -194,6 +194,7 @@ impl WhKernels {
     /// A bind group for `chaos_renorm`: particle state, run constants,
     /// control, status (a lost pair stops its accumulators), shadow state,
     /// accumulators and chaos constants.
+    #[allow(clippy::too_many_arguments)] // one buffer per binding of the chaos kernel
     pub fn chaos_bind_group(
         &self,
         state: &wgpu::Buffer,

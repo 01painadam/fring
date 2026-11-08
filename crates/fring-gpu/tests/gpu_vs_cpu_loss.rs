@@ -18,6 +18,9 @@
 //! 4. power: the GPU run with all radii x 1.1 is printed against the CPU, to
 //!    show how much a 10 % mistake of the radius changes the numbers.
 
+// Small loops over [moon][radius] tables and particle indexes read better with indexes.
+#![allow(clippy::needless_range_loop)]
+
 mod common;
 
 use common::*;
@@ -190,7 +193,7 @@ fn run_pair(
         for (g, (r, e)) in gpus.iter_mut().zip(rg.iter_mut()) {
             acc(g, r, e);
         }
-        if (done / every) % 200 == 0 {
+        if (done / every).is_multiple_of(200) {
             eprintln!(
                 "step {done} of {steps}, {:.0} s",
                 t0.elapsed().as_secs_f64()
