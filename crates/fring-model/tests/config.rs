@@ -394,3 +394,73 @@ fn moonlet_parses_round_trips_and_is_checked() {
     );
     assert!(RunConfig::from_toml_str(&with("20.0", "spin")).is_err());
 }
+
+// ICR-004: [loss] and [substep].
+
+fn with(extra: &str) -> fring_model::Result<RunConfig> {
+    RunConfig::from_toml_str(&format!("{EXAMPLE}\n{extra}"))
+}
+
+#[test]
+fn loss_and_substep_absent_means_off() {
+    let c = example();
+    assert!(c.loss.is_none() && c.substep.is_none());
+    assert!(!c.loss_or_substep_active());
+    assert!(!c.freeze_unbound() && !c.moon_radius_rule());
+}
+
+#[test]
+fn loss_and_substep_parse_with_defaults_and_round_trip() {
+    let c = with("[loss]\non_unbound = \"freeze\"\nmoon_radius = \"params\"\n[substep]\n").unwrap();
+    assert!(c.freeze_unbound() && c.moon_radius_rule() && c.loss_or_substep_active());
+    let s = c.substep.unwrap();
+    assert_eq!((s.accuracy, s.max_level), (0.1, 4));
+    let back = RunConfig::from_toml_str(&c.to_toml_string().unwrap()).unwrap();
+    assert_eq!(back, c);
+    // An empty [loss] is "error" and "off": it changes nothing.
+    let c = with("[loss]\n").unwrap();
+    assert!(!c.loss_or_substep_active());
+    let c = with("[loss]\non_unbound = \"error\"\nmoon_radius = \"off\"\n").unwrap();
+    assert!(!c.loss_or_substep_active());
+    let c = with("[loss]\non_unbound = \"freeze\"\n").unwrap();
+    assert!(c.loss_or_substep_active() && !c.moon_radius_rule());
+}
+
+#[test]
+fn loss_and_substep_are_checked() {
+    assert_config_error(
+        with("[loss]\nmoon_radius = \"params\"\n"),
+        "needs loss.on_unbound",
+    );
+    assert_config_error(
+        with("[loss]\non_unbound = \"freeze\"\nmoon_radius = \"maybe\"\n"),
+        "moon_radius",
+    );
+    assert_config_error(with("[loss]\nwhat = 1\n"), "what");
+    assert_config_error(with("[substep]\naccuracy = 0.06\n"), "substep.accuracy");
+    assert_config_error(with("[substep]\naccuracy = 1.01\n"), "substep.accuracy");
+    assert_config_error(with("[substep]\naccuracy = nan\n"), "substep.accuracy");
+    assert_config_error(with("[substep]\nmax_level = 7\n"), "substep.max_level");
+    assert!(with("[substep]\naccuracy = 0.07\nmax_level = 6\n").is_ok());
+    assert!(with("[substep]\naccuracy = 1.0\nmax_level = 0\n").is_ok());
+    // Without moons.
+    let no_moons = EXAMPLE.replace(r#"include = ["prometheus", "pandora"]"#, "include = []");
+    let r = RunConfig::from_toml_str(&format!("{no_moons}\n[substep]\n"));
+    assert_config_error(r, "at least one moon");
+    let r = RunConfig::from_toml_str(&format!(
+        "{no_moons}\n[loss]\non_unbound = \"freeze\"\nmoon_radius = \"params\"\n"
+    ));
+    assert_config_error(r, "at least one moon");
+    // freeze without the radius rule is fine without moons.
+    let r = RunConfig::from_toml_str(&format!("{no_moons}\n[loss]\non_unbound = \"freeze\"\n"));
+    assert!(r.is_ok());
+    // More than 4 moons.
+    let five = EXAMPLE.replace(
+        r#"include = ["prometheus", "pandora"]"#,
+        r#"include = ["a", "b", "c", "d", "e"]"#,
+    );
+    assert_config_error(
+        RunConfig::from_toml_str(&format!("{five}\n[substep]\n")),
+        "at most 4 moons",
+    );
+}
