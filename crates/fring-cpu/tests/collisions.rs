@@ -241,9 +241,13 @@ fn refusals() {
     };
     let chaos = "[diagnostics.chaos]\nmethod = \"shadow\"\noffset_km = 1e-3\nrenorm_steps = 100\n";
     assert!(err(config(&stochastic(1), chaos)).contains("shadow"));
-    let hs = "[collisions]\nmodel = \"hard_sphere\"\nparticle_radius_km = 1e-5\n\
+    let hs = "[collisions]\nmodel = \"hard_sphere\"\nparticle_radius_km = 1e-3\n\
               [collisions.restitution]\nlaw = \"constant\"\nepsilon = 0.5\n";
-    assert!(err(config(hs, "")).contains("K3-CPU"));
+    // Hard spheres are accepted (K3-CPU), but not with chaos.
+    if let Err(e) = CpuBackend::new(&config(hs, ""), &sys, &init) {
+        panic!("{e:?}");
+    }
+    assert!(err(config(hs, chaos)).contains("hard_sphere"));
     let mut arc = config(&stochastic(1), "");
     arc.domain = fring_model::config::Domain::Arc {
         width_deg: 10.0,
