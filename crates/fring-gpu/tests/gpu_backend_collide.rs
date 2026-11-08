@@ -228,7 +228,7 @@ fn call_splits_and_cadence() {
     assert_eq!(s.collision.energy_loss_km2_s2, 0.0);
     b.step(2).unwrap();
     b.step(1).unwrap();
-    assert_eq!(b.stats().unwrap().collision.occupancy_sum, 3000 * 1);
+    assert_eq!(b.stats().unwrap().collision.occupancy_sum, 3000);
     // The step that follows (6 to 7) is not a collision step.
     b.step(1).unwrap();
     assert_eq!(b.stats().unwrap().collision.occupancy_sum, 0);
