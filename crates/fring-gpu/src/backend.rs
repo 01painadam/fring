@@ -36,8 +36,8 @@ use fring_model::physics::{
     ArcGeometry, EpicycleElements, KickTable, SaturnField, epicycle_state, interpolate_moons,
 };
 use fring_model::{
-    Backend, ChaosReport, Error, InitialState, MoonState, ParticleView, Particles, Result,
-    RunConfig, StepStats, System, Vec3,
+    Backend, ChaosReport, DropReport, Error, InitialState, MoonState, ParticleView, Particles,
+    Result, RunConfig, StepStats, System, Vec3,
 };
 use rayon::prelude::*;
 
@@ -106,6 +106,14 @@ pub struct GpuBackend {
     snapshot_stale: bool,
     energy0: Vec<f64>,
     max_rel_energy_error: f64,
+    /// `[loss] on_unbound = "freeze"` (ICR-004): a lost particle is frozen and
+    /// `step` does not return an error for it.
+    freeze: bool,
+    /// `[loss] moon_radius = "params"`: the radii must be set before the first step.
+    rule: bool,
+    radii_set: bool,
+    /// Staging buffer of [`Backend::dropped`], made on first use.
+    drop_stage: Option<wgpu::Buffer>,
 }
 
 impl GpuBackend {
@@ -119,6 +127,23 @@ impl GpuBackend {
         config.validate()?;
         system.validate()?;
         init.particles.validate()?;
+        // ICR-004 amendment 2: no sub-stepping on the GPU.
+        if config.substep.is_some() {
+            return Err(Error::Config(
+                "[substep] is not available on the GPU backend (ICR-004 amendment 2); \
+                 remove it or use the CPU backend"
+                    .to_string(),
+            ));
+        }
+        let freeze = config.freeze_unbound();
+        let rule = config.moon_radius_rule();
+        if (freeze || rule) && opts.mode == Mode::C {
+            return Err(Error::Config(
+                "[loss] (freeze or the moon-radius rule) is not available in GPU mode C; \
+                 use mode dp or d"
+                    .to_string(),
+            ));
+        }
         let eph = &system.moons;
         if !eph.tracks.is_empty() {
             let end = eph.end_s();
@@ -180,6 +205,12 @@ impl GpuBackend {
             chaos_cfg,
         )?;
 
+        if rule && arc.is_some() {
+            return Err(Error::Config(
+                "[loss] moon_radius = \"params\" cannot be combined with the arc (ICR-004)"
+                    .to_string(),
+            ));
+        }
         if let Some(geom) = arc {
             stepper.set_arc(geom)?;
         }
@@ -217,8 +248,43 @@ impl GpuBackend {
             snapshot_stale: false,
             energy0,
             max_rel_energy_error: 0.0,
+            freeze,
+            rule,
+            radii_set: false,
+            drop_stage: None,
             kernels,
         })
+    }
+
+    /// Sets the radius of each moon in km for `moon_radius = "params"`
+    /// (ICR-004), in the moon order of the `System`, as
+    /// `CpuBackend::set_moon_radii_km` does. The caller reads
+    /// `<params_dir>/moons.toml` (`moon_radii_from_toml_str`) and matches the
+    /// names. The backend reads no files. With the rule off in the config the
+    /// radii are checked and ignored.
+    ///
+    /// # Errors
+    /// [`Error::Config`] if the number of radii differs from the number of
+    /// moons, a radius is not finite and > 0, or steps were already recorded.
+    pub fn set_moon_radii_km(&mut self, radii_km: &[f64]) -> Result<()> {
+        let n = self.stepper.n_moons();
+        if radii_km.len() != n {
+            return Err(Error::Config(format!(
+                "set_moon_radii_km: {} radii for {n} moons",
+                radii_km.len()
+            )));
+        }
+        if let Some(r) = radii_km.iter().find(|r| !(r.is_finite() && **r > 0.0)) {
+            return Err(Error::Config(format!(
+                "set_moon_radii_km: radius {r} is not finite and > 0"
+            )));
+        }
+        if !self.rule {
+            return Ok(());
+        }
+        self.stepper.set_moon_radii_km(radii_km)?;
+        self.radii_set = true;
+        Ok(())
     }
 
     /// The non-blocking core (read-only), for example to compare its buffers.
@@ -347,6 +413,13 @@ impl Backend for GpuBackend {
     /// such index; the state of the backend is then unspecified and the run
     /// must stop. The call waits for the GPU once, at its end.
     fn step(&mut self, n_steps: u64) -> Result<()> {
+        if self.rule && !self.radii_set {
+            return Err(Error::Config(
+                "moon_radius = \"params\" needs the moon radii: call \
+                 GpuBackend::set_moon_radii_km before the first step"
+                    .to_string(),
+            ));
+        }
         let gpu = self.kernels.gpu().clone();
         let (d, q) = (gpu.device(), gpu.queue());
         // `encode_block` counts each block in the stepper at once. A failed
@@ -380,7 +453,8 @@ impl Backend for GpuBackend {
         }
         self.snapshot_stale = true;
         let flag = self.failure_flag();
-        if flag != NO_FAILURE {
+        // With `freeze` a lost particle is flagged and frozen, not an error.
+        if flag != NO_FAILURE && !self.freeze {
             self.stepper.steps_total = base;
             let idx = flag as usize;
             let id = self.ids.get(idx).copied().unwrap_or(u32::MAX);
@@ -441,6 +515,62 @@ impl Backend for GpuBackend {
             interval_s,
             self.time_s(),
         )))
+    }
+
+    /// Lost particles (ICR-004), with `on_unbound = "freeze"`: reads the
+    /// status buffer back (`8 + 2 cap` words). `drop_step` is exact in the GPU
+    /// convention (see [`GpuStepper::status_buffer`]); the frozen state is the
+    /// state at the start of the block of the loss.
+    fn dropped(&mut self) -> Result<Option<DropReport>> {
+        if !self.freeze {
+            return Ok(None);
+        }
+        let gpu = self.kernels.gpu();
+        let d = gpu.device();
+        let words = 8 + 2 * self.cap;
+        let size = (4 * words) as u64;
+        let stage = self.drop_stage.get_or_insert_with(|| {
+            d.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("dropped"),
+                size,
+                usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            })
+        });
+        let mut enc = d.create_command_encoder(&Default::default());
+        enc.copy_buffer_to_buffer(self.stepper.status_buffer(), 0, stage, 0, size);
+        gpu.queue().submit([enc.finish()]);
+        stage.map_async(wgpu::MapMode::Read, .., |r| r.expect("map failed"));
+        d.poll(wgpu::PollType::wait_indefinitely())
+            .expect("GPU poll failed");
+        let w: Vec<u32> = {
+            let view = stage.get_mapped_range(..).expect("range");
+            view.as_chunks::<4>()
+                .0
+                .iter()
+                .map(|b| u32::from_le_bytes(*b))
+                .collect()
+        };
+        stage.unmap();
+        let (n, cap) = (self.n, self.cap);
+        let reason: Vec<u8> = (0..n).map(|i| w[8 + i] as u8).collect();
+        let drop_step: Vec<u64> = (0..n)
+            .map(|i| {
+                if reason[i] == 0 {
+                    u64::MAX
+                } else {
+                    u64::from(w[8 + cap + i])
+                }
+            })
+            .collect();
+        let n_moons = self.stepper.n_moons();
+        Ok(Some(DropReport {
+            time_s: self.time_s(),
+            reason,
+            drop_step,
+            n_unbound: u64::from(w[1]),
+            n_inside_moon: (0..n_moons).map(|k| u64::from(w[2 + k])).collect(),
+        }))
     }
 
     fn stats(&mut self) -> Result<StepStats> {

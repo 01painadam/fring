@@ -72,15 +72,17 @@ fn chaos_renorm_matches_its_rust_twin() {
         .unwrap();
     let c = fring_gpu::spike::Consts::<M4>::for_step(&sp, &[], 356.2537);
     q.write_buffer(&prm, 0, &bytes(&wh::params(&c, &[])));
-    let ctl = mk(16, uni);
+    let ctl = mk(32, uni);
     let cw: Vec<u8> = wh::control(1, n, cap, 0)
         .iter()
         .flat_map(|x| x.to_le_bytes())
         .collect();
     q.write_buffer(&ctl, 0, &cw);
+    let status = mk(4 * fring_gpu::wh_gpu::status_words(cap), rw);
+    q.write_buffer(&status, 0, &fring_gpu::wh_gpu::status_init_bytes(cap));
     let cprm = mk(16, uni);
     q.write_buffer(&cprm, 0, &bytes(&[d0, 0.0, 0.0, 0.0]));
-    let bind = k.chaos_bind_group(&st, &prm, &ctl, &sh, &acc, &cprm);
+    let bind = k.chaos_bind_group(&st, &prm, &ctl, &status, &sh, &acc, &cprm);
     let pipe = k.chaos_pipeline();
     let rounds = 3;
     for _ in 0..rounds {

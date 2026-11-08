@@ -7,7 +7,9 @@
 //    2 = sum of Y (DS), 3 = (j, flags) as f32. Particle i is at plane * cap + i.
 // 7: constants, vec4: x = d0 (km).
 // Binding 0 is the state of the particle, 3 is the control (y = particles,
-// z = cap) and 2 the run constants (ds_one).
+// z = cap), 2 the run constants (ds_one) and 4 the status buffer (ICR-004: a
+// lost particle is frozen with its shadow; its accumulators stop and its flags
+// get bit 1, value 2).
 
 @group(0) @binding(5) var<storage, read_write> sh: array<vec2<f32>>;
 @group(0) @binding(6) var<storage, read_write> acc: array<vec2<f32>>;
@@ -35,6 +37,13 @@ fn chaos_renorm(@builtin(global_invocation_id) id: vec3<u32>, @builtin(num_workg
     if (i >= prm_n_particles()) { return; }
     let c = prm_cap();
     let d0 = cpr.x;
+    if (is_dropped(i)) {
+        // The pair is frozen (main and shadow are not advanced): no renorm.
+        var f3 = acc[3u * c + i];
+        f3.y = f32(u32(f3.y) | 2u);
+        acc[3u * c + i] = f3;
+        return;
+    }
     let p = load_p(i);
     let v = load_v(i);
     let q = load_sp(i);

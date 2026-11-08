@@ -45,9 +45,16 @@ pub const fn reason_inside_moon(k: u32) -> u32 {
     2 + k
 }
 
-/// Number of `u32` words of the status buffer for `cap` particles.
+/// Number of `u32` words of the status buffer for `cap` particles: the header,
+/// the drop reasons (`8 + i`) and the `drop_step` words (`8 + cap + i`,
+/// E1-GPU). The arc log (D1) starts after them.
 pub const fn status_words(cap: usize) -> usize {
-    STATUS_HEADER_WORDS + cap
+    STATUS_HEADER_WORDS + 2 * cap
+}
+
+/// Index of the `drop_step` word of particle `i` in the status buffer.
+pub const fn drop_step_word(cap: usize, i: usize) -> usize {
+    STATUS_HEADER_WORDS + cap + i
 }
 
 /// The initial contents of the status buffer: word 0 is [`NO_FAILURE`], all
@@ -129,6 +136,7 @@ impl WhKernels {
                 entry(0, st(false)),
                 entry(2, wgpu::BufferBindingType::Uniform),
                 entry(3, wgpu::BufferBindingType::Uniform),
+                entry(4, st(false)),
                 entry(5, st(false)),
                 entry(6, st(false)),
                 entry(7, wgpu::BufferBindingType::Uniform),
@@ -184,12 +192,15 @@ impl WhKernels {
     }
 
     /// A bind group for `chaos_renorm`: particle state, run constants,
-    /// control, shadow state, accumulators and chaos constants.
+    /// control, status (a lost pair stops its accumulators), shadow state,
+    /// accumulators and chaos constants.
+    #[allow(clippy::too_many_arguments)] // one buffer per binding of the chaos kernel
     pub fn chaos_bind_group(
         &self,
         state: &wgpu::Buffer,
         prm: &wgpu::Buffer,
         ctl: &wgpu::Buffer,
+        status: &wgpu::Buffer,
         shadow: &wgpu::Buffer,
         acc: &wgpu::Buffer,
         cprm: &wgpu::Buffer,
@@ -209,6 +220,7 @@ impl WhKernels {
                     e(0, state),
                     e(2, prm),
                     e(3, ctl),
+                    e(4, status),
                     e(5, shadow),
                     e(6, acc),
                     e(7, cprm),
@@ -278,7 +290,7 @@ impl WhKernels {
         let uni = wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST;
         let prm_buf = mk((prm.len() * 4) as u64, uni);
         q.write_buffer(&prm_buf, 0, &bytes(prm));
-        let ctl_buf = mk(16, uni);
+        let ctl_buf = mk(crate::wh::CONTROL_BYTES as u64, uni);
         q.write_buffer(
             &ctl_buf,
             0,
