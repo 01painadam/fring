@@ -18,6 +18,11 @@
 //! of the longitude from the moon, which would swamp the numbers). Set
 //! `E1_D_LITERAL=1` for the formula of ICR-004 without the term.
 //!
+//! Limits (ICR-004 amendment 2): (i) p95 of |dCJ| after the pass <= 1e-6
+//! km² s⁻² for the sub-stepped WH and for today's WH (b >= 1 R_H); the ratio
+//! of the two is printed, not a limit. (ii) rms at N = 100 <= 2.7e-6 km² s⁻²
+//! for both, slope < 0.7. The reference must be below 1e-3 x the limit.
+//!
 //! Three integrators: the sub-stepped WH
 //! (`[substep]`), today's WH (no `[substep]`) and WH with h/64 as the
 //! reference (IAS15 is not available in Rust; ICR-004 allows it).
@@ -333,11 +338,14 @@ fn d_i_one_encounter_per_particle() {
             pct(&a, 0.5),
             pct(&t, 0.5)
         );
+        // ICR-004 amendment 2: the absolute limit holds for both schemes (today's
+        // WH is the production setting); the ratio to today is printed above
+        // and is not a limit; the reference must be below 1e-3 x the limit.
         if lo >= 1.0 {
-            let pass = pa <= 1.0e-6 && pa <= 0.1 * pt;
-            let ref_ok = pr <= 1.0e-3 * pa;
+            let pass = pa <= 1.0e-6 && pt <= 1.0e-6;
+            let ref_ok = pr <= 1.0e-3 * 1.0e-6;
             eprintln!(
-                "D(i)   limit 1e-6 and <= 0.1 x today: {pass}; reference below 1e-3 x substep: {ref_ok}"
+                "D(i)   p95 <= 1e-6 for substep and today: {pass}; reference below 1e-9 (1e-3 x the limit): {ref_ok}"
             );
             ok &= pass && ref_ok && idx.len() >= per * 9 / 10;
         }
@@ -452,14 +460,24 @@ fn d_ii_many_encounters() {
             .collect()
     };
     let (a100, t100) = (rms(&at_100(&series[0])), rms(&at_100(&series[1])));
-    // Reference vs substep over the checkpoints where the reference exists.
+    // Reference over the checkpoints where it exists. ICR-004 amendment 2: its
+    // rms must be below 1e-3 x the limit (2.7e-9); the ratio to the substep rms
+    // is printed (the reference is at the rounding floor, about 1e-12).
     let ratio = (0..series[2].len())
         .map(|m| rms(&series[2][m]) / rms(&series[0][m]))
         .fold(0.0f64, f64::max);
+    let ref_max = (0..series[2].len())
+        .map(|m| rms(&series[2][m]))
+        .fold(0.0f64, f64::max);
     eprintln!("D(ii) slope of ln rms against ln N (N_mean >= 5): {slope:.3}");
-    eprintln!("D(ii) rms |dCJ| at N = 100: substep {a100:.3e}  today {t100:.3e}  (limit 2.7e-6)");
-    eprintln!("D(ii) largest reference/substep ratio of the rms: {ratio:.3e} (limit 1e-3)");
-    let ok = a100 <= 2.7e-6 && slope < 0.7 && ratio <= 1.0e-3;
+    eprintln!(
+        "D(ii) rms |dCJ| at N = 100: substep {a100:.3e}  today {t100:.3e}  (limit 2.7e-6 for both)"
+    );
+    eprintln!(
+        "D(ii) largest reference rms {ref_max:.3e} (limit 2.7e-9 = 1e-3 x the limit); \
+         largest reference/substep ratio {ratio:.3e} (information)"
+    );
+    let ok = a100 <= 2.7e-6 && t100 <= 2.7e-6 && slope < 0.7 && ref_max <= 1.0e-3 * 2.7e-6;
     assert!(
         ok,
         "a limit of ICR-004 test D (ii) is not met: see the D(ii) lines"

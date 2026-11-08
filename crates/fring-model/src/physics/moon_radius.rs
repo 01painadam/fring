@@ -268,20 +268,11 @@ mod tests {
         let (worst_p, worst_v) = hermite_errors();
         eprintln!("hermite_moon worst position {worst_p:e} km, velocity {worst_v:e} km/s");
         assert!(worst_p < 5e-3, "position error {worst_p} km");
-        // Measured bound, not the ICR limit (see the next test).
+        // ICR-004 amendment 2: a cubic Hermite with nodes h apart gives
+        // h^3 x'''' / 125 = 9.6e-6 km/s (measured 1.0e-5), so the limit is
+        // 3e-5 km/s. The velocity enters the level rule only through
+        // u = |w - mdot| (0.03 km/s and more), a relative error of 3e-4.
         assert!(worst_v < 3e-5, "velocity error {worst_v} km/s");
-    }
-
-    /// ICR-004 T3 asks for a velocity error below 1e-6 km/s. A cubic Hermite
-    /// with nodes h apart gives 1.0e-5 km/s (the derivative of the
-    /// interpolation error, h^3 x'''' / 125 = 1e-5). The limit is kept here,
-    /// ignored, and reported to A0. The velocity enters the level rule only
-    /// through u = |w - mdot| (0.03 km/s and more), a relative error of 3e-4.
-    #[test]
-    #[ignore = "ICR-004 T3 velocity limit 1e-6 km/s is not reachable with cubic Hermite"]
-    fn t3_velocity_limit_of_the_icr() {
-        let (_, worst_v) = hermite_errors();
-        assert!(worst_v < 1e-6, "velocity error {worst_v} km/s");
     }
 
     /// Independent form with a logarithm; used away from the level edges.

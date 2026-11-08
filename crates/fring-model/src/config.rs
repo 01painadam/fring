@@ -54,7 +54,9 @@ pub struct RunConfig {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub loss: Option<LossConfig>,
     /// `[substep]`: per-particle sub-stepping near the moons (ICR-004).
-    /// Absent means no sub-stepping.
+    /// Absent means no sub-stepping. Off in production and CPU only
+    /// (ICR-004 amendment 2): it does not improve the energy error after a
+    /// pass (test D), and the GPU does not have it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub substep: Option<SubstepConfig>,
 }

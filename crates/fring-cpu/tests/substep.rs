@@ -278,9 +278,13 @@ fn c5_numbers(n: usize, runs: &[Serial]) -> (f64, usize, usize, Vec<f64>) {
     (same as f64 / all as f64, live, n_enc, diffs)
 }
 
-/// C5, levels: with encounters, other block lengths give the same levels in
-/// at least 99.9 % of the steps. Also, most positions after 100 days agree to
-/// 1e-3 km (the 90th percentile; see the next test for the ICR limit).
+/// C5 (ICR-004 amendment 2): with encounters, other block lengths give the
+/// same levels in at least 99.9 % of the steps, and the median position
+/// difference after 100 days is at most 1e-3 km. The 90th percentile and the
+/// maximum are printed, not limits: particles with close encounters are
+/// chaotic (a change of 1e-12 km in one start coordinate gives 4e-5 km after
+/// 100 days), so the maximum measures the chaos and not the code. A mistake at
+/// the block ends would move every particle, so the median finds it.
 #[test]
 #[ignore = "release: 100 days, 60 particles, three block lengths"]
 fn c5_block_length() {
@@ -297,22 +301,7 @@ fn c5_block_length() {
     );
     assert!(live >= 30 && n_enc >= 5, "the test has no power");
     assert!(frac >= 0.999, "levels agree in {frac}");
-    assert!(q(0.9) < 1e-3, "p90 {}", q(0.9));
-}
-
-/// C5, ICR limit: every position after 100 days agrees to 1e-3 km. This fails:
-/// a change of 1e-12 km in one start coordinate already gives 4e-5 km after
-/// 100 days (rounding noise grows through the encounters), and blocks of 37
-/// steps add 650 block ends of rounding. Kept ignored; the numbers are in the
-/// handoff E1-CPU. Do not relax the limit without A0.
-#[test]
-#[ignore = "ICR-004 C5 position limit 1e-3 km is below the rounding sensitivity; fails by design"]
-fn c5_positions_icr_limit() {
-    let sys = system();
-    let (n, runs) = c5_runs(&sys);
-    let (_, _, _, diffs) = c5_numbers(n, &runs);
-    let worst = *diffs.last().unwrap();
-    assert!(worst < 1e-3, "worst position difference {worst:e} km");
+    assert!(q(0.5) <= 1e-3, "median position difference {} km", q(0.5));
 }
 
 /// C6: bit for bit the same for 1, 4 and 8 threads and call splits, and equal

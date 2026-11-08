@@ -1,6 +1,6 @@
 # E1-CPU: ICR-004 and per-particle sub-stepping in the CPU backend
 Role: A2  Branch: ws/a2-e1-cpu  Status: review
-Updated: 2026-11-08
+Updated: 2026-11-08 (A0: ICR-004 amendment 2 applied)
 
 ## Goal and acceptance criteria
 ICR-004 (Accepted 2026-11-08), sections 1 to 6, A2 line of "Roles affected", migration item 4. PLAN E1: `[loss]` and `[substep]` in the config, `Backend::dropped`, `physics/moon_radius.rs`, `CpuBackend` with drop reasons, `drop_step`, levels, Hermite sub-kicks and a shadow that follows its main particle, tests C1 to C8 and the energy test D. The PLAN "done when" also asks for agreement with E1-REF; that comparison follows when A6 has E1-REF (not started).
@@ -15,6 +15,14 @@ ICR-004 (Accepted 2026-11-08), sections 1 to 6, A2 line of "Roles affected", mig
 - `CpuBackend::set_moon_radii_km(&[f64])`, `dropped()`, `ChaosReport.flags` bit 1 (value 2).
 - Tests: C2, C3, C7 (flags) in `tests/drops.rs`; C4, C5, C6, C7 (levels) in `tests/substep.rs`; test D in `tests/energy_encounter.rs`; C8 in `tests/bench_substep.rs`.
 - Level-0 shortcut with squares only (`level_zero_certain`, unit test: 2 million random cases, never says 0 where the rule gives more). C8 went from +9.3 % to +0.6 %.
+
+## ICR-004 amendment 2 (AJ 2026-11-08, applied by A0 on this branch)
+- Sub-stepping stays in the CPU code, off by default (no `[substep]` table), not used in production, not on the GPU. Doc comment in `config.rs`.
+- C5: the median position difference after 100 days <= 1e-3 km (p90 and max printed). `c5_positions_icr_limit` removed; `c5_block_length` asserts the median. Measured: median 3.7e-6, p90 1.1e-5, max 1.24 km.
+- T3: velocity < 3e-5 km/s (measured 1.0e-5; cubic Hermite floor h^3 x'''' / 125 = 9.6e-6). `t3_velocity_limit_of_the_icr` removed.
+- Test D (i): p95 <= 1e-6 for sub-stepped and today's WH (b >= 1 R_H); the ratio to today is printed only; reference < 1e-9 (1e-3 x the limit). Passes, same numbers as below.
+- Test D (ii): rms at N = 100 <= 2.7e-6 for both; slope < 0.7; largest reference rms < 2.7e-9.
+- The amendment text is in `docs/interfaces/ICR-004.md` on `ws/a0-phase4-board` (A0).
 
 ## Conventions chosen (for A3 and A5)
 - `drop_step` of a drift: the first half drift of a block belongs to the first step of the block. A drift after kick (or sub-kick) of step k belongs to step k, also the last drift to the block end and the merged drift to the next step. For the GPU (segment s = 0 for the first half drift, s = k + 1 for the drift after kick k): `drop_step = first_step + max(s - 1, 0)`.
@@ -43,16 +51,14 @@ ICR-004 (Accepted 2026-11-08), sections 1 to 6, A2 line of "Roles affected", mig
   - (ii), 100 particles, a = a_m + 300 to 600 km (b = 4.7 to 9.5 R_H, so L = 0 almost always: sub-stepped and today are bit for bit equal), samples every 30 days to 51 years: rms |dCJ| at N = 100 encounters 6.6e-12 km² s⁻² (limit 2.7e-6, passes); slope of ln rms against ln N 0.15 (limit 0.7, passes); the rms is flat (6.6e-12 to 2.6e-10 at N = 12 to 150). Reference (20 years, 243 samples): ratio to the sub-stepped rms 0.02 to 0.42 (limit 1e-3, **not met**: the reference is at the rounding floor 1e-12). (ii) does not exercise sub-stepping. It took 23 minutes (100 particles are one rayon chunk, so one thread).
 
 ## Next step (one concrete action)
-A0 reviews and decides: (1) the C5 position limit, (2) the T3 velocity limit, (3) the test D relative limit and the reference check, (4) merge. Then E1-GPU (A3) can start from the conventions above.
+A0: when test D (ii) passes (`runs/logs/a0-amend2-d_ii.log`) and CI is green, mark PR #60 ready and merge. Then E1-GPU (A3, without sub-stepping), E1-RUN (A5) and the A2 tasks K2-CPU, K3-CPU, D1-CPU can start.
 
 ## How to verify the current state
 ```sh
 cd .claude/worktrees/a2-e1-cpu            # branch ws/a2-e1-cpu
 cargo test -p fring-cpu -p fring-model     # normal tests, all pass
 cargo test -p fring-cpu --release -- --ignored c5_block_length c8 # pass
-# expected failures (limits not met, see above):
-cargo test -p fring-cpu --release --test substep c5_positions_icr_limit -- --ignored
-cargo test -p fring-cpu --release --test energy_encounter d_i_ -- --ignored --nocapture   # 20 s
+cargo test -p fring-cpu --release --test energy_encounter d_i_ -- --ignored --nocapture   # 10 s, passes (ICR-004 amendment 2)
 cargo test -p fring-cpu --release --test energy_encounter d_ii -- --ignored --nocapture   # 23 min; E1_D_QUICK=1 for a short run
 cargo test -p fring-cpu --release --test bench_substep -- --ignored --nocapture           # 2.5 min
 ```
@@ -63,8 +69,9 @@ cargo test -p fring-cpu --release --test bench_substep -- --ignored --nocapture 
 - For D1-CPU (the arc): `advance_ext` passes `arc = None` to `particle_level`. D1-CPU must pass the `ArcGeometry` so that the images are used. The radius rule with the arc stays a `Config` error.
 - For A3: T1 f32 part (the `Wf32` twin of `segment_min_d2` against the generic function with `T = f32` and `T = f64`, relative < 1e-6) belongs to E1-GPU. The generic function has the same order of operations. `fill_ext` is the host table that the GPU needs (velocities, sync rows).
 - For A0 (out of scope, decide later): how A6 (E1-REF) runs the CPU WH on its synthetic encounter states without reading the implementation. `CpuBackend` with `System` and `InitialState` is the public interface.
-- The C5 and T3 limits and the D relative limit are not changed. They need an A0 decision (ADR for any change).
+- None. The C5, T3 and test D limits are set by ICR-004 amendment 2 (AJ approved 2026-11-08).
 - `particle_level` and `substep_level` use the formula of section 3 exactly; the trigger shortcut `level_zero_certain` is CPU only.
 
 ## Decisions made (link ADRs)
+- AJ 2026-11-08: option (a), sub-stepping off by default and not on the GPU; ICR-004 amendment 2 limits approved.
 - A0 2026-11-08: radii by `CpuBackend::set_moon_radii_km`, arc images in the shared function, extended path only when a key changes the behaviour. No ADR.
