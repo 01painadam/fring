@@ -84,7 +84,7 @@ fn run(cfg: &RunConfig, init: &InitialState, calls: &[u64]) -> (Vec<u64>, Vec<u6
         b.step(n).unwrap();
     }
     let s = b.stats().unwrap();
-    (bits(&b.particles().unwrap().particles), stats_bits(&s))
+    (bits(b.particles().unwrap().particles), stats_bits(&s))
 }
 
 #[test]
@@ -116,9 +116,9 @@ fn collisions_nonzero_stats() {
     assert_eq!(s2.collisions_since_last, 0);
     assert_eq!(s2.collision.candidates, 0);
     // A step() of 0 steps does nothing.
-    let before = bits(&b.particles().unwrap().particles);
+    let before = bits(b.particles().unwrap().particles);
     b.step(0).unwrap();
-    assert_eq!(bits(&b.particles().unwrap().particles), before);
+    assert_eq!(bits(b.particles().unwrap().particles), before);
     assert_eq!(b.stats().unwrap().collision.occupancy_sum, 0);
 }
 
