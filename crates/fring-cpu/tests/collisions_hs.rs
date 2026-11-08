@@ -322,7 +322,8 @@ fn hs_refusals() {
         width_deg: 10.0,
         centre_longitude_deg: 0.0,
     };
-    assert!(err(arc).contains("D1-CPU"));
+    // The arc is accepted since D1-CPU (tests/arc.rs).
+    assert!(CpuBackend::new(&arc, &sys, &init).is_ok());
     // K3 counts the cells along the full ring in a u32: 1 cm particles do not fit.
     assert!(err(config(&hard_sphere(1.0e-5), "")).contains("too small"));
 }
