@@ -1,0 +1,58 @@
+{
+  "task": "E1-REF layer 1",
+  "seed": 20261108,
+  "numpy_generator": "numpy.random.default_rng(seed)",
+  "window_s": 172800.0,
+  "r_hill_km": 63.30014443471887,
+  "strata_rh": [
+    [
+      0.68,
+      1.0
+    ],
+    [
+      1.0,
+      2.0
+    ],
+    [
+      2.0,
+      4.1
+    ],
+    [
+      4.1,
+      6.3
+    ]
+  ],
+  "per_stratum": 500,
+  "strata_counts_in_range": [
+    500,
+    500,
+    500,
+    500
+  ],
+  "epsilon": 1e-09,
+  "epsilon_check": 1e-11,
+  "dt_out_s": 600.0,
+  "chunk": 25,
+  "t0_grid_days": [
+    0,
+    350,
+    10
+  ],
+  "start": "about 10 R_H upstream (x radial offset |x| in 0..10 R_H, e in 0..0.0024)",
+  "sha256": {
+    "e1_l1_states.csv": "065bc4c60c21969c0abd3da32136b48fd1083ffd4a20c38e02ab51eea46b4dee",
+    "e1_moons_t0.csv": "45caec9558ff1d2d79643b9ed9902149d5258b1ea0680ccefbb528549c72663f",
+    "e1_l1_ref.csv": "9c598ea7c00248a959c7d1d6fb255d97731c8fa0fd5a394d99f038893db9cff3"
+  },
+  "wall_s": {
+    "screen": 122.53373789787292,
+    "ref_eps1e-9": 37.78229594230652,
+    "ref_eps1e-11": 35.9367401599884,
+    "workers": 5
+  },
+  "versions": {
+    "rebound": "5.2.2",
+    "numpy": "2.5.4",
+    "python": "3.12.12"
+  }
+}

@@ -1,0 +1,20 @@
+R_H = 63.3001 km; seed 20261108; IAS15 epsilon 1e-09 (check 1e-11); window 2 d
+
+Reference error, |Delta a(1e-9) - Delta a(1e-11)| / |Delta a(1e-11)| (the limits are 5 % and 25 %):
+   stratum    n     median        p95        max  median |da| km  n |da|<10 floor
+[0.68,1.0]  500   3.03e-13   3.14e-12   1.48e-10       1.415e+02                0
+[1.0,2.0]  500   0.00e+00   2.05e-12   1.44e-11       8.381e+01                0
+[2.0,4.1]  500   0.00e+00   8.20e-12   5.14e-10       3.568e+01                0
+[4.1,6.3]  500   0.00e+00   3.64e-11   2.14e-10       1.357e+01                0
+
+Delta e and apse angle, eps 1e-9 against 1e-11: max |d(Delta e)| = 1.15e-11, max |d(Delta varpi)| = 1.94e-06 rad
+
+Measured b within each stratum against the closest-approach density of docs/results/data/closest_hist.csv
+(counts per bin in b; the run has a density that rises with ln b; the synthetic set is built per stratum):
+  stratum [0.68,1.0]: ours median 0.828, run-density median 0.831 R_H; KS statistic 0.027 (p = 0.86)
+  stratum [1.0,2.0]: ours median 1.516, run-density median 1.545 R_H; KS statistic 0.069 (p = 0.017)
+  stratum [2.0,4.1]: ours median 3.037, run-density median 3.083 R_H; KS statistic 0.037 (p = 0.5)
+  stratum [4.1,6.3]: ours median 5.284, run-density median 5.182 R_H; KS statistic 0.077 (p = 0.0054)
+
+Relative speed at the closest sample u (km/s), 5/50/95 %: [0.0203 0.0417 0.0761]
+u not checked against the run: no per-encounter data in docs/results/data.
