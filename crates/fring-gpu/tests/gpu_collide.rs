@@ -14,8 +14,14 @@ mod common;
 
 use fring_collide::frame::peculiar_velocity;
 use fring_collide::pair;
+use fring_collide::stochastic::StochasticModel;
+use fring_collide::tally::Tally;
+use fring_collide::testkit::{
+    BoxModel, BoxSpec, Check, ModelKind, ModelParams, Sample, Setup, dispersion, kinetic_energy,
+    momentum, t4_rate, t5_energy_loss, t7_haff, t9_determinism,
+};
 use fring_gpu::bin::Dsm;
-use fring_gpu::collide::{COLLIDE_TEST_WGSL, collide_uniform};
+use fring_gpu::collide::{COLLIDE_TEST_WGSL, CollideParams, GpuCollider, collide_uniform};
 use fring_gpu::gpu::Gpu;
 use fring_gpu::probe::self_test;
 use fring_model::Vec3;
@@ -444,5 +450,342 @@ fn peculiar_velocity_equals_the_f64_function() {
         if circular {
             assert!(u_max <= 1e-8, "a circular orbit has |u| = {u_max} km/s");
         }
+    }
+}
+
+// ---------------------------------------------------------------- box tests --
+
+/// A box model on the GPU for the K1 drivers (`testkit::BoxModel`): the host
+/// sorts the particles into cells (id order) and writes the sorted ids and keys
+/// in the layout of `GpuBinner`; `GpuCollider` runs in box mode (u = v). With
+/// `bulk` the velocity of every particle carries a bulk velocity in the
+/// double-single state (K1-T6 with 16.5 km/s). The GPU keeps the state between
+/// calls when the caller passes back the velocities it got; so the bulk part
+/// is not rounded again at each step.
+struct GpuBox {
+    gpu: Gpu,
+    params: ModelParams,
+    bulk: Vec3<f64>,
+    inner: Option<Inner>,
+    last: Vec<Vec3<f64>>,
+}
+
+struct Inner {
+    collider: GpuCollider,
+    state: wgpu::Buffer,
+    sorted: wgpu::Buffer,
+    skeys: wgpu::Buffer,
+    cap: usize,
+}
+
+fn buffer(gpu: &Gpu, bytes: usize, copy_src: bool) -> wgpu::Buffer {
+    gpu.device().create_buffer(&wgpu::BufferDescriptor {
+        label: None,
+        size: bytes.max(16) as u64,
+        usage: wgpu::BufferUsages::STORAGE
+            | wgpu::BufferUsages::COPY_DST
+            | if copy_src {
+                wgpu::BufferUsages::COPY_SRC
+            } else {
+                wgpu::BufferUsages::empty()
+            },
+        mapped_at_creation: false,
+    })
+}
+
+impl GpuBox {
+    fn new(gpu: &Gpu, params: ModelParams) -> Self {
+        Self::with_bulk(gpu, params, Vec3::zero())
+    }
+
+    fn with_bulk(gpu: &Gpu, params: ModelParams, bulk: Vec3<f64>) -> Self {
+        Self {
+            gpu: gpu.clone(),
+            params,
+            bulk,
+            inner: None,
+            last: Vec::new(),
+        }
+    }
+}
+
+fn words_bytes(w: &[u32]) -> Vec<u8> {
+    w.iter().flat_map(|x| x.to_le_bytes()).collect()
+}
+
+impl BoxModel for GpuBox {
+    fn collide(
+        &mut self,
+        cells: &BoxSpec,
+        pos_km: &[Vec3<f64>],
+        vel_km_s: &mut [Vec3<f64>],
+        step: u64,
+        dt_s: f64,
+    ) -> Tally {
+        let n = pos_km.len();
+        let cap = n.next_multiple_of(64);
+        if self.inner.is_none() {
+            let state = buffer(&self.gpu, 6 * cap * 8, true);
+            let sorted = buffer(&self.gpu, 4 * n, false);
+            let skeys = buffer(&self.gpu, 8 * n, false);
+            let params = CollideParams {
+                particle_radius_km: self.params.particle_radius_km,
+                weight: self.params.weight,
+                restitution: self.params.restitution,
+                seed: self.params.seed,
+            };
+            let collider = GpuCollider::new(
+                &self.gpu,
+                &state,
+                &sorted,
+                &skeys,
+                n,
+                cap,
+                &field(),
+                params,
+                cells.cell_volume_km3(),
+                true,
+            )
+            .expect("collider");
+            self.inner = Some(Inner {
+                collider,
+                state,
+                sorted,
+                skeys,
+                cap,
+            });
+        }
+        let inner = self.inner.as_ref().unwrap();
+        let q = self.gpu.queue();
+        // Cells in id order.
+        let mut order: Vec<(usize, u32)> = pos_km
+            .iter()
+            .enumerate()
+            .map(|(i, &p)| (cells.cell_of(p), i as u32))
+            .collect();
+        order.sort_unstable();
+        let sorted: Vec<u32> = order.iter().map(|&(_, i)| i).collect();
+        let keys: Vec<u32> = order.iter().flat_map(|&(c, _)| [c as u32, 0]).collect();
+        q.write_buffer(&inner.sorted, 0, &words_bytes(&sorted));
+        q.write_buffer(&inner.skeys, 0, &words_bytes(&keys));
+        if self.last.as_slice() != &*vel_km_s {
+            let mut w = vec![0f32; 12 * cap];
+            for (i, v) in vel_km_s.iter().enumerate() {
+                let u = *v + self.bulk;
+                for (c, x) in [u.x, u.y, u.z].into_iter().enumerate() {
+                    let d = Dsm::split(x);
+                    w[2 * ((3 + c) * cap + i)] = d.hi;
+                    w[2 * ((3 + c) * cap + i) + 1] = d.lo;
+                }
+            }
+            let bytes: Vec<u8> = w.iter().flat_map(|x| x.to_le_bytes()).collect();
+            q.write_buffer(&inner.state, 0, &bytes);
+        }
+        let mut enc = self
+            .gpu
+            .device()
+            .create_command_encoder(&Default::default());
+        inner.collider.encode(&mut enc, step, dt_s);
+        q.submit([enc.finish()]);
+        let tally = inner.collider.read_tally().expect("tally");
+        let w = inner
+            .collider
+            .read_words(&inner.state, 2 * 3 * inner.cap, 2 * 3 * inner.cap);
+        for (i, v) in vel_km_s.iter_mut().enumerate() {
+            let get = |c: usize| {
+                let k = 2 * (c * inner.cap + i);
+                f64::from(f(w[k])) + f64::from(f(w[k + 1]))
+            };
+            *v = Vec3::new(get(0), get(1), get(2)) - self.bulk;
+        }
+        self.last = vel_km_s.to_vec();
+        tally
+    }
+}
+
+const S: ModelKind = ModelKind::Stochastic;
+
+fn power_law() -> Restitution {
+    Restitution::PowerLaw {
+        reference_speed_km_s: 1e-6,
+        exponent: 0.234,
+    }
+}
+
+/// CPU against GPU: the relative errors against the own theory differ by at most
+/// 4 combined standard errors (SPEC 11, last paragraph of the table).
+fn compare(g: &Check, c: &Check) {
+    let (eg, ec) = (g.relative_error(), c.relative_error());
+    let se = ((g.standard_error / g.theory).powi(2) + (c.standard_error / c.theory).powi(2)).sqrt();
+    let z = if se > 0.0 { (eg - ec) / se } else { 0.0 };
+    println!("  CPU against GPU: GPU {eg:+.4e}, CPU {ec:+.4e}, difference {z:+.2} combined SE");
+    assert!(z.abs() <= 4.0, "CPU and GPU differ by {z} combined SE");
+}
+
+fn cpu(p: ModelParams) -> StochasticModel {
+    StochasticModel::from_params(p)
+}
+
+fn t4(sample: Sample, occupancies: &[f64]) {
+    let Some(gpu) = gpu() else {
+        return;
+    };
+    for &o in occupancies {
+        let g = t4_rate(S, o, sample, |p| GpuBox::new(&gpu, p));
+        g.assert_ok();
+        let c = t4_rate(S, o, sample, cpu);
+        compare(&g, &c);
+    }
+}
+
+fn t5(sample: Sample, laws: &[Restitution]) {
+    let Some(gpu) = gpu() else {
+        return;
+    };
+    for law in laws {
+        let g = t5_energy_loss(S, *law, sample, |p| GpuBox::new(&gpu, p));
+        g.assert_ok();
+        let c = t5_energy_loss(S, *law, sample, cpu);
+        if g.theory != 0.0 {
+            compare(&g, &c);
+        }
+    }
+}
+
+fn t7(sample: Sample) {
+    let Some(gpu) = gpu() else {
+        return;
+    };
+    let g = t7_haff(S, sample, |p| GpuBox::new(&gpu, p));
+    g.assert_ok();
+    let c = t7_haff(S, sample, cpu);
+    compare(&g, &c);
+}
+
+#[test]
+#[ignore = "needs a GPU"]
+fn quick_t4_rate() {
+    t4(Sample::Quick, &[2.0, 5.0]);
+}
+
+#[test]
+#[ignore = "needs a GPU"]
+fn quick_t5_energy_loss() {
+    t5(
+        Sample::Quick,
+        &[
+            Restitution::Constant { epsilon: 0.5 },
+            Restitution::Constant { epsilon: 1.0 },
+        ],
+    );
+}
+
+#[test]
+#[ignore = "needs a GPU"]
+fn quick_t7_haff() {
+    t7(Sample::Quick);
+}
+
+#[test]
+#[ignore = "needs a GPU"]
+fn k1_t9_determinism_on_the_gpu() {
+    let Some(gpu) = gpu() else {
+        return;
+    };
+    t9_determinism(S, |p| GpuBox::new(&gpu, p));
+    println!("K1-T9 on the GPU: same seed bit for bit, another seed other velocities: ok");
+}
+
+#[test]
+#[ignore = "needs a GPU; long"]
+fn full_t4_rate() {
+    t4(Sample::Full, &[2.0, 5.0, 20.0]);
+}
+
+#[test]
+#[ignore = "needs a GPU; long"]
+fn full_t5_energy_loss() {
+    let mut laws: Vec<Restitution> = [0.0, 0.5, 0.9, 1.0]
+        .iter()
+        .map(|&e| Restitution::Constant { epsilon: e })
+        .collect();
+    laws.push(power_law());
+    t5(Sample::Full, &laws);
+}
+
+#[test]
+#[ignore = "needs a GPU; long"]
+fn full_t7_haff() {
+    t7(Sample::Full);
+}
+
+/// K1-T6 on the GPU with the bounds of `ICR-010` (proposed). Momentum: 4 u_DS
+/// max|u| collisions, u_DS = 2^-48 (ADR 0006), as `SPEC.md` 11 says for the bulk
+/// case. Energy: the f64 bounds (1e-12, 1e-10) cannot hold with f32 velocity
+/// changes. Each collision changes the energy by about the rounding of Delta-u,
+/// 2 u_f32 |g|^2 with u_f32 = 2^-24; the bound adds 4 of these per collision in a
+/// straight sum (no cancellation): 8 u_f32 N_coll <g^2> / K0, <g^2> = 8 c0^2.
+fn t6(epsilon: f64, bulk: Vec3<f64>) {
+    let Some(gpu) = gpu() else {
+        return;
+    };
+    let law = Restitution::Constant { epsilon };
+    let setup = Setup::stochastic(8, 5.0, 0.02, law, 61);
+    let mut state = setup.initial_state(0);
+    let mut model = GpuBox::with_bulk(&gpu, setup.params, bulk);
+    let p0 = momentum(&state.vel_km_s);
+    let k0 = kinetic_energy(&state.vel_km_s);
+    let c0 = dispersion(&state.vel_km_s);
+    let max_speed = |v: &[Vec3<f64>]| v.iter().map(|u| (*u + bulk).norm()).fold(0.0, f64::max);
+    let mut umax = max_speed(&state.vel_km_s);
+    let mut tally = Tally::default();
+    for step in 1..=1000 {
+        setup.stream(&mut state, setup.dt_s);
+        tally += model.collide(
+            &setup.cells,
+            &state.pos_km,
+            &mut state.vel_km_s,
+            step,
+            setup.dt_s,
+        );
+        umax = umax.max(max_speed(&state.vel_km_s));
+    }
+    let dp = momentum(&state.vel_km_s) - p0;
+    let dp = dp.x.abs().max(dp.y.abs()).max(dp.z.abs());
+    let u_ds = 2f64.powi(-48);
+    let p_bound = 4.0 * u_ds * umax * tally.collisions as f64;
+    let k1 = kinetic_energy(&state.vel_km_s);
+    let elastic = epsilon == 1.0;
+    let e_err = if elastic {
+        (k1 - k0).abs() / k0
+    } else {
+        (k0 - k1 - tally.stats.energy_loss_km2_s2).abs() / k0
+    };
+    let e_bound = 8.0 * 2f64.powi(-24) * tally.collisions as f64 * 8.0 * c0 * c0 / k0;
+    println!(
+        "K1-T6 GPU eps {epsilon}, bulk {bulk:?}: {} collisions; momentum error {dp:.2e} km/s (bound {p_bound:.2e}); \
+         energy error {e_err:.2e} (ICR-010 bound {e_bound:.2e}; f64 bound {:e})",
+        tally.collisions,
+        if elastic { 1e-12 } else { 1e-10 }
+    );
+    assert!(tally.collisions > 0);
+    assert!(dp <= p_bound, "momentum");
+    assert!(e_err <= e_bound, "energy");
+}
+
+#[test]
+#[ignore = "needs a GPU"]
+fn k1_t6_budget_on_the_gpu() {
+    for eps in [0.5, 1.0] {
+        t6(eps, Vec3::zero());
+    }
+}
+
+/// K1-T6 with 16.5 km/s added to the double-single velocities (SPEC 11).
+#[test]
+#[ignore = "needs a GPU"]
+fn k1_t6_budget_with_bulk_velocity_on_the_gpu() {
+    for eps in [0.5, 1.0] {
+        t6(eps, Vec3::new(16.5, -3.0, 1.0));
     }
 }
