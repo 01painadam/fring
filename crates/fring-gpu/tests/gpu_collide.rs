@@ -438,17 +438,17 @@ fn peculiar_velocity_equals_the_f64_function() {
         }
         println!(
             "peculiar velocity ({}): max |u_gpu - u_f64| {e_u:.2e} km/s, max |u_gpu| {u_max:.2e} km/s, \
-             v_circ relative error {e_vc:.2e} (T8a bound 1e-8 km/s = 1e-3 c at c = 1 cm/s, SPEC 12)",
+             v_circ relative error {e_vc:.2e} (T8a GPU bound 1e-11 km/s, ICR-010; the physics need is 1e-3 c = 1e-8 km/s)",
             if circular {
                 "circular orbits, K1-T8a"
             } else {
                 "random u"
             }
         );
-        assert!(e_u <= 1e-8, "u differs by {e_u} km/s");
+        assert!(e_u <= 1e-11, "u differs by {e_u} km/s");
         assert!(e_vc <= 1e-12, "v_circ relative error {e_vc}");
         if circular {
-            assert!(u_max <= 1e-8, "a circular orbit has |u| = {u_max} km/s");
+            assert!(u_max <= 1e-11, "a circular orbit has |u| = {u_max} km/s");
         }
     }
 }
