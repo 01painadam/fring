@@ -11,6 +11,7 @@
 //!    stepping, and `meta.json` last (its presence means "finished").
 
 pub mod cli;
+pub mod e1;
 
 use cli::Args;
 use fring_cpu::CpuBackend;
