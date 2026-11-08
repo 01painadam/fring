@@ -19,9 +19,11 @@
 //! or on the chunk size. Set the number of threads with `RAYON_NUM_THREADS`
 //! or a rayon thread pool.
 
+pub mod collide;
 pub mod extended;
 pub mod integrate;
 
+use collide::CollisionState;
 use extended::{ExtParams, LEVEL_UNKNOWN, MAX_MOONS, advance_ext};
 use fring_model::Vec3;
 use fring_model::config::ChaosConfig;
@@ -90,6 +92,8 @@ pub struct CpuBackend {
     chaos: Option<ChaosState>,
     /// `Some` only with `[loss]` or `[substep]` keys that change the behaviour.
     ext: Option<ExtState>,
+    /// `Some` only with `model = "stochastic"` (K2-CPU).
+    collide: Option<CollisionState>,
 }
 
 impl CpuBackend {
@@ -117,6 +121,30 @@ impl CpuBackend {
         if let Some(e) = &mut self.ext {
             e.radii_km = Some(radii_km.to_vec());
         }
+        Ok(())
+    }
+
+    /// The collision step after global step `step` (the count after the
+    /// integrator step), if `step` is a multiple of `every_steps`.
+    fn collide_after(&mut self, step: u64) -> Result<()> {
+        let Some(c) = &mut self.collide else {
+            return Ok(());
+        };
+        if !step.is_multiple_of(c.every) {
+            return Ok(());
+        }
+        let reason = self.ext.as_ref().map(|e| e.reason.as_slice());
+        let t_s = self.start_s + step as f64 * self.step_s;
+        c.step(
+            &self.field,
+            t_s,
+            step,
+            self.step_s,
+            &self.ids,
+            reason,
+            &mut self.state,
+        )?;
+        self.snapshot_stale = true;
         Ok(())
     }
 
@@ -229,6 +257,7 @@ impl Backend for CpuBackend {
             }
         }
         let field = SaturnField::<f64>::from_params(&system.saturn);
+        let collide = CollisionState::from_config(config, &field)?;
         let p = &init.particles;
         let state: Vec<State> = (0..p.len())
             .map(|i| {
@@ -301,6 +330,7 @@ impl Backend for CpuBackend {
             max_rel_energy_error: 0.0,
             chaos,
             ext,
+            collide,
         })
     }
 
@@ -318,8 +348,14 @@ impl Backend for CpuBackend {
                 let k = u64::from(c.cfg.renorm_steps);
                 block = block.min(k - first_step % k);
             }
+            if let Some(c) = &self.collide {
+                // Blocks end at multiples of `every_steps`, so the collision
+                // steps do not depend on how the caller splits the run.
+                block = block.min(c.every - first_step % c.every);
+            }
             if self.ext.is_some() {
                 self.step_block_ext(first_step, block)?;
+                self.collide_after(first_step + block)?;
                 done += block;
                 continue;
             }
@@ -357,6 +393,7 @@ impl Backend for CpuBackend {
                     .zip(c.acc.par_iter_mut())
                     .for_each(|((m, sh), a)| a.add(renormalise(m, sh, d0)));
             }
+            self.collide_after(first_step + block)?;
             done += block;
         }
         self.steps_total += n_steps;
@@ -427,7 +464,7 @@ impl Backend for CpuBackend {
 
     fn stats(&mut self) -> Result<StepStats> {
         // Computed here, not at every step, to keep the step loop cheap.
-        let max_rel_energy_error = if self.has_moons() {
+        let max_rel_energy_error = if self.has_moons() || self.collide.is_some() {
             None
         } else {
             self.sync_snapshot();
@@ -437,11 +474,18 @@ impl Backend for CpuBackend {
             }
             Some(self.max_rel_energy_error)
         };
+        // Collision sums since the previous call (ICR-009).
+        let tally = self
+            .collide
+            .as_mut()
+            .map(|c| std::mem::take(&mut c.tally))
+            .unwrap_or_default();
         Ok(StepStats {
             time_s: self.time_s(),
             steps_total: self.steps_total,
             max_rel_energy_error,
-            ..Default::default()
+            collisions_since_last: tally.collisions,
+            collision: tally.stats,
         })
     }
 }
