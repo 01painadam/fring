@@ -222,6 +222,17 @@ The GPU (K5) runs K1-T1 (through the WGSL twin), T4 to T7 and T9 on its own path
 
 Box velocities have a zero mean, so the box does not test the precision rules of section 12. K5 therefore also runs T6 with a bulk velocity of 16.5 km/s added to the double-single velocities (the adapter adds it before the upload and removes it after the download), with ε_mach in the bound replaced by the unit round-off of the double-single arithmetic (ADR 0006). An f32 velocity update fails this test at once: one f32 step at 16.5 km/s is 1.9 mm/s. T4, T5 and T7 cannot see such errors at their tolerances.
 
+**GPU bounds (ICR-010, accepted 2026-11-08).** The GPU updates velocities with f32 values of Δu and builds u from the double-single state, so three f64 bounds of the table above are replaced for K5. All other tolerances are as above.
+
+| Test | f64 bound | GPU bound (K5) |
+|---|---|---|
+| K1-T6 energy, ε = 1: \|K_end − K₀\| / K₀ | 10⁻¹² | 8 u_f32 N_coll ⟨g²⟩ / K₀, with u_f32 = 2⁻²⁴ and ⟨g²⟩ = 8 c₀² |
+| K1-T6 energy, ε = 0.5: \|K₀ − K_end − Σ ΔK\| / K₀ | 10⁻¹⁰ | the same bound |
+| K1-T8 (a): \|u\| of a circular orbit, and \|u_GPU − u_f64\| | 10⁻¹³ km s⁻¹ | 10⁻¹¹ km s⁻¹ |
+| K1-T8 (b): dispersion with collisions against without, after 10 orbits | 10⁻¹² km s⁻¹ | 10⁻⁸ km s⁻¹ (10⁻³ c) |
+
+The derivations and the measured values are in `docs/interfaces/ICR-010.md`.
+
 K1 also adds two slow reference models (`testkit::reference`, test use only): `AllPairs` (each pair of a cell collides with probability P_ij, without the NTC method) and `HardSphere` (section 8 in the box). The testkit passes with both, so a failing K2, K3 or K5 points to the model, not the test. K1-T8 (b) needs the integrator, so K2 and K5 write it.
 
 ## 12. Precision
