@@ -34,6 +34,12 @@ pub fn load_params(params_dir: &Path) -> Result<(SaturnParams, Vec<MoonInit>)> {
     Ok((saturn, moons))
 }
 
+/// Loads the moons from one file with the layout of `params/moons.toml`, for
+/// example the variant `params/variants/gr03b-moons.toml` (task A4-ANALYSIS).
+pub fn load_moons_file(path: &Path) -> Result<Vec<MoonInit>> {
+    moons_from_toml_str(&read(path)?)
+}
+
 /// Makes the setup for the config file at `config_path`.
 pub fn load(config_path: &Path) -> Result<Setup> {
     let config = RunConfig::from_toml_str(&read(config_path)?)?;
@@ -298,5 +304,22 @@ mod tests {
         assert!((p[0].apse_deg - 113.78).abs() < 1e-9 && p[5].name == "p-ecc-phase120-b05");
         assert!(ecc_jobs(10.0, "x", 1, &[22], "ecc", e, w).is_err());
         assert!(ecc_jobs(10.0, "x", 1, &[], "bogus", e, w).is_err());
+    }
+
+    /// The GR03b variant file loads, with the GR03b masses and the nominal states.
+    #[test]
+    fn gr03b_variant_has_gr03b_masses_and_nominal_states() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../params");
+        let nominal = load_moons_file(&root.join("moons.toml")).unwrap();
+        let variant = load_moons_file(&root.join("variants/gr03b-moons.toml")).unwrap();
+        let gm = |m: &[MoonInit], n: &str| m.iter().find(|x| x.name == n).unwrap().gm_km3_s2;
+        assert_eq!(gm(&variant, "prometheus"), 0.02200);
+        assert_eq!(gm(&variant, "pandora"), 0.01301);
+        assert_eq!(gm(&nominal, "prometheus"), 0.01071);
+        for (a, b) in nominal.iter().zip(&variant) {
+            assert_eq!(a.name, b.name);
+            assert_eq!(a.state.position_km, b.state.position_km);
+            assert_eq!(a.state.velocity_km_s, b.state.velocity_km_s);
+        }
     }
 }
