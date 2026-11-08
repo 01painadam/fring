@@ -91,6 +91,31 @@ pub fn advance_ext(
     drop_step: &mut u64,
     level: &mut u8,
 ) {
+    advance_ext_hooked(prm, s, shadow, reason, drop_step, level, LevelHook::Off);
+}
+
+/// A way to look at the levels of [`advance_ext_hooked`] (for tests).
+pub enum LevelHook<'a> {
+    /// Nothing; the rule chooses the levels.
+    Off,
+    /// Push the level of every step of the block to the vector.
+    Record(&'a mut Vec<u8>),
+    /// Use these levels instead of the rule: `levels[k]` for step `k` of the
+    /// block (the entry for the first step of the next block is `levels[len]`
+    /// if present, else 0).
+    Replay(&'a [u8]),
+}
+
+/// [`advance_ext`] with a [`LevelHook`].
+pub fn advance_ext_hooked(
+    prm: &ExtParams<'_>,
+    s: &mut State,
+    shadow: Option<&mut State>,
+    reason: &mut u8,
+    drop_step: &mut u64,
+    level: &mut u8,
+    mut hook: LevelHook<'_>,
+) {
     let table = prm.table;
     let n_steps = table.len();
     if *reason != 0 || n_steps == 0 {
@@ -105,6 +130,10 @@ pub fn advance_ext(
 
     // Level of the first step.
     let mut lev: u8 = match prm.substep {
+        _ if matches!(hook, LevelHook::Replay(_)) => match &hook {
+            LevelHook::Replay(r) => r.first().copied().unwrap_or(0),
+            _ => 0,
+        },
         None => 0,
         Some((acc, max)) => {
             if *level != LEVEL_UNKNOWN {
@@ -183,6 +212,9 @@ pub fn advance_ext(
     for k in 0..n_steps {
         let n_sub = 1u32 << lev;
         let hs = h / f64::from(n_sub);
+        if let LevelHook::Record(v) = &mut hook {
+            v.push(lev);
+        }
         for j in 0..n_sub {
             let (mp, mv): (&[Vec3<f64>], &[Vec3<f64>]) = if n_sub == 1 {
                 (table.moon_positions_km(k), table.moon_velocities_km_s(k))
@@ -211,6 +243,10 @@ pub fn advance_ext(
             }
             // Last kick of step k: choose the level of step k + 1.
             next_level = match prm.substep {
+                _ if matches!(hook, LevelHook::Replay(_)) => match &hook {
+                    LevelHook::Replay(r) => r.get(k + 1).copied().unwrap_or(0),
+                    _ => 0,
+                },
                 None => 0,
                 Some((acc, max)) => {
                     let at = moons_at(prm, gm, mp, mv);

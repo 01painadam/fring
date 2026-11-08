@@ -299,3 +299,37 @@ fn c3_radius_rule() {
         assert_eq!(miss.drop_step, vec![u64::MAX; 2]);
     }
 }
+
+/// C7 (flags): a lost particle gets `ChaosReport.flags` bit 1 and its
+/// accumulators stop; the others keep adding.
+#[test]
+fn c7_dropped_particle_is_flagged_and_its_accumulators_stop() {
+    let init = band(24);
+    let victim = 7usize;
+    let q = kick_position(&init, victim, 100) + Vec3::new(0.01, 0.0, 0.0);
+    let sys = system(fixed_moons(&[q], 1.0e3));
+    let cfg = config(
+        "[loss]\non_unbound = \"freeze\"\n[diagnostics.chaos]\nmethod = \"shadow\"\noffset_km = 1e-3\nrenorm_steps = 50\n",
+        1,
+    );
+    let mut b = CpuBackend::new(&cfg, &sys, &init).unwrap();
+    b.step(100).unwrap();
+    let c1 = b.chaos().unwrap().unwrap();
+    assert!(c1.flags.iter().all(|&f| f & 2 == 0));
+    assert_eq!(c1.n_renorm, 2);
+    b.step(400).unwrap();
+    let c2 = b.chaos().unwrap().unwrap();
+    assert_eq!(c2.n_renorm, 10);
+    for i in 0..24 {
+        if i == victim {
+            assert_eq!(c2.flags[i] & 2, 2);
+            // Dropped in step 100, the block [100, 150): only the two
+            // renormalisations before it were added.
+            assert_eq!(c2.log_growth[i].to_bits(), c1.log_growth[i].to_bits());
+            assert_eq!(c2.megno_mean[i].to_bits(), c1.megno_mean[i].to_bits());
+        } else {
+            assert_eq!(c2.flags[i] & 2, 0);
+            assert_ne!(c2.log_growth[i].to_bits(), c1.log_growth[i].to_bits());
+        }
+    }
+}
