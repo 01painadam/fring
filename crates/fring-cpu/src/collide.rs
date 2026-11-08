@@ -23,6 +23,9 @@ use fring_model::physics::frames::reference_mean_motion;
 use fring_model::{Error, Result, RunConfig, Vec3};
 use rayon::prelude::*;
 
+/// Tally and velocity changes `(particle index, Δv)` of a chunk of cells.
+type ChunkResult = (Tally, Vec<(u32, Vec3<f64>)>);
+
 /// Cells per task. The tally sum is done per chunk, so this number is part of
 /// the result (the f64 rounding), and must not depend on the thread count.
 pub const CELL_CHUNK: usize = 256;
@@ -143,7 +146,7 @@ impl CollisionState {
         let model = &self.model;
         let st: &[State] = state;
         let n_chunks = cells.len().div_ceil(CELL_CHUNK);
-        let results: Vec<Result<(Tally, Vec<(u32, Vec3<f64>)>)>> = (0..n_chunks)
+        let results: Vec<Result<ChunkResult>> = (0..n_chunks)
             .into_par_iter()
             .map(|ch| {
                 let mut scratch = CellScratch::default();
