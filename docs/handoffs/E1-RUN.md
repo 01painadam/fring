@@ -53,6 +53,37 @@ The only failed limit is the count inside 1 R_H: WH 29 against 24, a difference 
 - It converges with h: h/4 gives 26, 65, 153 (chaotic fraction 0.337); h/16 gives 26, 65, 153 (0.330). Both pass. Time: 40 s and 113 s.
 - The REBOUND WHFast stand-in at h gave 23, 63, 154 (E1-REF handoff), so the Rust CPU WH at h differs from the stand-in by +6 inside 1 R_H. Possible cause (not tested): the Rust code kicks with the exact tabulated moons, while WHFast evolves the moons with the same step. A0 and AJ decide: the limit is AJ's.
 
+### Paired realisation study of the layer 2 count (A0 follow-up)
+Option `--l2-perturb-km x --l2-seed k`: a random offset of length x km (isotropic; Philox stream `ANALYSIS`, counter index = particle id, key = seed) is added to each layer 2 start position. With x = 0 nothing changes: the output file is bit for bit equal to the run without the option (`cmp`), and a unit test checks it. Study: seeds 1 to 10, x = 1e-6 km, three settings on the same perturbed states: `plain` at h (88,582 steps), `substep` at h, `plain` at h/4 (`--l2-step 89.0634 --l2-stride 4`). 30 runs, about 15 min. Scripts: `apps/fring-run/scripts/e1_realisations.sh` and `e1_realisations_analyse.py`; logs `runs/logs/e1-l2-realisations.log` and `e1-l2-realisations-summary.log`.
+
+Counts inside 1 / 3 / 6.3 R_H and chaotic fraction:
+| seed | plain h | substep h | plain h/4 |
+|---|---|---|---|
+| 1 | 29 70 158, 0.320 | 29 70 158, 0.320 | 26 65 153, 0.337 |
+| 2 | 29 70 158, 0.320 | 29 70 158, 0.320 | 26 65 153, 0.337 |
+| 3 | 29 70 158, 0.320 | 29 70 158, 0.320 | 25 65 153, 0.337 |
+| 4 | 29 70 158, 0.320 | 29 70 158, 0.320 | 25 65 153, 0.337 |
+| 5 | 29 70 158, 0.320 | 29 70 158, 0.320 | 25 65 153, 0.337 |
+| 6 | 29 70 158, 0.317 | 29 70 158, 0.320 | 26 65 153, 0.337 |
+| 7 | 29 70 158, 0.317 | 29 70 158, 0.320 | 25 65 153, 0.337 |
+| 8 | 29 70 158, 0.320 | 28 70 158, 0.320 | 26 65 153, 0.337 |
+| 9 | 29 70 158, 0.317 | 28 70 158, 0.320 | 26 65 153, 0.337 |
+| 10 | 29 70 158, 0.317 | 28 70 158, 0.320 | 26 65 153, 0.337 |
+
+Mean and standard error of the mean over 10 seeds (inside 1 R_H; 3 R_H and 6.3 R_H have zero spread):
+| setting | 1 R_H | 3 R_H | 6.3 R_H | chaotic fraction |
+|---|---|---|---|---|
+| plain h | 29.00 +- 0.00 | 70 | 158 | 0.319 +- 0.001 |
+| substep h | 28.70 +- 0.15 | 70 | 158 | 0.320 |
+| plain h/4 | 25.60 +- 0.16 | 65 | 153 | 0.337 |
+
+Paired differences (mean +- standard error of the mean difference): plain h minus h/4: 3.40 +- 0.16 (1 R_H), 5 +- 0 (3 R_H), 5 +- 0 (6.3 R_H), -0.018 +- 0.001 (chaotic fraction). Substep minus h/4: 3.10 +- 0.28, 5, 5, -0.017.
+
+Particles inside 1 R_H in all 10 realisations: plain h 29 (of 29 in any), substep 28 (of 29 in any), h/4 25 (of 26 in any).
+
+**Reading.** A start offset of 1e-6 km does not change the set of particles inside 1 R_H: 25 to 29 of the 29 are the same in every realisation. So on this ensemble the counts are almost deterministic. The chaotic part is small at this offset (the Lyapunov rate of the chaotic particles is about 0.22 per year, so 1e-6 km grows by a factor of a few in one year, not enough to change an encounter). The h against h/4 difference is therefore a step-size effect on the same orbits and not noise: +3.4 +- 0.16 inside 1 R_H, +5 inside 3 and 6.3 R_H. The stated error is small because the realisations are nearly identical, so it measures the spread of this offset only. It does not measure how a different, independent sample of 300 particles would count. h/4 itself gives 25.6 against IAS15 24. The sub-stepped run removes only 0.3 of the 3.4.
+Open: a larger offset (for example 1 km, which is the MEGNO shadow size) would decorrelate the chaotic orbits and give the true realisation spread. About 7 min for h and h/4 with 10 seeds.
+
 ## Next step (one concrete action)
 A0: decide on the layer 2 count inside 1 R_H (WH 29 against IAS15 24, limit +-4.9; passes with h/4 and with sub-stepping at 28). Then merge. A3 (E1-GPU G5): call `fring_run::e1::layer1/layer2` with a GPU backend maker, compare the same way.
 
