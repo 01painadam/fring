@@ -21,7 +21,13 @@ fn five() -> Vec<L1Row> {
     let other = all.iter().find(|r| r.t0_idx != first).unwrap().clone();
     let mut v: Vec<L1Row> = all.iter().take(2).cloned().collect();
     v.push(other.clone());
-    v.extend(all.iter().filter(|r| r.t0_idx == other.t0_idx).skip(1).take(2).cloned());
+    v.extend(
+        all.iter()
+            .filter(|r| r.t0_idx == other.t0_idx)
+            .skip(1)
+            .take(2)
+            .cloned(),
+    );
     assert!(v.iter().any(|r| r.t0_idx != first));
     v
 }
@@ -35,7 +41,13 @@ fn layer1_group_and_repeat_are_bit_identical() {
     let rows = five();
     let s = e1::build_setup(&root().join("params"), cover(&rows)).unwrap();
     let run = |rows: &[L1Row]| {
-        e1::layer1(rows, &s.system, Variant::Plain, e1::cpu_backend(s.radii_km.clone())).unwrap()
+        e1::layer1(
+            rows,
+            &s.system,
+            Variant::Plain,
+            e1::cpu_backend(s.radii_km.clone()),
+        )
+        .unwrap()
     };
     let a = run(&rows);
     let b = run(&rows);
@@ -85,8 +97,16 @@ fn layer2_smoke() {
     }
     let days = 20.0;
     let s = e1::build_setup(&root().join("params"), days * 86_400.0 + 3600.0).unwrap();
-    let r = e1::layer2(p.clone(), days, &s.system, Variant::Plain, e1::cpu_backend(s.radii_km.clone()))
-        .unwrap();
+    let r = e1::layer2(
+        p.clone(),
+        days,
+        e1::NOMINAL_STEP_S,
+        1,
+        &s.system,
+        Variant::Plain,
+        e1::cpu_backend(s.radii_km.clone()),
+    )
+    .unwrap();
     assert_eq!(r.rows.len(), 3);
     assert_eq!(r.n_steps, 4850);
     for (i, row) in r.rows.iter().enumerate() {
@@ -97,6 +117,15 @@ fn layer2_smoke() {
         assert!(row.min_prometheus_km > 0.0);
         assert!(row.megno_mean.is_finite());
     }
-    let r2 = e1::layer2(p, days, &s.system, Variant::Plain, e1::cpu_backend(s.radii_km.clone())).unwrap();
+    let r2 = e1::layer2(
+        p,
+        days,
+        e1::NOMINAL_STEP_S,
+        1,
+        &s.system,
+        Variant::Plain,
+        e1::cpu_backend(s.radii_km.clone()),
+    )
+    .unwrap();
     assert_eq!(r.rows, r2.rows, "two runs differ");
 }

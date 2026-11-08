@@ -16,9 +16,7 @@
 
 use crate::{RunError, read_text, select_moons, setup};
 use fring_cpu::CpuBackend;
-use fring_model::params::{
-    moon_radii_from_toml_str, moons_from_toml_str, saturn_from_toml_str,
-};
+use fring_model::params::{moon_radii_from_toml_str, moons_from_toml_str, saturn_from_toml_str};
 use fring_model::physics::{DEFAULT_INTERVAL_S, build_ephemeris, interpolate_moons};
 use fring_model::units::SECONDS_PER_JULIAN_YEAR;
 use fring_model::{Backend, InitialState, Particles, RunConfig, System, Vec3};
@@ -229,7 +227,9 @@ pub fn format_l2(rows: &[L2Row], header: &str) -> String {
 pub fn format_frozen(layer: u8, rows: &[Frozen]) -> String {
     let mut sorted: Vec<_> = rows.to_vec();
     sorted.sort_by_key(|r| r.id);
-    let mut s = String::from("# layer,id,stratum,reason,drop_step (reason 1 unbound, 2 + k inside moon k; stratum 255 = layer 2)\n");
+    let mut s = String::from(
+        "# layer,id,stratum,reason,drop_step (reason 1 unbound, 2 + k inside moon k; stratum 255 = layer 2)\n",
+    );
     for r in sorted {
         let _ = writeln!(
             s,
@@ -271,13 +271,19 @@ pub fn config_text(
          [collisions]\nmodel = \"none\"\n\
          [output]\nframe_every_steps = 1000000\nstats_every_steps = 1000000\nvelocities = false\n\
          [loss]\non_unbound = \"freeze\"\nmoon_radius = \"{}\"\n",
-        if variant == Variant::Loss { "params" } else { "off" }
+        if variant == Variant::Loss {
+            "params"
+        } else {
+            "off"
+        }
     );
     if variant == Variant::Substep {
         t.push_str("[substep]\naccuracy = 0.1\nmax_level = 4\n");
     }
     if chaos {
-        t.push_str("[diagnostics.chaos]\nmethod = \"shadow\"\noffset_km = 1.0\nrenorm_steps = 100\n");
+        t.push_str(
+            "[diagnostics.chaos]\nmethod = \"shadow\"\noffset_km = 1.0\nrenorm_steps = 100\n",
+        );
     }
     t
 }
@@ -340,7 +346,10 @@ pub fn cpu_backend(
 /// Moon position and velocity differences against `e1_moons_t0.csv`.
 /// Returns the CSV text and the maximum position (km) and velocity (km/s)
 /// differences over both moons and all epochs.
-pub fn moon_difference(eph: &fring_model::MoonEphemeris, csv: &str) -> Result<(String, f64, f64), RunError> {
+pub fn moon_difference(
+    eph: &fring_model::MoonEphemeris,
+    csv: &str,
+) -> Result<(String, f64, f64), RunError> {
     let rows = parse_numeric_csv(csv, 14, "e1_moons_t0.csv")?;
     let mut out = String::from(
         "# j,t0_s,dr_prometheus_km,dv_prometheus_km_s,dr_pandora_km,dv_pandora_km_s (Rust ephemeris minus E1-REF IAS15)\n",
@@ -373,7 +382,13 @@ pub fn moon_difference(eph: &fring_model::MoonEphemeris, csv: &str) -> Result<(S
 
 /// Smallest distance of the cubic Hermite curve through `(r0, v0)` and
 /// `(r1, v1)` over an interval of `h_s` seconds. r in km, v in km/s.
-pub fn hermite_min_distance(r0: [f64; 3], v0: [f64; 3], r1: [f64; 3], v1: [f64; 3], h_s: f64) -> f64 {
+pub fn hermite_min_distance(
+    r0: [f64; 3],
+    v0: [f64; 3],
+    r1: [f64; 3],
+    v1: [f64; 3],
+    h_s: f64,
+) -> f64 {
     const N: usize = 32;
     let at = |s: f64| -> f64 {
         let (s2, s3) = (s * s, s * s * s);
@@ -526,6 +541,9 @@ pub struct L2Result {
     pub step_s: f64,
 }
 
+/// Particle states, Prometheus position (km) and velocity (km/s).
+type Snap = (Vec<[f64; 6]>, [f64; 3], [f64; 3]);
+
 fn vec3(a: Vec3<f64>) -> [f64; 3] {
     [a.x, a.y, a.z]
 }
@@ -535,11 +553,13 @@ fn vec3(a: Vec3<f64>) -> [f64; 3] {
 pub fn layer2<B: Backend>(
     init_particles: Particles,
     days: f64,
+    nominal_step_s: f64,
+    sample_every: u64,
     system: &System,
     variant: Variant,
     mut make: impl FnMut(&RunConfig, &System, &InitialState) -> Result<B, RunError>,
 ) -> Result<L2Result, RunError> {
-    let (n, h) = exact_step(days * 86_400.0, NOMINAL_STEP_S);
+    let (n, h) = exact_step(days * 86_400.0, nominal_step_s);
     let count = init_particles.len();
     let text = config_text(variant, count, n, h, true);
     let config = setup(RunConfig::from_toml_str(&text))?;
@@ -558,10 +578,9 @@ pub fn layer2<B: Backend>(
     };
     let ids = init.particles.id.clone();
     let mut backend = make(&config, system, &init)?;
-    let freeze = true;
     let mut min_d = vec![f64::INFINITY; count];
     // Previous step end: particle state and Prometheus state.
-    let snapshot = |b: &mut B| -> Result<(Vec<[f64; 6]>, [f64; 3], [f64; 3]), RunError> {
+    let snapshot = |b: &mut B| -> Result<Snap, RunError> {
         let m = b.moons().moons[prom];
         let view = b.particles().map_err(|e| RunError::Run(e.to_string()))?;
         let p = view.particles;
@@ -594,32 +613,39 @@ pub fn layer2<B: Backend>(
         min_d[i] = (r[0] * r[0] + r[1] * r[1] + r[2] * r[2]).sqrt();
     }
     let mut live = vec![true; count];
+    let mut last = prev.clone();
     for k in 0..n {
         backend
             .step(1)
             .map_err(|e| RunError::Run(format!("layer 2 step {k}: {e}")))?;
         let (cur, cp, cv) = snapshot(&mut backend)?;
-        if freeze && let Some(d) = backend.dropped().map_err(|e| RunError::Run(e.to_string()))? {
+        if let Some(d) = backend
+            .dropped()
+            .map_err(|e| RunError::Run(e.to_string()))?
+        {
             for (i, &r) in d.reason.iter().enumerate() {
                 if r != 0 {
                     live[i] = false;
                 }
             }
         }
-        for i in 0..count {
-            if !live[i] {
-                continue;
+        if (k + 1) % sample_every == 0 {
+            for i in 0..count {
+                if !live[i] {
+                    continue;
+                }
+                let (r0, v0) = rel(&prev[i], pp, pv);
+                let (r1, v1) = rel(&cur[i], cp, cv);
+                let d = hermite_min_distance(r0, v0, r1, v1, h * sample_every as f64);
+                if d < min_d[i] {
+                    min_d[i] = d;
+                }
             }
-            let (r0, v0) = rel(&prev[i], pp, pv);
-            let (r1, v1) = rel(&cur[i], cp, cv);
-            let d = hermite_min_distance(r0, v0, r1, v1, h);
-            if d < min_d[i] {
-                min_d[i] = d;
-            }
+            prev = cur.clone();
+            pp = cp;
+            pv = cv;
         }
-        prev = cur;
-        pp = cp;
-        pv = cv;
+        last = cur;
     }
     let mut frozen = Vec::new();
     drops(&mut backend, &ids, |_| 255, &mut frozen)?;
@@ -631,7 +657,7 @@ pub fn layer2<B: Backend>(
         .map(|i| L2Row {
             id: ids[i],
             min_prometheus_km: min_d[i],
-            state: prev[i],
+            state: last[i],
             megno_mean: chaos.megno_mean[i],
         })
         .collect();
@@ -655,7 +681,10 @@ mod tests {
         let (n, h) = exact_step(365.25 * 86_400.0, NOMINAL_STEP_S);
         assert_eq!(n, 88_582);
         assert!((h - 356.2527).abs() < 1e-3);
-        for (n, h) in [(485, WINDOW_S / 485.0), (88_582, 365.25 * 86_400.0 / 88_582.0)] {
+        for (n, h) in [
+            (485, WINDOW_S / 485.0),
+            (88_582, 365.25 * 86_400.0 / 88_582.0),
+        ] {
             let c = RunConfig::from_toml_str(&config_text(Variant::Plain, 3, n, h, true)).unwrap();
             assert_eq!(c.time.n_steps(), n);
         }
