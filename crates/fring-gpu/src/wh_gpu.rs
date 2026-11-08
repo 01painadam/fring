@@ -136,6 +136,7 @@ impl WhKernels {
                 entry(0, st(false)),
                 entry(2, wgpu::BufferBindingType::Uniform),
                 entry(3, wgpu::BufferBindingType::Uniform),
+                entry(4, st(false)),
                 entry(5, st(false)),
                 entry(6, st(false)),
                 entry(7, wgpu::BufferBindingType::Uniform),
@@ -191,12 +192,14 @@ impl WhKernels {
     }
 
     /// A bind group for `chaos_renorm`: particle state, run constants,
-    /// control, shadow state, accumulators and chaos constants.
+    /// control, status (a lost pair stops its accumulators), shadow state,
+    /// accumulators and chaos constants.
     pub fn chaos_bind_group(
         &self,
         state: &wgpu::Buffer,
         prm: &wgpu::Buffer,
         ctl: &wgpu::Buffer,
+        status: &wgpu::Buffer,
         shadow: &wgpu::Buffer,
         acc: &wgpu::Buffer,
         cprm: &wgpu::Buffer,
@@ -216,6 +219,7 @@ impl WhKernels {
                     e(0, state),
                     e(2, prm),
                     e(3, ctl),
+                    e(4, status),
                     e(5, shadow),
                     e(6, acc),
                     e(7, cprm),

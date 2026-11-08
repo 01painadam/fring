@@ -512,9 +512,12 @@ fn set_moon_radii_checks_its_arguments() {
         offset_km: 1.0,
         renorm_steps: 5,
     };
-    assert!(is_config(
-        make(Mode::Dp, Some(chaos)).set_moon_radii_km(&RADII_KM)
-    ));
+    // E1-GPU: the rule and chaos go together (the pair is frozen together).
+    assert!(
+        make(Mode::Dp, Some(chaos))
+            .set_moon_radii_km(&RADII_KM)
+            .is_ok()
+    );
     let mut st = make(Mode::D, None);
     let mut enc = gpu.device().create_command_encoder(&Default::default());
     st.encode_steps(&mut enc, 1).unwrap();

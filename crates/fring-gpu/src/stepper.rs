@@ -36,6 +36,10 @@ pub const MAX_BLOCK_STEPS: usize = 4096;
 struct GpuChaos {
     cfg: ChaosConfig,
     acc_buf: wgpu::Buffer,
+    /// Control and constants of the renormalisation kernel (kept to make the
+    /// bind group again when the status buffer is replaced by `set_arc`).
+    ctl: wgpu::Buffer,
+    cprm: wgpu::Buffer,
     renorm_pipeline: wgpu::ComputePipeline,
     renorm_bind: wgpu::BindGroup,
 }
@@ -117,6 +121,9 @@ pub struct GpuStepper {
     next_slot: usize,
     chaos: Option<GpuChaos>,
     arc: Option<GpuArc>,
+    /// With chaos and the radius rule: the plain kernel for the shadow (the
+    /// shadow follows its main particle and is not tested against the moons).
+    shadow_plain: Option<wgpu::ComputePipeline>,
 }
 
 impl GpuStepper {
@@ -223,6 +230,7 @@ impl GpuStepper {
             next_slot: 0,
             chaos: None,
             arc: None,
+            shadow_plain: None,
         };
         for _ in 0..RING {
             let slot = s.make_slot();
@@ -242,6 +250,7 @@ impl GpuStepper {
                     &s.state_buf,
                     &s.prm_buf,
                     &ctl,
+                    &s.status_buf,
                     shadow_buf,
                     &acc_buf,
                     &cprm,
@@ -249,6 +258,8 @@ impl GpuStepper {
                 Some(GpuChaos {
                     cfg,
                     acc_buf,
+                    ctl,
+                    cprm,
                     renorm_pipeline: kernels.chaos_pipeline(),
                     renorm_bind,
                 })
@@ -377,6 +388,8 @@ impl GpuStepper {
             if let (Some(c), Some(bs)) = (&self.chaos, &slot.bind_shadow) {
                 if let Some(sp) = self.arc.as_ref().and_then(|a| a.shadow_pipeline.as_ref()) {
                     pass.set_pipeline(sp);
+                } else if let Some(sp) = &self.shadow_plain {
+                    pass.set_pipeline(sp);
                 }
                 pass.set_bind_group(0, bs, &[]);
                 pass.dispatch_workgroups(gx, gy, 1);
@@ -435,7 +448,7 @@ impl GpuStepper {
     ///
     /// # Errors
     /// [`Error::Config`] if steps were already recorded, if the mode is C, if
-    /// chaos is on, if the number of radii differs from the number of moons
+    /// the arc is on, if the number of radii differs from the number of moons
     /// (at most 4: the kernels take 4 moons, and the status words for moons 4
     /// and 5 stay reserved), or if a radius is negative or not finite.
     pub fn set_moon_radii_km(&mut self, radii_km: &[f64]) -> Result<()> {
@@ -446,9 +459,6 @@ impl GpuStepper {
         let Some(entry) = self.mode.entry_rule() else {
             return err("the moon-radius rule is not available in mode C".into());
         };
-        if self.chaos.is_some() {
-            return err("the moon-radius rule cannot be combined with chaos".into());
-        }
         if self.arc.is_some() {
             return err("the moon-radius rule cannot be combined with the arc".into());
         }
@@ -466,6 +476,12 @@ impl GpuStepper {
         let q = self.kernels.gpu().queue();
         q.write_buffer(&self.prm_buf, 0, &le_bytes(&words));
         self.pipeline = self.kernels.pipeline(entry);
+        if self.chaos.is_some() {
+            // E1-GPU: the shadow runs the plain kernel (reason 1 only). If the
+            // main particle is lost, the shadow kernel returns at once, so the
+            // pair is frozen together.
+            self.shadow_plain = Some(self.kernels.pipeline(self.mode.entry()));
+        }
         self.radii_km = Some(radii_km.to_vec());
         Ok(())
     }
@@ -528,6 +544,17 @@ impl GpuStepper {
             let n = self.slots.len();
             self.slots = (0..n).map(|_| self.make_slot()).collect();
             self.next_slot = 0;
+            if let (Some(c), Some(shadow_buf)) = (&mut self.chaos, &self.shadow_buf) {
+                c.renorm_bind = self.kernels.chaos_bind_group(
+                    &self.state_buf,
+                    &self.prm_buf,
+                    &c.ctl,
+                    &self.status_buf,
+                    shadow_buf,
+                    &c.acc_buf,
+                    &c.cprm,
+                );
+            }
         }
         self.arc = Some(GpuArc {
             geom,
