@@ -49,6 +49,42 @@ pub trait Backend {
     fn chaos(&mut self) -> Result<Option<ChaosReport>> {
         Ok(None)
     }
+
+    /// Lost particles (ICR-004): the reason and the step of each loss, or
+    /// `None` when the config has no `[loss]` with `on_unbound = "freeze"`
+    /// or the backend does not support it. A GPU backend reads its status
+    /// buffer back here, so do not call this every step.
+    fn dropped(&mut self) -> Result<Option<DropReport>> {
+        Ok(None)
+    }
+}
+
+/// Reason 0 of [`DropReport::reason`]: the particle is live.
+pub const DROP_LIVE: u8 = 0;
+/// Reason 1: unbound or invalid orbit (the Kepler drift fails).
+pub const DROP_UNBOUND: u8 = 1;
+/// Reason `2 + k`: inside moon `k` (moon order of the `System`, `k` = 0 to 5).
+pub const fn drop_inside_moon(k: usize) -> u8 {
+    2 + k as u8
+}
+
+/// Lost particles (ICR-004 section 2). With `on_unbound = "freeze"` a lost
+/// particle is flagged and frozen. The frozen position is unspecified within
+/// one block: use the reason and `drop_step`, not the position, for physics.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct DropReport {
+    /// Simulation time of the report, s.
+    pub time_s: f64,
+    /// Per particle, in `ParticleView` order: 0 live, 1 unbound, `2 + k`
+    /// inside moon `k`.
+    pub reason: Vec<u8>,
+    /// Per particle: the 0-based global step (counted from the start of the
+    /// run) in which the loss was found. `u64::MAX` for a live particle.
+    pub drop_step: Vec<u64>,
+    /// Particles lost as unbound, cumulative since the start of the run.
+    pub n_unbound: u64,
+    /// Particles lost inside each moon, cumulative, in `System` order.
+    pub n_inside_moon: Vec<u64>,
 }
 
 /// Chaos indicator per particle (ICR-003, ADR 0008), in particle order.
