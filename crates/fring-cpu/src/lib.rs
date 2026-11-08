@@ -28,9 +28,7 @@ use extended::{ExtParams, LEVEL_UNKNOWN, MAX_MOONS, advance_ext};
 use fring_model::Vec3;
 use fring_model::config::ChaosConfig;
 use fring_model::physics::chaos::{ChaosAccum, renormalise, shadow_offset_km};
-use fring_model::physics::{
-    ArcGeometry, KickTable, SaturnField, interpolate_moons, reference_mean_motion,
-};
+use fring_model::physics::{ArcGeometry, KickTable, SaturnField, interpolate_moons};
 use fring_model::{
     Backend, ChaosReport, DropReport, Error, InitialState, MoonEphemeris, MoonState, ParticleView,
     Particles, Result, RunConfig, StepStats, System,
