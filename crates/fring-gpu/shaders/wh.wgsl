@@ -11,17 +11,22 @@
 //    x, y, z), indirect term DS at 24, indirect term f32 (scaled by h/f32(h),
 //    for option D) at 30.
 // 2: run constants, see prm_* below (11 vec4; ICR-006 radii in 9, flag in 10).
-// 3: per-dispatch control: n_steps, n_particles, cap, n_moons.
-// 4: status (ICR-006), 8 + cap words: status[0] = smallest index of a dropped
+// 3: per-dispatch control, 2 vec4<u32> (32 bytes): n_steps, n_particles, cap,
+//    n_moons; then first_step (the global step number of step 0 of the block;
+//    E1-GPU), 3 words unused.
+// 4: status (ICR-006, ICR-004), 8 + 2 cap words: status[0] = smallest index of a dropped
 //    particle (0xFFFFFFFF if none), status[1] = number dropped for an unbound
 //    or invalid orbit, status[2 + k] = number dropped inside moon k (k < 4;
 //    words 6 and 7 are reserved), status[8 + i] = reason of particle i (0
-//    live, 1 unbound or invalid orbit, 2 + k inside moon k).
+//    live, 1 unbound or invalid orbit, 2 + k inside moon k), and
+//    status[8 + cap + i] = drop_step of particle i (the 0-based global step in
+//    which the loss was found, valid when the reason is not 0; E1-GPU). The
+//    arc log (arc.wgsl) follows at 8 + 2 cap.
 
 @group(0) @binding(0) var<storage, read_write> st: array<vec2<f32>>;
 @group(0) @binding(1) var<storage, read> tab: array<f32>;
 @group(0) @binding(2) var<uniform> prm: array<vec4<f32>, 11>;
-@group(0) @binding(3) var<uniform> ctl: vec4<u32>;
+@group(0) @binding(3) var<uniform> ctl: array<vec4<u32>, 2>;
 @group(0) @binding(4) var<storage, read_write> status: array<atomic<u32>>;
 
 fn prm_gm() -> vec2<f32> { return prm[0].xy; }
@@ -46,10 +51,11 @@ fn prm_gm_moon_ds(j: u32) -> vec2<f32> {
 // Moon radius squared, km^2, of moon j (0 = not checked); the rule flag (ICR-006).
 fn prm_r2(j: u32) -> f32 { return prm[9][j]; }
 fn prm_rule() -> f32 { return prm[10].x; }
-fn prm_n_steps() -> u32 { return ctl.x; }
-fn prm_n_particles() -> u32 { return ctl.y; }
-fn prm_cap() -> u32 { return ctl.z; }
-fn prm_n_moons() -> u32 { return ctl.w; }
+fn prm_n_steps() -> u32 { return ctl[0].x; }
+fn prm_n_particles() -> u32 { return ctl[0].y; }
+fn prm_cap() -> u32 { return ctl[0].z; }
+fn prm_n_moons() -> u32 { return ctl[0].w; }
+fn prm_first_step() -> u32 { return ctl[1].x; }
 
 const ROW: u32 = 36u;
 
@@ -423,7 +429,17 @@ fn is_dropped(i: u32) -> bool { return atomicLoad(&status[8u + i]) != 0u; }
 // Sets the reason of particle i (1 unbound or invalid orbit, 2 + k inside
 // moon k), counts it in word `reason`, and lowers word 0. Each thread calls
 // it once for its own particle, so the counts are exact.
-fn drop_particle(i: u32, reason: u32) {
+//
+// `seg` is the drift in which the loss was found: 0 for the half drift before
+// kick 0, k + 1 for the drift after kick k (the last one is the half drift to
+// the end of the block). The drop_step word is first_step + max(seg - 1, 0):
+// the drift after kick k belongs to step k. The GPU convention: the end half
+// drift of a block belongs to the last step of the block (first + n - 1); the
+// CPU, which merges the end half drift with the start half drift of the next
+// block, can give one step later (E1-CPU handoff). Written only here, so a
+// live particle costs nothing.
+fn drop_particle(i: u32, reason: u32, seg: u32) {
+    atomicStore(&status[8u + prm_cap() + i], prm_first_step() + max(seg, 1u) - 1u);
     atomicStore(&status[8u + i], reason);
     atomicAdd(&status[reason], 1u);
     atomicMin(&status[0], i);
@@ -440,15 +456,17 @@ fn step_d(@builtin(global_invocation_id) id: vec3<u32>, @builtin(num_workgroups)
     let half = prm_half();
     var o = drift_d(load_p(i), load_v(i), half);
     var ok = o.ok;
+    var seg = 0u;
     for (var k = 0u; k < n; k++) {
         if (!ok) { break; }
+        seg = k + 1u;
         let v = kick_dir(k, o.p, o.v);
         var dt = h;
         if (k + 1u == n) { dt = half; }
         o = drift_d(o.p, v, dt);
         ok = ok && o.ok;
     }
-    if (ok) { store(i, o.p, o.v); } else { drop_particle(i, 1u); }
+    if (ok) { store(i, o.p, o.v); } else { drop_particle(i, 1u, seg); }
 }
 
 @compute @workgroup_size(WG_SIZE)
@@ -462,15 +480,17 @@ fn step_dp(@builtin(global_invocation_id) id: vec3<u32>, @builtin(num_workgroups
     let half = prm_half();
     var o = drift_d(load_p(i), load_v(i), half);
     var ok = o.ok;
+    var seg = 0u;
     for (var k = 0u; k < n; k++) {
         if (!ok) { break; }
+        seg = k + 1u;
         let v = kick_dir_plus(k, o.p, o.v);
         var dt = h;
         if (k + 1u == n) { dt = half; }
         o = drift_d(o.p, v, dt);
         ok = ok && o.ok;
     }
-    if (ok) { store(i, o.p, o.v); } else { drop_particle(i, 1u); }
+    if (ok) { store(i, o.p, o.v); } else { drop_particle(i, 1u, seg); }
 }
 
 // As step_d, with the moon-radius rule (ICR-006): a particle whose path comes
@@ -491,12 +511,14 @@ fn step_d_r(@builtin(global_invocation_id) id: vec3<u32>, @builtin(num_workgroup
     var o = drift_d(p0, load_v(i), half);
     var ok = o.ok;
     var reason = 0u;
+    var seg = 0u;
     if (ok) {
         let hit = rule_step(0u, o.p);
         if (hit != 0u) { reason = hit + 1u; }
     }
     for (var k = 0u; k < n; k++) {
         if (!ok || reason != 0u) { break; }
+        seg = k + 1u;
         let v = kick_dir(k, o.p, o.v);
         var dt = h;
         var row = k + 1u;
@@ -509,9 +531,9 @@ fn step_d_r(@builtin(global_invocation_id) id: vec3<u32>, @builtin(num_workgroup
         }
     }
     if (!ok) {
-        drop_particle(i, 1u);
+        drop_particle(i, 1u, seg);
     } else if (reason != 0u) {
-        drop_particle(i, reason);
+        drop_particle(i, reason, seg);
     } else {
         store(i, o.p, o.v);
     }
@@ -535,12 +557,14 @@ fn step_dp_r(@builtin(global_invocation_id) id: vec3<u32>, @builtin(num_workgrou
     var o = drift_d(p0, load_v(i), half);
     var ok = o.ok;
     var reason = 0u;
+    var seg = 0u;
     if (ok) {
         let hit = rule_step(0u, o.p);
         if (hit != 0u) { reason = hit + 1u; }
     }
     for (var k = 0u; k < n; k++) {
         if (!ok || reason != 0u) { break; }
+        seg = k + 1u;
         let v = kick_dir_plus(k, o.p, o.v);
         var dt = h;
         var row = k + 1u;
@@ -553,9 +577,9 @@ fn step_dp_r(@builtin(global_invocation_id) id: vec3<u32>, @builtin(num_workgrou
         }
     }
     if (!ok) {
-        drop_particle(i, 1u);
+        drop_particle(i, 1u, seg);
     } else if (reason != 0u) {
-        drop_particle(i, reason);
+        drop_particle(i, reason, seg);
     } else {
         store(i, o.p, o.v);
     }

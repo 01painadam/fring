@@ -20,8 +20,16 @@ pub const ORBIT_TYPES: [(&str, f64, f64); 3] = [
     ("stress", 0.01, 1.0e-3),
 ];
 
-/// Config of the example run with the given step and number of steps.
-pub fn config(step_s: f64, steps: u64, moons: bool) -> RunConfig {
+/// Text of the config of the example run with the given step and number of
+/// steps. `extra` is appended (for example a `[loss]` table); `arc_deg` makes
+/// the domain a co-moving arc of that width.
+pub fn config_text(
+    step_s: f64,
+    steps: u64,
+    moons: bool,
+    extra: &str,
+    arc_deg: Option<f64>,
+) -> String {
     let text = include_str!("../../../fring-model/tests/data/example-run.toml");
     let mut t = text.replace("step_s = 360.0", &format!("step_s = {step_s}"));
     // A little more than the steps, so that the run end is inside the table.
@@ -32,7 +40,20 @@ pub fn config(step_s: f64, steps: u64, moons: bool) -> RunConfig {
     if !moons {
         t = t.replace(r#"include = ["prometheus", "pandora"]"#, "include = []");
     }
-    RunConfig::from_toml_str(&t).unwrap()
+    if let Some(w) = arc_deg {
+        t = t.replace(
+            r#"kind = "full_ring""#,
+            &format!("kind = \"arc\"\nwidth_deg = {w}\ncentre_longitude_deg = 0.0\n#"),
+        );
+    }
+    t.push('\n');
+    t.push_str(extra);
+    t
+}
+
+/// Config of the example run with the given step and number of steps.
+pub fn config(step_s: f64, steps: u64, moons: bool) -> RunConfig {
+    RunConfig::from_toml_str(&config_text(step_s, steps, moons, "", None)).unwrap()
 }
 
 /// Saturn and (if `moons`) Prometheus and Pandora, with a table that covers

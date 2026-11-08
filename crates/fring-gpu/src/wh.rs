@@ -229,13 +229,36 @@ pub fn params_with_radii<const M: u8>(
     }
 }
 
-/// The control uniform of one dispatch: steps, particles, plane stride, moons.
-pub fn control(n_steps: usize, n_particles: usize, cap: usize, n_moons: usize) -> [u32; 4] {
+/// Bytes of the control uniform (two `vec4<u32>`).
+pub const CONTROL_BYTES: usize = 32;
+
+/// The control uniform of one dispatch: steps, particles, plane stride, moons;
+/// then the global number of the first step of the block (0 here, see
+/// [`control_at`]) and three unused words.
+pub fn control(n_steps: usize, n_particles: usize, cap: usize, n_moons: usize) -> [u32; 8] {
+    control_at(n_steps, n_particles, cap, n_moons, 0)
+}
+
+/// As [`control`], with `first_step`, the 0-based global number of step 0 of
+/// the block. The kernels write `first_step + max(s - 1, 0)` as the `drop_step`
+/// of a particle lost in drift `s` of the block (E1-GPU). Truncated to `u32`:
+/// 4.29e9 steps are 48,000 years at 360 s.
+pub fn control_at(
+    n_steps: usize,
+    n_particles: usize,
+    cap: usize,
+    n_moons: usize,
+    first_step: u64,
+) -> [u32; 8] {
     [
         n_steps as u32,
         n_particles as u32,
         cap as u32,
         n_moons as u32,
+        first_step as u32,
+        0,
+        0,
+        0,
     ]
 }
 
@@ -534,6 +557,10 @@ pub struct DropOutcome {
     /// For `reason >= 2`: the squared distances of the two ends of the drift
     /// that hit, km².
     pub ends_d2_km2: [f32; 2],
+    /// For `reason >= 2`: the positions relative to the moon at the two ends
+    /// of the drift that hit, km (the input of the generic
+    /// `fring_model::physics::moon_radius::drift_hits_moon`).
+    pub hit_rel_km: [[f32; 3]; 2],
     /// Smallest squared distance to each moon over the drifts that were
     /// checked, km² (infinity for a moon never checked). Over the whole block
     /// if nothing hit, up to the hit otherwise.
@@ -564,6 +591,7 @@ pub fn advance_dropping<const M: u8>(
         reason: 0,
         segment: None,
         ends_d2_km2: [0.0; 2],
+        hit_rel_km: [[0.0; 3]; 2],
         min_d2_km2: [f32::INFINITY; MAX_MOONS],
     };
     if n == 0 {
@@ -592,6 +620,7 @@ pub fn advance_dropping<const M: u8>(
                     out.reason = 2 + j as u32;
                     out.segment = Some(seg);
                     out.ends_d2_km2 = [sq(a[j]), sq(b[j])];
+                    out.hit_rel_km = [a[j], b[j]];
                 }
             }
         }
