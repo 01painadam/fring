@@ -80,8 +80,8 @@ Rules (full text in `AGENTS.md` and `CLAUDE.md`):
 | E1-REF-2 | `e1_compare.py` for ICR-004 amendment 2, part 3: the limits apply to the run without sub-stepping, a run with sub-stepping is reported with no limit, no power check; `AGENTS.md` command line updated by A0 (added by A0 2026-11-08) | A6 | done | ws/a6-e1-ref-2 (PR #63) | E1-REF |
 | E1-CPU | ICR-004 and per-particle sub-stepping in the CPU backend | A2 | done | ws/a2-e1-cpu (PR #60; ICR-004 amendment 2: sub-stepping off by default, not on the GPU) | E1-ICR |
 | K3 | Hard-sphere collision model on CPU (cell list) | A4 | done | ws/a4-k3 | K1, ICR-009-IMPL |
-| K2-CPU | CPU backend runs the stochastic model (K2) every `every_steps` steps and reports `CollisionStats`; `fring-run` accepts `model = "stochastic"` (A5 part) | A2 + A5 | doing | ws/a2-k2-cpu (A2 part; A5 part after E1-RUN) | K2 |
-| K3-CPU | CPU backend runs the hard-sphere model (K3) at every step and reports `CollisionStats`; `fring-run` accepts `model = "hard_sphere"` (A5 part) | A2 + A5 | todo | | K3 |
+| K2-CPU | CPU backend runs the stochastic model (K2) every `every_steps` steps and reports `CollisionStats`; `fring-run` accepts `model = "stochastic"` (A5 part) | A2 + A5 | doing | ws/a2-k2-cpu (A2 part merged, PR #64; A5 part after E1-RUN; the serial `CellList::group` sort is 60 to 70 % of a collision step: 60 ms at 10⁶) | K2 |
+| K3-CPU | CPU backend runs the hard-sphere model (K3) at every step and reports `CollisionStats`; `fring-run` accepts `model = "hard_sphere"` (A5 part) | A2 + A5 | doing | ws/a2-k3-cpu (A2 part) | K3 |
 | D1 | Co-moving arc domain with azimuthal wrapping | A3 | done | ws/a3-d1 | Gate G3 |
 | D1-CPU | CPU backend wraps particles into the arc after each step (D1 `physics::arc`), with an energy test; `fring-run` accepts `domain.kind = "arc"` (A5 part) | A2 + A5 | todo | | D1 |
 | ARC-CELLS | Cell index in the arc from the signed longitude to the arc centre, clamped to the first and last cell (D1 finding 1): K2 `cell_key` and K3 pairs across the arc seam (A4); K5-BIN `cell_f64` and `cell_of` with the twin (A3) | A3 + A4 | done | ws/a3-arc-cells, ws/a4-arc-cells | D1 |
