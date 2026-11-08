@@ -74,6 +74,37 @@ pub struct KickTable<T: Real> {
     pos_km: Vec<Vec3<T>>,
     indirect_km_s2: Vec<Vec3<T>>,
     n_steps: usize,
+    /// Extended rows (ICR-004), filled only by [`KickTable::fill_ext`].
+    ext: ExtRows<T>,
+}
+
+/// A table row for the Hermite sub-kicks: time from the block start, positions, velocities.
+type Node<'a, T> = (T, &'a [Vec3<T>], &'a [Vec3<T>]);
+
+/// Moon velocities at the kick rows and the two sync rows (block start and
+/// block end), for the sub-kicks of ICR-004.
+#[derive(Clone, Debug)]
+struct ExtRows<T: Real> {
+    filled: bool,
+    /// `n_steps × n_moons` velocities, step-major.
+    vel_km_s: Vec<Vec3<T>>,
+    /// Row 0: block start `t_0`. Row 1: block end `t_n`. Each `n_moons` long.
+    sync_pos_km: [Vec<Vec3<T>>; 2],
+    sync_vel_km_s: [Vec<Vec3<T>>; 2],
+    /// False when the sync time is outside the ephemeris.
+    sync_ok: [bool; 2],
+}
+
+impl<T: Real> ExtRows<T> {
+    fn empty() -> Self {
+        Self {
+            filled: false,
+            vel_km_s: Vec::new(),
+            sync_pos_km: [Vec::new(), Vec::new()],
+            sync_vel_km_s: [Vec::new(), Vec::new()],
+            sync_ok: [false; 2],
+        }
+    }
 }
 
 impl<T: Real> KickTable<T> {
@@ -84,6 +115,7 @@ impl<T: Real> KickTable<T> {
             pos_km: Vec::new(),
             indirect_km_s2: Vec::new(),
             n_steps: 0,
+            ext: ExtRows::empty(),
         }
     }
 
@@ -142,6 +174,34 @@ impl<T: Real> KickTable<T> {
         first_step: u64,
         n_steps: usize,
     ) -> Result<()> {
+        self.fill_inner(eph, run_start_s, h_s, first_step, n_steps, false)
+    }
+
+    /// As [`fill`](Self::fill), and also the moon velocities at the kick rows
+    /// and the moon states at the two sync times `t_0 = start + first_step h`
+    /// and `t_n = start + (first_step + n_steps) h` (ICR-004 section 3). The
+    /// rows of `fill` are the same bits. A sync time outside the ephemeris is
+    /// not an error: [`sync_ok`](Self::sync_ok) is then false for that row.
+    pub fn fill_ext(
+        &mut self,
+        eph: &MoonEphemeris,
+        run_start_s: f64,
+        h_s: f64,
+        first_step: u64,
+        n_steps: usize,
+    ) -> Result<()> {
+        self.fill_inner(eph, run_start_s, h_s, first_step, n_steps, true)
+    }
+
+    fn fill_inner(
+        &mut self,
+        eph: &MoonEphemeris,
+        run_start_s: f64,
+        h_s: f64,
+        first_step: u64,
+        n_steps: usize,
+        ext: bool,
+    ) -> Result<()> {
         let m = self.n_moons();
         if eph.tracks.len() != m {
             return Err(Error::Input(format!(
@@ -152,6 +212,7 @@ impl<T: Real> KickTable<T> {
         self.pos_km.clear();
         self.indirect_km_s2.clear();
         self.n_steps = 0;
+        self.ext = ExtRows::empty();
         let mut states = vec![BodyState::default(); m];
         let mut pos = vec![Vec3::new(T::ZERO, T::ZERO, T::ZERO); m];
         for k in 0..n_steps {
@@ -163,9 +224,144 @@ impl<T: Real> KickTable<T> {
             self.indirect_km_s2
                 .push(indirect_acceleration(&self.gm_km3_s2, &pos));
             self.pos_km.extend_from_slice(&pos);
+            if ext {
+                self.ext
+                    .vel_km_s
+                    .extend(states.iter().map(|s| s.velocity_km_s.cast::<T>()));
+            }
+        }
+        if ext {
+            for (row, step) in [(0, first_step), (1, first_step + n_steps as u64)] {
+                let t = run_start_s + (step as f64) * h_s;
+                if interpolate_moons_into(eph, t, &mut states).is_ok() {
+                    self.ext.sync_ok[row] = true;
+                    self.ext.sync_pos_km[row] =
+                        states.iter().map(|s| s.position_km.cast::<T>()).collect();
+                    self.ext.sync_vel_km_s[row] =
+                        states.iter().map(|s| s.velocity_km_s.cast::<T>()).collect();
+                }
+            }
+            self.ext.filled = true;
         }
         self.n_steps = n_steps;
         Ok(())
+    }
+
+    /// True if the table was made by [`fill_ext`](Self::fill_ext).
+    pub fn has_ext(&self) -> bool {
+        self.ext.filled
+    }
+
+    /// Moon velocities at kick `k`, in km/s (needs `fill_ext`).
+    pub fn moon_velocities_km_s(&self, k: usize) -> &[Vec3<T>] {
+        let m = self.n_moons();
+        &self.ext.vel_km_s[k * m..(k + 1) * m]
+    }
+
+    /// True if sync row `row` (0: block start, 1: block end) has moon states.
+    pub fn sync_ok(&self, row: usize) -> bool {
+        self.ext.sync_ok[row]
+    }
+
+    /// Moon positions at sync row `row`, km (empty if not `sync_ok`).
+    pub fn sync_positions_km(&self, row: usize) -> &[Vec3<T>] {
+        &self.ext.sync_pos_km[row]
+    }
+
+    /// Moon velocities at sync row `row`, km/s (empty if not `sync_ok`).
+    pub fn sync_velocities_km_s(&self, row: usize) -> &[Vec3<T>] {
+        &self.ext.sync_vel_km_s[row]
+    }
+
+    /// Moon states at sub-kick `j` of step `k` of the block, when the step is
+    /// done as `n_sub` sub-steps (ICR-004 section 3): the kick is at
+    /// `t_k + (j + 1/2) h/n_sub`. `pos` and `vel` have `n_moons` entries.
+    ///
+    /// For `n_sub = 1` the rows of kick `k` are copied (no interpolation).
+    /// Otherwise it is the cubic Hermite polynomial between the two nearest
+    /// rows of the sequence S0, K_0, ..., K_{n-1}, S1. If a sync row is not
+    /// available, the two nearest kick rows are used instead (a short
+    /// extrapolation); with one kick only, the kick row itself.
+    pub fn moons_at_subkick(
+        &self,
+        k: usize,
+        j: u32,
+        n_sub: u32,
+        h_s: T,
+        pos: &mut [Vec3<T>],
+        vel: &mut [Vec3<T>],
+    ) {
+        let m = self.n_moons();
+        if n_sub == 1 {
+            pos[..m].copy_from_slice(self.moon_positions_km(k));
+            vel[..m].copy_from_slice(self.moon_velocities_km_s(k));
+            return;
+        }
+        let half = T::from_f64(0.5);
+        let n = self.n_steps;
+        // Times from the block start t_0, s.
+        let t = (T::from_f64(k as f64)
+            + (T::from_f64(f64::from(j)) + half) / T::from_f64(f64::from(n_sub)))
+            * h_s;
+        let tk = (T::from_f64(k as f64) + half) * h_s;
+        // The two nodes: (time, positions, velocities).
+        let node = |i: i64| -> Option<Node<'_, T>> {
+            if i < 0 {
+                self.ext.sync_ok[0].then(|| {
+                    (
+                        T::ZERO,
+                        &self.ext.sync_pos_km[0][..],
+                        &self.ext.sync_vel_km_s[0][..],
+                    )
+                })
+            } else if i as usize >= n {
+                self.ext.sync_ok[1].then(|| {
+                    (
+                        T::from_f64(n as f64) * h_s,
+                        &self.ext.sync_pos_km[1][..],
+                        &self.ext.sync_vel_km_s[1][..],
+                    )
+                })
+            } else {
+                let i = i as usize;
+                Some((
+                    (T::from_f64(i as f64) + half) * h_s,
+                    self.moon_positions_km(i),
+                    self.moon_velocities_km_s(i),
+                ))
+            }
+        };
+        let k = k as i64;
+        let (a, b) = if t < tk {
+            match (node(k - 1), node(k)) {
+                (Some(a), Some(b)) => (a, b),
+                // No S0: use K_k and K_{k+1}.
+                _ => (
+                    node(k).unwrap(),
+                    node(k + 1).unwrap_or_else(|| node(k).unwrap()),
+                ),
+            }
+        } else {
+            match (node(k), node(k + 1)) {
+                (Some(a), Some(b)) => (a, b),
+                // No S1: use K_{k-1} and K_k.
+                _ => (
+                    node(k - 1).unwrap_or_else(|| node(k).unwrap()),
+                    node(k).unwrap(),
+                ),
+            }
+        };
+        if a.0 == b.0 {
+            pos[..m].copy_from_slice(a.1);
+            vel[..m].copy_from_slice(a.2);
+            return;
+        }
+        for i in 0..m {
+            let (p, v) =
+                super::moon_radius::hermite_moon(t, a.0, b.0, a.1[i], a.2[i], b.1[i], b.2[i]);
+            pos[i] = p;
+            vel[i] = v;
+        }
     }
 }
 
@@ -276,5 +472,54 @@ mod tests {
         // Past the end of the table: an error, not a wrong value.
         let r = table.fill(&eph, start, h, 1000, 5);
         assert!(matches!(r, Err(Error::Input(_))));
+    }
+
+    /// `fill_ext` gives the same rows as `fill`, plus velocities and sync rows;
+    /// sub-kicks are the row itself for n = 1 and close to the ephemeris else.
+    #[test]
+    fn fill_ext_rows_and_subkicks() {
+        let (saturn, moons) = saturn_and_moons();
+        let h = 356.25;
+        let eph = build_ephemeris(&saturn, &moons, 40.0 * h + 3600.0, 1800.0).unwrap();
+        let mut a = KickTable::<f64>::for_ephemeris(&eph);
+        let mut b = KickTable::<f64>::for_ephemeris(&eph);
+        let (start, first, n) = (1800.0, 3u64, 10usize);
+        a.fill(&eph, start, h, first, n).unwrap();
+        b.fill_ext(&eph, start, h, first, n).unwrap();
+        assert!(!a.has_ext() && b.has_ext());
+        for k in 0..n {
+            assert_eq!(a.moon_positions_km(k), b.moon_positions_km(k));
+            assert_eq!(a.indirect_km_s2(k), b.indirect_km_s2(k));
+        }
+        assert!(b.sync_ok(0) && b.sync_ok(1));
+        let mut st = vec![BodyState::default(); 2];
+        interpolate_moons_into(&eph, start + (first + n as u64) as f64 * h, &mut st).unwrap();
+        assert_eq!(b.sync_positions_km(1)[1], st[1].position_km);
+        assert_eq!(b.moon_velocities_km_s(4)[0], {
+            interpolate_moons_into(&eph, start + (first + 4) as f64 * h + 0.5 * h, &mut st)
+                .unwrap();
+            st[0].velocity_km_s
+        });
+        let (mut p, mut v) = (vec![Vec3::zero(); 2], vec![Vec3::zero(); 2]);
+        b.moons_at_subkick(4, 0, 1, h, &mut p, &mut v);
+        assert_eq!(p, b.moon_positions_km(4));
+        // n = 4 sub-kicks of steps 0, 5 and 9 (edges of the block included).
+        let mut worst: f64 = 0.0;
+        for k in [0usize, 5, 9] {
+            for j in 0..4u32 {
+                b.moons_at_subkick(k, j, 4, h, &mut p, &mut v);
+                let t = start + (first as f64 + k as f64 + (f64::from(j) + 0.5) / 4.0) * h;
+                interpolate_moons_into(&eph, t, &mut st).unwrap();
+                for m in 0..2 {
+                    worst = worst.max((p[m] - st[m].position_km).norm());
+                }
+            }
+        }
+        assert!(worst < 5e-3, "sub-kick position error {worst} km");
+        // Without a block-end row the last sub-kicks still work.
+        let mut c = KickTable::<f64>::for_ephemeris(&eph);
+        c.fill_ext(&eph, start, h, 0, 40).unwrap();
+        let ok = c.sync_ok(1);
+        assert!(ok);
     }
 }

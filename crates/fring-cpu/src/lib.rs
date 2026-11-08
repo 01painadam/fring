@@ -19,17 +19,20 @@
 //! or on the chunk size. Set the number of threads with `RAYON_NUM_THREADS`
 //! or a rayon thread pool.
 
+pub mod extended;
 pub mod integrate;
 
+use extended::{ExtParams, LEVEL_UNKNOWN, MAX_MOONS, advance_ext};
 use fring_model::Vec3;
 use fring_model::config::ChaosConfig;
 use fring_model::physics::chaos::{ChaosAccum, renormalise, shadow_offset_km};
 use fring_model::physics::{KickTable, SaturnField, interpolate_moons};
 use fring_model::{
-    Backend, ChaosReport, Error, InitialState, MoonEphemeris, MoonState, ParticleView, Particles,
-    Result, RunConfig, StepStats, System,
+    Backend, ChaosReport, DropReport, Error, InitialState, MoonEphemeris, MoonState, ParticleView,
+    Particles, Result, RunConfig, StepStats, System,
 };
 use integrate::{State, advance_chunk, particle_energy};
+use rayon::iter::Either;
 use rayon::prelude::*;
 
 /// Largest number of steps for which the moon table is made at once. The
@@ -45,6 +48,23 @@ struct ChaosState {
     cfg: ChaosConfig,
     shadow: Vec<State>,
     acc: Vec<ChaosAccum>,
+}
+
+/// State of the keys `[loss]` and `[substep]` (ICR-004). `Some` only when a
+/// key changes the behaviour; without it the old loop runs.
+struct ExtState {
+    freeze: bool,
+    radius_rule: bool,
+    /// `(accuracy, max_level)` with `[substep]`.
+    substep: Option<(f64, u8)>,
+    /// Set by `set_moon_radii_km`.
+    radii_km: Option<Vec<f64>>,
+    /// Per particle: 0 live, 1 unbound, 2 + k inside moon k.
+    reason: Vec<u8>,
+    /// Per particle: global step of the loss, `u64::MAX` if live.
+    drop_step: Vec<u64>,
+    /// Per particle: level of the next step (`LEVEL_UNKNOWN` at the start).
+    level: Vec<u8>,
 }
 
 /// The CPU reference backend (f64, Saturn's field and the moons of the
@@ -68,11 +88,111 @@ pub struct CpuBackend {
     max_rel_energy_error: f64,
     /// `Some` only with `[diagnostics.chaos]`; without it there is no extra work.
     chaos: Option<ChaosState>,
+    /// `Some` only with `[loss]` or `[substep]` keys that change the behaviour.
+    ext: Option<ExtState>,
 }
 
 impl CpuBackend {
+    /// Sets the radius of each moon in km, in the order of the `System`
+    /// (ICR-004). The backend reads no files: `fring-run` reads
+    /// `<params_dir>/moons.toml` with `moon_radii_from_toml_str`, matches the
+    /// names and calls this. The radii are needed with `moon_radius =
+    /// "params"` and with `[substep]` (the floor of the effective distance).
+    ///
+    /// Returns `Error::Config` if the length is not the number of moons or a
+    /// radius is not finite and > 0.
+    pub fn set_moon_radii_km(&mut self, radii_km: &[f64]) -> Result<()> {
+        let n = self.eph.tracks.len();
+        if radii_km.len() != n {
+            return Err(Error::Config(format!(
+                "set_moon_radii_km: {} radii for {n} moons",
+                radii_km.len()
+            )));
+        }
+        if let Some(r) = radii_km.iter().find(|r| !(r.is_finite() && **r > 0.0)) {
+            return Err(Error::Config(format!(
+                "set_moon_radii_km: radius {r} is not finite and > 0"
+            )));
+        }
+        if let Some(e) = &mut self.ext {
+            e.radii_km = Some(radii_km.to_vec());
+        }
+        Ok(())
+    }
+
     fn has_moons(&self) -> bool {
         !self.eph.tracks.is_empty()
+    }
+
+    /// One block with the extended loop (ICR-004). The chaos shadow is
+    /// stepped with its main particle.
+    fn step_block_ext(&mut self, first_step: u64, block: u64) -> Result<()> {
+        let ext = self.ext.as_mut().expect("extended state");
+        if (ext.radius_rule || ext.substep.is_some()) && ext.radii_km.is_none() {
+            return Err(Error::Config(
+                "moon_radius = \"params\" or [substep] needs the moon radii: call \
+                 CpuBackend::set_moon_radii_km before the first step"
+                    .to_string(),
+            ));
+        }
+        self.table.fill_ext(
+            &self.eph,
+            self.start_s,
+            self.step_s,
+            first_step,
+            block as usize,
+        )?;
+        let prm = ExtParams {
+            field: &self.field,
+            table: &self.table,
+            h_s: self.step_s,
+            first_step,
+            radii_km: ext.radii_km.as_deref().unwrap_or(&[]),
+            radius_rule: ext.radius_rule,
+            substep: ext.substep,
+        };
+        let n_chunks = self.state.len().div_ceil(CHUNK);
+        let shadows = match &mut self.chaos {
+            Some(c) => Either::Left(c.shadow.par_chunks_mut(CHUNK).map(Some)),
+            None => Either::Right((0..n_chunks).into_par_iter().map(|_| None)),
+        };
+        self.state
+            .par_chunks_mut(CHUNK)
+            .zip(ext.reason.par_chunks_mut(CHUNK))
+            .zip(ext.drop_step.par_chunks_mut(CHUNK))
+            .zip(ext.level.par_chunks_mut(CHUNK))
+            .zip(shadows)
+            .for_each(|((((st, re), dr), lv), mut sh)| {
+                for i in 0..st.len() {
+                    let shadow = sh.as_mut().map(|x| &mut x[i]);
+                    advance_ext(&prm, &mut st[i], shadow, &mut re[i], &mut dr[i], &mut lv[i]);
+                }
+            });
+        self.snapshot_stale = true;
+        if !ext.freeze
+            && let Some(index) = ext.reason.iter().position(|&r| r != 0)
+        {
+            return Err(Error::Backend(format!(
+                "particle {} (index {index}) has an unbound or invalid orbit",
+                self.ids[index]
+            )));
+        }
+        if let Some(c) = &mut self.chaos
+            && (first_step + block).is_multiple_of(u64::from(c.cfg.renorm_steps))
+        {
+            let d0 = c.cfg.offset_km;
+            self.state
+                .par_iter()
+                .zip(c.shadow.par_iter_mut())
+                .zip(c.acc.par_iter_mut())
+                .zip(ext.reason.par_iter())
+                .for_each(|(((m, sh), a), &r)| {
+                    if r == 0 {
+                        a.add(renormalise(m, sh, d0));
+                    }
+                });
+        }
+        Ok(())
     }
 
     fn sync_snapshot(&mut self) {
@@ -147,6 +267,25 @@ impl Backend for CpuBackend {
                     acc: vec![ChaosAccum::default(); p.len()],
                 }
             });
+        let ext = if config.loss_or_substep_active() {
+            if eph.tracks.len() > MAX_MOONS {
+                return Err(Error::Config(format!(
+                    "[loss] and [substep] support at most {MAX_MOONS} moons, found {}",
+                    eph.tracks.len()
+                )));
+            }
+            Some(ExtState {
+                freeze: config.freeze_unbound(),
+                radius_rule: config.moon_radius_rule(),
+                substep: config.substep.map(|s| (s.accuracy, s.max_level)),
+                radii_km: None,
+                reason: vec![0; p.len()],
+                drop_step: vec![u64::MAX; p.len()],
+                level: vec![LEVEL_UNKNOWN; p.len()],
+            })
+        } else {
+            None
+        };
         Ok(Self {
             field,
             table: KickTable::for_ephemeris(eph),
@@ -161,6 +300,7 @@ impl Backend for CpuBackend {
             energy0,
             max_rel_energy_error: 0.0,
             chaos,
+            ext,
         })
     }
 
@@ -177,6 +317,11 @@ impl Backend for CpuBackend {
                 // do not depend on how the caller splits the run.
                 let k = u64::from(c.cfg.renorm_steps);
                 block = block.min(k - first_step % k);
+            }
+            if self.ext.is_some() {
+                self.step_block_ext(first_step, block)?;
+                done += block;
+                continue;
             }
             let moons = self.has_moons();
             if moons {
@@ -251,7 +396,32 @@ impl Backend for CpuBackend {
             ftle_per_s: c.acc.iter().map(|a| a.ftle_per_s(interval_s)).collect(),
             log_growth: c.acc.iter().map(|a| a.l).collect(),
             megno_mean: c.acc.iter().map(|a| a.megno_mean()).collect(),
-            flags: c.acc.iter().map(|a| a.flags).collect(),
+            flags: c
+                .acc
+                .iter()
+                .enumerate()
+                .map(|(i, a)| match &self.ext {
+                    // Bit 1: dropped (ICR-004).
+                    Some(e) if e.reason[i] != 0 => a.flags | 2,
+                    _ => a.flags,
+                })
+                .collect(),
+        }))
+    }
+
+    fn dropped(&mut self) -> Result<Option<DropReport>> {
+        let Some(e) = self.ext.as_ref().filter(|e| e.freeze) else {
+            return Ok(None);
+        };
+        let count = |code: u8| e.reason.iter().filter(|&&r| r == code).count() as u64;
+        Ok(Some(DropReport {
+            time_s: self.time_s(),
+            reason: e.reason.clone(),
+            drop_step: e.drop_step.clone(),
+            n_unbound: count(fring_model::DROP_UNBOUND),
+            n_inside_moon: (0..self.eph.tracks.len())
+                .map(|k| count(fring_model::drop_inside_moon(k)))
+                .collect(),
         }))
     }
 

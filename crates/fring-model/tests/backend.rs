@@ -191,3 +191,14 @@ fn saturn_checks() {
     s.gm_km3_s2 = -1.0;
     assert!(matches!(s.validate(), Err(Error::Input(_))));
 }
+
+#[test]
+fn dropped_has_a_default_body_and_the_reason_numbers() {
+    use fring_model::{DROP_LIVE, DROP_UNBOUND, DropReport, drop_inside_moon};
+    let mut backend: Box<dyn Backend> =
+        Box::new(Drift::new(&config(), &one_moon_system(), &two_particles()).unwrap());
+    assert_eq!(backend.dropped().unwrap(), None);
+    assert_eq!((DROP_LIVE, DROP_UNBOUND), (0, 1));
+    assert_eq!((drop_inside_moon(0), drop_inside_moon(5)), (2, 7));
+    assert_eq!(DropReport::default().reason.len(), 0);
+}

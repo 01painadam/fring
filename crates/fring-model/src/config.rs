@@ -49,7 +49,80 @@ pub struct RunConfig {
     /// none, and a backend then does no extra work.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub diagnostics: Option<DiagnosticsConfig>,
+    /// `[loss]`: what happens to a lost particle (ICR-004). Absent means a
+    /// lost particle is an error, as before.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub loss: Option<LossConfig>,
+    /// `[substep]`: per-particle sub-stepping near the moons (ICR-004).
+    /// Absent means no sub-stepping. Off in production and CPU only
+    /// (ICR-004 amendment 2): it does not improve the energy error after a
+    /// pass (test D), and the GPU does not have it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub substep: Option<SubstepConfig>,
 }
+
+/// What a backend does with a particle with an unbound or invalid orbit.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum OnUnbound {
+    /// `Backend::step` returns an error (the default).
+    #[default]
+    Error,
+    /// The particle is flagged and frozen (ICR-004 section 2).
+    Freeze,
+}
+
+/// Where the moon radius for the "inside a moon" rule comes from.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MoonRadiusRule {
+    /// No radius rule (the default).
+    #[default]
+    Off,
+    /// The radii of `<params_dir>/moons.toml`; needs `on_unbound = "freeze"`.
+    Params,
+}
+
+/// `[loss]` section (ICR-004 section 1).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct LossConfig {
+    /// `"error"` (default) or `"freeze"`.
+    #[serde(default)]
+    pub on_unbound: OnUnbound,
+    /// `"off"` (default) or `"params"`.
+    #[serde(default)]
+    pub moon_radius: MoonRadiusRule,
+}
+
+/// `[substep]` section (ICR-004 section 3).
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SubstepConfig {
+    /// Target value of `h v_eff / d_eff` per sub-step, 0.07 to 1.0 (default 0.1).
+    #[serde(default = "default_substep_accuracy")]
+    pub accuracy: f64,
+    /// Highest level L: a step is split into at most 2^L sub-steps. 0 to 6
+    /// (default 4).
+    #[serde(default = "default_substep_max_level")]
+    pub max_level: u8,
+}
+
+fn default_substep_accuracy() -> f64 {
+    0.1
+}
+
+fn default_substep_max_level() -> u8 {
+    4
+}
+
+/// Lowest `[substep] accuracy` (ICR-004 section 1: below it every particle
+/// would be sub-stepped everywhere).
+pub const SUBSTEP_ACCURACY_MIN: f64 = 0.07;
+/// Highest `[substep] accuracy`.
+pub const SUBSTEP_ACCURACY_MAX: f64 = 1.0;
+/// Highest `[substep] max_level` (n = 64 sub-steps).
+pub const SUBSTEP_MAX_LEVEL: u8 = 6;
 
 /// `[diagnostics]` section (ICR-003).
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
@@ -374,6 +447,67 @@ impl RunConfig {
         toml::to_string(self).map_err(|e| Error::Config(e.to_string()))
     }
 
+    /// True if `[loss]` has `on_unbound = "freeze"`.
+    pub fn freeze_unbound(&self) -> bool {
+        self.loss.is_some_and(|l| l.on_unbound == OnUnbound::Freeze)
+    }
+
+    /// True if `[loss]` has `moon_radius = "params"`.
+    pub fn moon_radius_rule(&self) -> bool {
+        self.loss
+            .is_some_and(|l| l.moon_radius == MoonRadiusRule::Params)
+    }
+
+    /// True if any of the ICR-004 keys changes the behaviour of a backend:
+    /// `[substep]`, `moon_radius = "params"` or `on_unbound = "freeze"`. A
+    /// `[loss]` table with only the defaults does not.
+    pub fn loss_or_substep_active(&self) -> bool {
+        self.substep.is_some() || self.freeze_unbound() || self.moon_radius_rule()
+    }
+
+    fn validate_loss_and_substep(&self) -> Result<()> {
+        let moons = self.moons.include.len();
+        if self.moon_radius_rule() {
+            require(
+                self.freeze_unbound(),
+                "loss.moon_radius = \"params\" needs loss.on_unbound = \"freeze\"".to_string(),
+            )?;
+            require(
+                moons >= 1,
+                "loss.moon_radius = \"params\" needs at least one moon in moons.include"
+                    .to_string(),
+            )?;
+        }
+        if let Some(s) = &self.substep {
+            require(
+                moons >= 1,
+                "[substep] needs at least one moon in moons.include".to_string(),
+            )?;
+            require(
+                s.accuracy.is_finite()
+                    && (SUBSTEP_ACCURACY_MIN..=SUBSTEP_ACCURACY_MAX).contains(&s.accuracy),
+                format!(
+                    "substep.accuracy must be in [{SUBSTEP_ACCURACY_MIN}, {SUBSTEP_ACCURACY_MAX}], found {}",
+                    s.accuracy
+                ),
+            )?;
+            require(
+                s.max_level <= SUBSTEP_MAX_LEVEL,
+                format!(
+                    "substep.max_level must be at most {SUBSTEP_MAX_LEVEL}, found {}",
+                    s.max_level
+                ),
+            )?;
+        }
+        if self.substep.is_some() || self.moon_radius_rule() {
+            require(
+                moons <= 4,
+                format!("substep or loss.moon_radius needs at most 4 moons, found {moons}"),
+            )?;
+        }
+        Ok(())
+    }
+
     /// Checks that every value is in its allowed range.
     pub fn validate(&self) -> Result<()> {
         let run = &self.run;
@@ -441,6 +575,7 @@ impl RunConfig {
                 "diagnostics.chaos.renorm_steps must be at least 1".to_string(),
             )?;
         }
+        self.validate_loss_and_substep()?;
         require(
             self.output.frame_every_steps >= 1,
             "output.frame_every_steps must be at least 1".to_string(),

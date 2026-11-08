@@ -25,7 +25,10 @@ pub mod system;
 pub mod units;
 pub mod vec3;
 
-pub use backend::{Backend, ChaosReport, CollisionStats, StepStats};
+pub use backend::{
+    Backend, ChaosReport, CollisionStats, DROP_LIVE, DROP_UNBOUND, DropReport, StepStats,
+    drop_inside_moon,
+};
 pub use config::RunConfig;
 pub use error::{Error, Result};
 pub use particles::{InitialState, ParticleView, Particles};
