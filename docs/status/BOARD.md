@@ -74,10 +74,10 @@ Rules (full text in `AGENTS.md` and `CLAUDE.md`):
 | A5-ANALYSIS | A2-ANALYSIS follow-ups: h/4 test for `eccentric_band`, `closest` on `eccentric_band`, second apse phase at 30 years | A8 | done | ws/a8-a5-analysis | Gate G3 |
 | E1-ICR | Write ICR-004: flag and freeze on the CPU, radius rule twin to `fring-model/src/physics/`, sub-stepping trigger and scheme, REBOUND comparison set | A2 | done | ws/a2-e1-icr (PR #54; ICR-004 Accepted 2026-11-08) | Gate G3, A5-ANALYSIS |
 | L3-PARAMS | GR03b moon masses as a variant file in `params/` (nominal values unchanged) | A1 | done | ws/a1-l3-params | Gate G3 |
-| A4-ANALYSIS | L3 deciding run: moon Lyapunov rate with the GR03b masses; GR03 method on our masses | A8 | doing | ws/a8-a4-analysis | L3-PARAMS |
+| A4-ANALYSIS | L3 deciding run: moon Lyapunov rate with the GR03b masses; GR03 method on our masses | A8 | done | ws/a8-a4-analysis (PR #58; masses do not explain the factor 1.4) | L3-PARAMS |
 | K2 | Stochastic collision model on CPU | A4 | done | ws/a4-k2 | K1, ICR-009-IMPL |
-| E1-REF | REBOUND (IAS15) reference for particles within 1 R_H of Prometheus (from the spec only) | A6 | doing | ws/a6-e1-ref | E1-ICR |
-| E1-CPU | ICR-004 and per-particle sub-stepping in the CPU backend | A2 | doing | ws/a2-e1-cpu | E1-ICR |
+| E1-REF | REBOUND (IAS15) reference for particles within 1 R_H of Prometheus (from the spec only) | A6 | done | ws/a6-e1-ref (PR #59; WHFast stand-in: no power at h) | E1-ICR |
+| E1-CPU | ICR-004 and per-particle sub-stepping in the CPU backend | A2 | review | ws/a2-e1-cpu (draft PR #60; 4 ICR limits not met, sub-stepping worse in test D: AJ decides) | E1-ICR |
 | K3 | Hard-sphere collision model on CPU (cell list) | A4 | done | ws/a4-k3 | K1, ICR-009-IMPL |
 | K2-CPU | CPU backend runs the stochastic model (K2) every `every_steps` steps and reports `CollisionStats`; `fring-run` accepts `model = "stochastic"` (A5 part) | A2 + A5 | todo | | K2 |
 | K3-CPU | CPU backend runs the hard-sphere model (K3) at every step and reports `CollisionStats`; `fring-run` accepts `model = "hard_sphere"` (A5 part) | A2 + A5 | todo | | K3 |
@@ -85,13 +85,14 @@ Rules (full text in `AGENTS.md` and `CLAUDE.md`):
 | D1-CPU | CPU backend wraps particles into the arc after each step (D1 `physics::arc`), with an energy test; `fring-run` accepts `domain.kind = "arc"` (A5 part) | A2 + A5 | todo | | D1 |
 | ARC-CELLS | Cell index in the arc from the signed longitude to the arc centre, clamped to the first and last cell (D1 finding 1): K2 `cell_key` and K3 pairs across the arc seam (A4); K5-BIN `cell_f64` and `cell_of` with the twin (A3) | A3 + A4 | done | ws/a3-arc-cells, ws/a4-arc-cells | D1 |
 | K5-BIN | GPU binning: counting sort by cell at each step, with a Rust twin | A3 | done | ws/a3-k5-bin | K1, ICR-009-IMPL |
+| E1-RUN | Rust runner for the E1-REF file contract: reads `validation/reference/e1_l1_states.csv`, `e1_l2_states.csv` and `e1_moons_t0.csv`, runs `CpuBackend` with `[substep]` on and off, writes the WH result files; then `e1_compare.py` for layers 1 and 2 (closes the E1-CPU acceptance; added by A0 2026-11-08) | A5 | todo | | E1-CPU, E1-REF |
 | E1-GPU | ICR-004 and per-particle sub-stepping in WGSL, with Rust twins | A3 | todo | | E1-CPU |
-| K5 | Stochastic collisions in WGSL (`shaders/collide/`) | A4 | doing | ws/a4-k5 | K2, K5-BIN, ARC-CELLS |
+| K5 | Stochastic collisions in WGSL (`shaders/collide/`) | A4 | review | ws/a4-k5 (PR #57; merge waits for AJ on ICR-010) | K2, K5-BIN, ARC-CELLS |
 | K4 | Cross-check stochastic and hard-sphere models in a small arc (A6 reviews the report) | A4 | todo | | K2, K3, ICR-009-IO, K2-CPU, K3-CPU, D1, D1-CPU, ARC-CELLS |
 | D2 | Arc error test, full ring versus arc, Δθ in {5°, 10°, 30°} | A6 | todo | | D1, D1-CPU |
 | A3-ANALYSIS | 30-year chaos map over the full band with sub-stepping (the run must complete) | A8 | todo | | E1-GPU |
 | B2 | `fring-bench` again with collisions and sub-stepping on; budget check for S1 | A5 | todo | | K5, E1-GPU |
-| Gate G4 | Collision models validated; arc size chosen; close encounters handled; cost measured | AJ | todo | | K1, K1-REFS, ICR-009-IMPL, ICR-009-IO, K2, K3, K2-CPU, K3-CPU, K4, K5, K5-BIN, D1, D1-CPU, ARC-CELLS, D2, E1-CPU, E1-GPU, A3-ANALYSIS, B2 |
+| Gate G4 | Collision models validated; arc size chosen; close encounters handled; cost measured | AJ | todo | | K1, K1-REFS, ICR-009-IMPL, ICR-009-IO, K2, K3, K2-CPU, K3-CPU, K4, K5, K5-BIN, D1, D1-CPU, ARC-CELLS, D2, E1-CPU, E1-RUN, E1-GPU, A3-ANALYSIS, B2 |
 
 ## Phase 5: science runs
 

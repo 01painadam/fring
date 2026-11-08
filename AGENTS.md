@@ -158,6 +158,13 @@ cd validation && uv run python scripts/v2_moons.py           # V2, about 15 minu
 cd validation && uv run python scripts/v3_particles.py --check   # V3, recompute the first orbit of 3 particles, compare with the committed file
 cd validation && uv run python scripts/v3_particles.py           # V3, about 2 minutes; writes reference/v3_*, reports/v3*
 cd validation && uv run python scripts/v3_compare.py --rust <file.csv>   # V3, compare a Rust trajectory (long CSV) with the reference
+cd validation && uv run python scripts/e1_ref.py check        # E1-REF, recompute 2 chunks of layer 1 and compare with the committed files, 3 s
+cd validation && uv run python scripts/e1_ref.py layer1       # E1-REF layer 1, about 3 min; writes reference/e1_l1_*, e1_moons_t0.csv
+cd validation && uv run python scripts/e1_ref.py analyse1     # E1-REF reference error and distributions, reports/e1_l1_distribution.*
+cd validation && uv run python scripts/e1_l2.py check         # E1-REF layer 2, 20-day recompute of chunk 0, 9 s
+cd validation && uv run python scripts/e1_l2.py run --n 300 --days 365.25   # E1-REF layer 2, about 25 min; writes reference/e1_l2_*
+cd validation && uv run python scripts/e1_compare.py layer1 --on <wh_on.csv> [--off <wh_off.csv>]   # E1-REF limits and power check (also: layer2)
+cd validation && uv run python scripts/e1_standin.py layer1|layer2 --div 16 --out <file>   # REBOUND WHFast stand-in, NOT the Rust backend
 ```
 
 Analysis commands (A8; `fring-analyse` reads run directories, and the plots are a `uv` project in `crates/fring-analysis/python/` with Altair). `docs/results/a1-analysis.md` lists the full set of runs:
