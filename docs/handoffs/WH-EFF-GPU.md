@@ -46,8 +46,13 @@ The rule "q <= 2 x baseline" fails on the old tree too (seed 101: quantile 0, D+
 | 3 | 7.13e-3 / 2.06e-3 = 3.5 | 4.17e-3 / 1.04e-3 = 4.0 |
 In absolute terms mode D is better with mu_eff (arc against ring 4.2e-3 km, was 5.5 to 7.5e-3). The floor (full ring from a state turned by 0.7 rad) fell by a factor of 1.5 to 2.4, because the f32 radial factor is now small near a0 (the J2 and epsilon terms cancel), so the rotation-dependent rounding is smaller, while the rest of the arc difference did not shrink. The ratio moved from a mean of 3.05 to 3.8; one of four ensembles is above the bound 4 (4.0 is on it). Mode D+ passes everywhere. Mode D is not for science. Decision for A0 (not taken here).
 
+## Resolution (AJ 2026-11-09, ADR 0009 proposed)
+- `chaos_done_when` runs 4 seeds (20261102, 101, 202, 303; `FRING_G3_SEED` runs one, about 80 s for four). Per seed the class rules, the 95 % |dL| limit 0.1 and the FTLE limit 0.15 stay; max |dL| becomes per particle: GPU |dL| <= max(0.3, 2 x the |dL| of the same particle in the CPU baseline). Across seeds the median GPU FTLE-quantile difference must be at most 2 x the median baseline difference. Result (median GPU / median baseline / limit), D+: q10 0.0011 / 0.0083 / 0.0165; q50 0.0016 / 0.0070 / 0.0139; q90 0.0163 / 0.0225 / 0.0449. C: 0.0009 / 0.0083 / 0.0165; 0.0033 / 0.0070 / 0.0139; 0.0137 / 0.0225 / 0.0449. Passes.
+- `gpu_arc`: mode D prints the ratio and does not assert; D+ and C keep the bound 4.
+- ADR: `docs/adr/0009-g3-chaos-rule-multi-seed.md` (proposed; A0 approves in the PR).
+
 ## Next step (one concrete action)
-A0 decides on the two failures (see the investigation: no bug found). Then A7: WH-EFF-WEB (`GpuStepper::new_with_drift` with the run a0).
+A0 reviews, approves ADR 0009 and merges. Then A7: WH-EFF-WEB. Then A7: WH-EFF-WEB (`GpuStepper::new_with_drift` with the run a0).
 
 ## How to verify the current state
 ```sh
