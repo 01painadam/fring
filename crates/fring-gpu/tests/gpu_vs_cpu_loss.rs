@@ -132,7 +132,7 @@ fn run_pair(
     every: u64,
     gpu_radius_scale: &[f64],
 ) -> (Result, Vec<Result>) {
-    let mut cpu = CpuBackend::new(config, system, init).unwrap();
+    let mut cpu = CpuBackend::with_point_mass_drift(config, system, init).unwrap();
     cpu.set_moon_radii_km(&RADII_KM).unwrap();
     let mut gpus: Vec<GpuBackend> = gpu_radius_scale
         .iter()
