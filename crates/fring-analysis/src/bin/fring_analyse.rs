@@ -3,7 +3,7 @@
 //!
 //! ```text
 //! fring-analyse map <run> <out_dir> <tag> [r_lo r_hi r_bin lon_bin]
-//! fring-analyse windows <run> <out.csv> <years>
+//! fring-analyse windows <run> <out.csv> <years> [lo-hi ...]
 //!   per radius window: survivors, lost by reason (flag bit 1), chaotic fraction
 //!   of the survivors and with the lost counted as chaotic, lambda (A3-ANALYSIS)
 //! fring-analyse compare <run_a> <run_b>
@@ -127,11 +127,16 @@ fn cmd_windows(a: &[String]) -> Res<()> {
         .and_then(|s| s.parse().ok())
         .ok_or("usage: windows <run> <out.csv> <years>")?;
     let pts = map::read_points(Path::new(&a[0]))?;
+    let mut windows = fring_analysis::loss::default_windows();
+    for w in &a[3..] {
+        let (lo, hi) = w.split_once('-').ok_or("extra windows are lo-hi in km")?;
+        windows.push((lo.parse()?, hi.parse()?));
+    }
     let lost = fring_analysis::loss::read_lost(Path::new(&a[0]))?;
     let t = fring_analysis::loss::window_table(
         &pts,
         &lost,
-        &fring_analysis::loss::default_windows(),
+        &windows,
         years,
     );
     let mut f = BufWriter::new(File::create(&a[1])?);
