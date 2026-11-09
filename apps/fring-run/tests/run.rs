@@ -207,24 +207,8 @@ fn small_run_without_moons_is_deterministic() {
 }
 
 #[test]
-fn refuses_what_a_backend_would_ignore() {
+fn refuses_hard_sphere_on_the_gpu() {
     let base = small_config();
-    let arc = |t: &str| {
-        replace(
-            t,
-            "kind = \"full_ring\"",
-            "kind = \"arc\"\nwidth_deg = 10.0\ncentre_longitude_deg = 0.0",
-        )
-    };
-    let stoch = |t: &str| {
-        replace(
-            t,
-            "model = \"none\"",
-            "model = \"stochastic\"\nparticle_radius_km = 1.0e-5\nweight = 8.0e8\n\
-             cell_radial_km = 0.05\ncell_azimuthal_km = 10.0\ncell_vertical_km = 0.04\n\
-             [collisions.restitution]\nlaw = \"constant\"\nepsilon = 0.5",
-        )
-    };
     let hs = |t: &str| {
         replace(
             t,
@@ -234,11 +218,7 @@ fn refuses_what_a_backend_would_ignore() {
         )
     };
     let gpu = |t: String| replace(&t, "backend = \"cpu\"", "backend = \"gpu\"");
-    let cases = [
-        (arc(&base), "D1-CPU"),
-        (gpu(stoch(&base)), "K5-WIRE"),
-        (gpu(hs(&base)), "K3 is CPU only"),
-    ];
+    let cases = [(gpu(hs(&base)), "K3 is CPU only")];
     for (text, needle) in cases {
         let tmp = Tmp::new();
         let e = run_config(&tmp, &text, "x", true).unwrap_err();
@@ -462,4 +442,68 @@ fn chaos_table_writes_chaos_csv_and_the_meta_field() {
     assert!(!dir.chaos_path().exists());
     assert!(dir.read_meta_file().unwrap().chaos.is_none());
     assert!(summary.chaos.is_none());
+}
+
+const STOCH: &str = "model = \"stochastic\"\nparticle_radius_km = 1.0e-5\nweight = 8.0e8\n\
+     cell_radial_km = 0.05\ncell_azimuthal_km = 10.0\ncell_vertical_km = 0.04\n\
+     [collisions.restitution]\nlaw = \"constant\"\nepsilon = 0.5";
+
+/// GPU stochastic collisions are accepted (K5-WIRE): with a GPU the run works,
+/// without one it fails with a backend error, never "not implemented".
+#[test]
+fn gpu_stochastic_is_selected_not_refused() {
+    let text = replace(&small_config(), "backend = \"cpu\"", "backend = \"gpu\"");
+    let text = replace(&text, "model = \"none\"", STOCH);
+    let tmp = Tmp::new();
+    match run_config(&tmp, &text, "g", true) {
+        Ok(_) => {}
+        Err(RunError::Setup(m)) => {
+            assert!(!m.contains("not implemented"), "{m}");
+            assert!(m.contains("backend error"), "{m}");
+        }
+        Err(e) => panic!("{e}"),
+    }
+}
+
+/// GPU stochastic with chaos is a clean setup error from the backend, not a
+/// panic (with no GPU the adapter error comes first; both are setup errors).
+#[test]
+fn gpu_stochastic_with_chaos_is_a_clean_setup_error() {
+    let base = replace(&small_config(), "backend = \"cpu\"", "backend = \"gpu\"");
+    let text = replace(&base, "model = \"none\"", STOCH);
+    let text = format!(
+        "{text}\n[diagnostics.chaos]\nmethod = \"shadow\"\noffset_km = 1.0\nrenorm_steps = 100\n"
+    );
+    let tmp = Tmp::new();
+    let e = run_config(&tmp, &text, "gc", true).unwrap_err();
+    assert!(matches!(e, RunError::Setup(_)), "{e}");
+    assert_eq!(e.exit_code(), 2);
+}
+
+/// The CPU backend wraps particles into the arc (D1-CPU): the run completes
+/// and every particle of every frame stays inside the arc.
+#[test]
+fn cpu_arc_run_keeps_particles_in_the_arc() {
+    let width_deg: f64 = 10.0;
+    let text = replace(
+        &small_config(),
+        "kind = \"full_ring\"",
+        &format!("kind = \"arc\"\nwidth_deg = {width_deg}\ncentre_longitude_deg = 0.0"),
+    );
+    let text = replace(&text, "duration_years = 0.02", "duration_years = 0.004");
+    let tmp = Tmp::new();
+    let (dir, _) = run_config(&tmp, &text, "arc", true).unwrap();
+    let frames = dir.list_frames().unwrap();
+    assert!(!frames.is_empty());
+    for i in frames {
+        let f = dir.read_frame_file(i).unwrap();
+        // Rotating frame: y is the azimuthal offset from the arc centre (km).
+        let half_km = f.a0_km * (0.5 * width_deg).to_radians();
+        for (k, y) in f.y_km.iter().enumerate() {
+            assert!(
+                (*y as f64).abs() <= half_km * 1.001,
+                "frame {i} particle {k}: y = {y} km, half arc {half_km} km"
+            );
+        }
+    }
 }
