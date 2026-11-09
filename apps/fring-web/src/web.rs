@@ -11,7 +11,7 @@
 //! compiles the kernels, builds the moon ephemeris and makes the stepper.
 
 use crate::live::{
-    BLOCK_STEPS, Band, COLOUR_FAINT_OFFSET, CompareMode, END_MARGIN_S, FLOATS_PER_INSTANCE,
+    Band, COLOUR_FAINT_OFFSET, CompareMode, END_MARGIN_S, FLOATS_PER_INSTANCE,
     Governor, MAX_IN_FLIGHT, MOONLET_RADIUS_KM, PANDORA, PARTICLE_COUNT, ProjectionUniform, SPAN_S,
     STEP_S, Setup, StepPlanner, ViewFrame, builtin_moon_radii_for, count_fits, drop_text,
     head_instances_styled, instance_bytes, limit_to_end, max_hours_for, moonlet_velocity,
@@ -20,7 +20,7 @@ use crate::live::{
 use crate::view::{Camera, half_local_x, split_halves};
 use fring_gpu::gpu::Gpu;
 use fring_gpu::probe::SelfTest;
-use fring_gpu::stepper::GpuStepper;
+use fring_gpu::stepper::{GpuStepper, StepperOptions};
 use fring_gpu::wh::Mode;
 use fring_gpu::wh_gpu::{DEFAULT_WORKGROUP, WhKernels};
 use fring_model::MoonEphemeris;
@@ -724,15 +724,20 @@ impl App {
             });
             self.instances_n = self.count;
         }
-        let mut stepper = GpuStepper::new(
+        // ICR-011: the drift is about mu_eff at a0, as in the CPU and GPU runs.
+        let cfg = self.setup.stepper_settings();
+        let mut stepper = GpuStepper::new_with_drift(
             &self.gpu,
             kernels,
             &system,
             &init,
-            STEP_S,
-            BLOCK_STEPS,
-            Mode::Dp,
-            None,
+            StepperOptions {
+                step_s: cfg.step_s,
+                block_steps: cfg.block_steps,
+                mode: Mode::Dp,
+                chaos: None,
+                drift_radius_km: cfg.drift_radius_km,
+            },
         )?;
         // ICR-006: a particle that comes inside a moon is dropped. One radius
         // for each track of the system, matched by name (params/moons.toml).
