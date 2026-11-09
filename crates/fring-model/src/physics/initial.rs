@@ -44,6 +44,7 @@
 use super::circular::{circular_speed, frequencies};
 use super::gravity::SaturnField;
 use crate::config::{Distribution, MoonletVelocity};
+use crate::real::sin_cos;
 use crate::rng::{Counter, Philox, Stream, box_muller};
 use crate::{Particles, Real, Result, Vec3};
 
@@ -77,19 +78,16 @@ pub fn epicycle_state<T: Real>(
     let f = frequencies(field, el.a_km);
     let (n, kappa, nu) = (f.n_rad_s, f.kappa_rad_s, f.nu_rad_s);
     let a = el.a_km;
-    let (sm, cm) = (el.mean_anomaly_rad.sin(), el.mean_anomaly_rad.cos());
+    let (sm, cm) = sin_cos(el.mean_anomaly_rad);
     let r = a * (T::ONE - el.e * cm);
     let two = T::from_f64(2.0);
     let theta = el.mean_longitude_rad + two * el.e * (n / kappa) * sm;
     let vr = a * el.e * kappa * sm;
     let vt = a * n * (T::ONE + el.e * cm);
-    let (s, c) = (theta.sin(), theta.cos());
-    let pos = Vec3::new(r * c, r * s, a * el.i_rad * el.z_phase_rad.sin());
-    let vel = Vec3::new(
-        vr * c - vt * s,
-        vr * s + vt * c,
-        a * el.i_rad * nu * el.z_phase_rad.cos(),
-    );
+    let (s, c) = sin_cos(theta);
+    let (sz, cz) = sin_cos(el.z_phase_rad);
+    let pos = Vec3::new(r * c, r * s, a * el.i_rad * sz);
+    let vel = Vec3::new(vr * c - vt * s, vr * s + vt * c, a * el.i_rad * nu * cz);
     (pos, vel)
 }
 
@@ -188,7 +186,7 @@ pub fn initial_particle(
             let (gx, gy) = box_muller(u1, u2);
             let [u3, u4] = rng.uniform_f64(counter(id, 1));
             let (gz, _) = box_muller(u3, u4);
-            let (s, c) = longitude_deg.to_radians().sin_cos();
+            let (s, c) = sin_cos(longitude_deg.to_radians());
             let v = circular_speed(field, semi_major_axis_km);
             (
                 Vec3::new(
@@ -210,8 +208,8 @@ pub fn initial_particle(
             let r = packing_radius_km * u_r.cbrt();
             let mu = 1.0 - 2.0 * u_mu;
             let rho = (1.0 - mu * mu).max(0.0).sqrt();
-            let (sp, cp) = (two_pi * u_phi).sin_cos();
-            let (s, c) = longitude_deg.to_radians().sin_cos();
+            let (sp, cp) = sin_cos(two_pi * u_phi);
+            let (s, c) = sin_cos(longitude_deg.to_radians());
             let pos = Vec3::new(
                 semi_major_axis_km * c + r * rho * cp,
                 semi_major_axis_km * s + r * rho * sp,
