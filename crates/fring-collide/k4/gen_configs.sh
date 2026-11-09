@@ -1,10 +1,10 @@
 #!/bin/sh
-# Writes the K4 configs. Usage: gen_configs.sh <name> <model> <seed> <count> <width_deg> <years> <vc> [cx cy cz every h frames]
+# Writes the K4 configs. Usage: gen_configs.sh <name> <model> <seed> <count> <width_deg> <years> <vc> [cx cy cz every h frames stats radius_km]
 name=$1; model=$2; seed=$3; count=$4; width=$5; years=$6; vc=$7
-cx=${8:-0.7}; cy=${9:-0.8}; cz=${10:-0.03}; every=${11:-1}; h=${12:-60.0}; fr=${13:-1782}
+cx=${8:-0.7}; cy=${9:-0.8}; cz=${10:-0.03}; every=${11:-1}; h=${12:-60.0}; fr=${13:-1782}; stats=${14:-89}; rad=${15:-0.01}
 if [ "$model" = stochastic ]; then
 COL="model = \"stochastic\"
-particle_radius_km = 0.01
+particle_radius_km = $rad
 weight = 1.0
 cell_radial_km = $cx
 cell_azimuthal_km = $cy
@@ -12,7 +12,7 @@ cell_vertical_km = $cz
 every_steps = $every"
 else
 COL="model = \"hard_sphere\"
-particle_radius_km = 0.01"
+particle_radius_km = $rad"
 fi
 cat > configs/$name.toml <<EOT
 # K4 cross-check (stochastic against hard sphere), arc, core e = 0 plus velocity seed e = 4e-7.
@@ -59,6 +59,6 @@ reference_speed_km_s = $vc
 
 [output]
 frame_every_steps = $fr
-stats_every_steps = 89
+stats_every_steps = $stats
 velocities = true
 EOT
