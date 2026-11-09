@@ -38,6 +38,9 @@ jobs:
       - name: Test
         run: cargo test --workspace
 
+      - name: fring-model release (profile-independence tests)
+        run: cargo test -p fring-model --release --lib
+
       - name: fring-model, fring-io, fring-collide, fring-gpu and fring-web build for wasm32
         run: cargo check -p fring-model -p fring-io -p fring-collide -p fring-gpu -p fring-web --target wasm32-unknown-unknown
 
