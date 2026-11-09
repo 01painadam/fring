@@ -1,0 +1,46 @@
+# K4 cross-check (stochastic against hard sphere), arc, core e = 0 plus velocity seed e = 4e-7.
+# Form test: v_c scaled so that c_eq is about 6 Omega s (s = 10 m); not a physical constant.
+[run]
+name = "t01-hs-s2"
+backend = "cpu"
+seed = 2
+params_dir = "params"
+
+[time]
+step_s = 60.0
+duration_years = 0.3389
+
+[frame]
+reference_semi_major_axis_km = 140220.0
+
+[domain]
+kind = "arc"
+width_deg = 0.0163
+centre_longitude_deg = 0.0
+
+[moons]
+include = []
+
+[particles]
+count = 100000
+
+[particles.distribution]
+kind = "core"
+semi_major_axis_km = 140220.0
+sigma_semi_major_axis_km = 3.0
+eccentricity = 4e-7
+apse_longitude_deg = 0.0
+
+[collisions]
+model = "hard_sphere"
+particle_radius_km = 0.01
+
+[collisions.restitution]
+law = "power_law"
+exponent = 0.234
+reference_speed_km_s = 1.96e-6
+
+[output]
+frame_every_steps = 1782
+stats_every_steps = 89
+velocities = true
