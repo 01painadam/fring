@@ -1,5 +1,6 @@
 //! The float trait [`Real`], for code that must run in both f64 and f32.
 
+use core::hint::black_box;
 use std::fmt::Debug;
 use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign};
 
@@ -65,6 +66,19 @@ pub trait Real:
     fn max(self, other: Self) -> Self;
     /// `self * a + b` with one rounding (fused multiply-add, WGSL `fma`).
     fn mul_add(self, a: Self, b: Self) -> Self;
+}
+
+/// Sine and cosine of the same angle, in radians, with the bits of separate
+/// `sin` and `cos` calls in every build profile.
+///
+/// In release, LLVM fuses `x.sin()` and `x.cos()` of one argument into macOS
+/// `___sincos_stret`, which can differ from libm `sin` and `cos` by up to
+/// 2 ulp, so release results would differ from debug (GOLDEN-REL). One
+/// [`black_box`] per call stops the fusion. Use this function for every
+/// same-argument pair in code that must give the same bits in all profiles.
+#[inline]
+pub fn sin_cos<T: Real>(x: T) -> (T, T) {
+    (black_box(x).sin(), black_box(x).cos())
 }
 
 macro_rules! impl_real {
@@ -134,6 +148,19 @@ impl_real!(f64);
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn sin_cos_equals_separate_sin_and_cos() {
+        for i in 0..2000_u32 {
+            let x = (f64::from(i) - 1000.0) * 0.37;
+            let (s, c) = sin_cos(x);
+            assert_eq!(s.to_bits(), black_box(x).sin().to_bits());
+            assert_eq!(c.to_bits(), black_box(x).cos().to_bits());
+            let (s, c) = sin_cos(x as f32);
+            assert_eq!(s.to_bits(), black_box(x as f32).sin().to_bits());
+            assert_eq!(c.to_bits(), black_box(x as f32).cos().to_bits());
+        }
+    }
 
     /// A generic function, as force functions will be.
     fn hypot<T: Real>(a: T, b: T) -> T {

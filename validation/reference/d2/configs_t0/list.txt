@@ -1,0 +1,8 @@
+d2-ecc-ring-s0
+d2-ecc-arc05-c000
+d2-ecc-arc10-c000
+d2-ecc-arc30-c000
+d2-circ-ring-s0
+d2-circ-arc05-c000
+d2-circ-arc10-c000
+d2-circ-arc30-c000

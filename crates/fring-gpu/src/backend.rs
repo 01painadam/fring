@@ -43,7 +43,7 @@ use crate::bin::{BinGeometry, GpuBinner};
 use crate::collide::{CollideParams, GpuCollider};
 use crate::gpu::Gpu;
 use crate::spike::{Consts, State, kick_scale, state_from_f64, state_to_f64};
-use crate::stepper::{GpuStepper, plan_capacity};
+use crate::stepper::{GpuStepper, StepperOptions, plan_capacity};
 use crate::wf32::model;
 use crate::wh::{self, HostTable, Mode};
 use crate::wh_gpu::{DEFAULT_WORKGROUP, NO_FAILURE, WhKernels, unbound};
@@ -245,7 +245,14 @@ impl GpuBackend {
         let cap = plan_capacity(&gpu, n, wg)?;
         let state_bytes = (6 * cap * 8) as u64;
         let kernels = WhKernels::new(&gpu, wg)?;
-        startup_check(&kernels, opts.mode, system, init.time_s, step_s)?;
+        startup_check(
+            &kernels,
+            opts.mode,
+            system,
+            init.time_s,
+            step_s,
+            config.frame.reference_semi_major_axis_km,
+        )?;
 
         // Task D1: a co-moving arc domain. Particles made all round the ring
         // are folded into the arc first (a rotation by whole widths).
@@ -269,15 +276,18 @@ impl GpuBackend {
             .unwrap_or_else(|| (TARGET_PARTICLE_STEPS / n.max(1)).clamp(8, MAX_BLOCK_STEPS))
             .clamp(1, MAX_BLOCK_STEPS);
         let chaos_cfg = config.diagnostics.as_ref().and_then(|d| d.chaos);
-        let mut stepper = GpuStepper::new(
+        let mut stepper = GpuStepper::new_with_drift(
             &gpu,
             &kernels,
             system,
             init,
-            step_s,
-            block_steps,
-            opts.mode,
-            chaos_cfg,
+            StepperOptions {
+                step_s,
+                block_steps,
+                mode: opts.mode,
+                chaos: chaos_cfg,
+                drift_radius_km: Some(config.frame.reference_semi_major_axis_km),
+            },
         )?;
 
         if rule && arc.is_some() {
@@ -767,7 +777,14 @@ fn fold_into_arc(g: &ArcGeometry, init: &InitialState) -> Result<InitialState> {
 /// The second start-up check of ADR 0006: one short block of the real kernel
 /// against its Rust twin on a few particles (relative < 1e-6, PLAN section
 /// 10), because a primitive can pass alone and fail after inlining.
-fn startup_check(k: &WhKernels, mode: Mode, system: &System, t0_s: f64, h_s: f64) -> Result<()> {
+fn startup_check(
+    k: &WhKernels,
+    mode: Mode,
+    system: &System,
+    t0_s: f64,
+    h_s: f64,
+    a0_km: f64,
+) -> Result<()> {
     const M: u8 = model::M4;
     const STEPS: usize = 4;
     let fail = |msg: String| {
@@ -780,7 +797,7 @@ fn startup_check(k: &WhKernels, mode: Mode, system: &System, t0_s: f64, h_s: f64
     };
     let eph = &system.moons;
     let gms: Vec<f64> = eph.tracks.iter().map(|t| t.gm_km3_s2).collect();
-    let c = Consts::<M>::for_step(&system.saturn, &gms, h_s);
+    let c = Consts::<M>::for_step_drift(&system.saturn, &gms, h_s, Some(a0_km));
     let scale = kick_scale(h_s);
     let mut table = KickTable::<f64>::for_ephemeris(eph);
     table.fill(eph, t0_s, h_s, 0, STEPS)?;

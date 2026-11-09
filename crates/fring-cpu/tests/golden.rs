@@ -2,6 +2,12 @@
 //! steps, recorded on the code before E1-CPU changed `advance_chunk`. The new
 //! keys `[loss]` and `[substep]` are absent here, so the bits must not change.
 //!
+//! ICR-011 (WH-EFF-CPU): `CpuBackend::new` now drifts about mu_eff, so the
+//! `GOLDEN_*` hashes are new (recorded once, debug build). The old hashes
+//! were removed with the transitional `CpuBackend::with_point_mass_drift`
+//! (WH-EFF-GPU). The bit identity of the drift about GM is covered by the
+//! field test `kick_is_bit_identical_for_from_params`.
+//!
 //! The hashes are f64 bit patterns of this machine's libm (macOS). Change
 //! them only with a decision of A0.
 
@@ -11,9 +17,9 @@ use fring_model::physics::{SaturnField, build_ephemeris, generate_particles};
 use fring_model::{Backend, InitialState, MoonEphemeris, RunConfig, System};
 
 const STEPS: u64 = 2000;
-const GOLDEN_NO_MOONS: u64 = 0x7ed4_9723_2da4_4f96;
-const GOLDEN_MOONS: u64 = 0x14f5_b688_39fd_1b87;
-const GOLDEN_MOONS_CHAOS: u64 = 0x0e57_b85b_5b10_bcf4;
+const GOLDEN_NO_MOONS: u64 = 0x445b_bb7b_e1df_7a8b;
+const GOLDEN_MOONS: u64 = 0x940a_556a_46c4_91a9;
+const GOLDEN_MOONS_CHAOS: u64 = 0x8ca8_3887_bf9b_1a61;
 
 fn system(moons: bool) -> System {
     let saturn =
@@ -59,7 +65,8 @@ fn run_hash(moons: bool, chaos: bool) -> u64 {
         time_s: 0.0,
         particles: generate_particles(&field, &dist, 300, 20_261_108).unwrap(),
     };
-    let mut b = CpuBackend::new(&config(moons, chaos), &sys, &ini).unwrap();
+    let cfg = config(moons, chaos);
+    let mut b = CpuBackend::new(&cfg, &sys, &ini).unwrap();
     b.step(777).unwrap();
     b.step(STEPS - 777).unwrap();
     let mut h = 0xcbf2_9ce4_8422_2325u64;

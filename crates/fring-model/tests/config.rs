@@ -464,3 +464,29 @@ fn loss_and_substep_are_checked() {
         "at most 4 moons",
     );
 }
+
+#[test]
+fn core_inclination_defaults_to_zero_and_is_checked() {
+    // ICR-012: absent means 0, and the value round-trips.
+    let c = example();
+    match c.particles.distribution {
+        Distribution::Core {
+            inclination_deg, ..
+        } => assert_eq!(inclination_deg, 0.0),
+        _ => panic!("example is a core"),
+    }
+    let with = |v: &str| {
+        EXAMPLE.replace(
+            "apse_longitude_deg = 0.0",
+            &format!("apse_longitude_deg = 0.0\ninclination_deg = {v}"),
+        )
+    };
+    let ok = RunConfig::from_toml_str(&with("1.0e-5")).unwrap();
+    let again = RunConfig::from_toml_str(&ok.to_toml_string().unwrap()).unwrap();
+    assert_eq!(again, ok);
+    assert!(RunConfig::from_toml_str(&with("0.0")).is_ok());
+    assert!(RunConfig::from_toml_str(&with("89.9")).is_ok());
+    for bad in ["-1.0", "-0.001", "90.0", "120.0", "nan", "inf"] {
+        assert_config_error(RunConfig::from_toml_str(&with(bad)), "inclination_deg");
+    }
+}

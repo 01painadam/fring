@@ -39,6 +39,7 @@ fn main() {
             sigma_semi_major_axis_km: 5.0,
             eccentricity: 0.0024,
             apse_longitude_deg: 0.0,
+            inclination_deg: 0.0,
         };
         let init = InitialState {
             time_s: 0.0,

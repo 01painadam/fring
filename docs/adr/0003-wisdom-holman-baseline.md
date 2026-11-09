@@ -59,3 +59,11 @@ The leapfrog value at a₀ agrees with the script above (−9.71 %). Other C2 nu
 - WH energy, circular start at a₀, 150 steps per orbit, 10⁴ orbits: max |ΔE/E₀| = 8.3 × 10⁻¹³, drift 2.3 × 10⁻¹³. With e = i = 0.01, 10³ orbits: 7.0 × 10⁻⁹, drift 8.3 × 10⁻¹³.
 - WH one orbit in f32 against f64: 0.20 km.
 - Debug run time: precession tests 0.06 s, WH energy tests 0.8 s.
+
+## Amendment 1: drift about an effective GM (ICR-011, 2026-11-09)
+
+Accepted by AJ on 2026-11-09. The Kepler drift is about μ_eff = n(a₀)² a₀³ = GM (1 + 3/2 J2 q² − 15/8 J4 q⁴ + 35/16 J6 q⁶), q = R/a₀, with a₀ = `[frame] reference_semi_major_axis_km`. The kick adds (μ_eff − GM) r/|r|³, so the total force does not change. At a₀ = 140,220 km, μ_eff/GM − 1 = 4.5848 × 10⁻³.
+
+Reason: a circular orbit of the J2 field is a Kepler ellipse with e of about μ_eff/GM − 1 in the drift about GM. The split error is then secular in the mean longitude: −12.8 km per year along-track at h = 356.25 s (E1-DIAG, ICR-011). With μ_eff the error over one year at h is −0.072, +0.0001 and +0.109 km at r = 139,500, 140,220 and 141,500 km (test T1, `crates/fring-cpu/tests/wh_eff.rs`). The E1 layer 2 count inside 1 R_H of Prometheus went from 29 to 24 (IAS15: 24). The cost per step does not change.
+
+`SaturnField::from_params` keeps the drift about GM (old behaviour, bit for bit); `with_drift_radius(a0)` selects μ_eff. The precession numbers above (C2) were measured with the drift about GM and stay valid for that split.

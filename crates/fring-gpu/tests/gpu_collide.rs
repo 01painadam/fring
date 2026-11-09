@@ -193,6 +193,8 @@ fn pair_run(gpu: &Gpu, cases: &[(Vec3<f32>, f32, f32)], law: &Restitution) -> Ve
         j2: 0.0,
         j4: 0.0,
         j6: 0.0,
+        drift_gm_km3_s2: 1.0,
+        drift_gm_excess: 0.0,
     };
     let cp = collide_uniform(&field, law);
     let kind = u32::from(matches!(law, Restitution::PowerLaw { .. }));

@@ -351,7 +351,9 @@ impl Backend for CpuBackend {
                 )));
             }
         }
-        let field = SaturnField::<f64>::from_params(&system.saturn);
+        // ICR-011: the Wisdom-Holman drift is about mu_eff at a0.
+        let field = SaturnField::<f64>::from_params(&system.saturn)
+            .with_drift_radius(config.frame.reference_semi_major_axis_km);
         let collide = CollisionState::from_config(config, &field)?;
         let p = &init.particles;
         let mut state: Vec<State> = (0..p.len())

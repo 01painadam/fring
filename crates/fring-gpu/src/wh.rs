@@ -19,10 +19,13 @@ use fring_model::{Error, Real, Result, Vec3};
 pub const MAX_MOONS: usize = 4;
 /// f32 words per step in the kick table.
 pub const ROW: usize = 36;
-/// 32-bit words of the run constants (11 vec4; the last two hold the moon
-/// radii of ICR-006: R squared in km² for each moon at word 36, and the rule
-/// flag at word 40).
-pub const PARAM_WORDS: usize = 44;
+/// 32-bit words of the run constants (12 vec4). Words 0 to 1 hold the drift
+/// GM (mu_eff, ICR-011) and 2 to 3 h, words 4 to 5 1/mu_eff. The moon radii
+/// of ICR-006 are R squared in km² for each moon at word 36 and the rule flag
+/// at word 40. Words 41 to 42 hold GM (DS, for the kick), words 44 to 45
+/// epsilon = mu_eff / GM - 1 (DS) and word 46 epsilon scaled by h / f32(h)
+/// (f32, for the option D kick).
+pub const PARAM_WORDS: usize = 48;
 
 /// The number format of the kernels (ADR 0006).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -201,7 +204,7 @@ pub fn params_with_radii<const M: u8>(
     let half = Ds::<M>::split(0.5 * c.h_s);
     let ds2 = |d: Ds<M>| [d.hi, d.lo];
     let mut v: Vec<f32> = Vec::with_capacity(PARAM_WORDS);
-    v.extend(ds2(f.gm_km3_s2));
+    v.extend(ds2(f.drift_gm_km3_s2));
     v.extend(ds2(h));
     v.extend(ds2(c.inv_gm_d));
     v.extend(ds2(f.reference_radius_km));
@@ -221,7 +224,12 @@ pub fn params_with_radii<const M: u8>(
     for d in gm_d {
         v.extend(ds2(d));
     }
-    v.extend([0.0; 8]);
+    v.extend([0.0; 5]); // word 36 to 40: radii and flag, off
+    v.extend(ds2(f.gm_km3_s2)); // words 41, 42
+    v.push(0.0);
+    v.extend(ds2(f.drift_gm_excess)); // words 44, 45
+    v.push(c.field_w.drift_gm_excess.0); // word 46
+    v.push(0.0);
     debug_assert_eq!(v.len(), PARAM_WORDS);
     match radii_km {
         Some(r) => with_radii(&v, r),
@@ -369,7 +377,7 @@ pub fn kick_dir<const M: u8>(
     let j6q = f.j6 * q6;
     let aa = cw(3.0) * j2q * p2 + cw(5.0) * j4q * p4 + cw(7.0) * j6q * p6;
     let b = j2q * d2 + j4q * d4 + j6q * d6;
-    let radial = -aa - u * b;
+    let radial = -f.drift_gm_excess - aa - u * b;
     let kk = -f.gm_km3_s2 / (r2 * r);
     let h = cw(c.h_s as f32);
     let sxy = (kk * radial * h).0;
@@ -416,7 +424,7 @@ pub fn kick_dir_plus<const M: u8>(
     let d2d = ds(3.0) * ud;
     let aa2 = ds(3.0) * j2q * p2d;
     let b2 = j2q * d2d;
-    let radial2 = (ds(0.0) - aa2) - ud * b2;
+    let radial2 = ((ds(0.0) - fd.drift_gm_excess) - aa2) - ud * b2;
     let kkd = (-fd.gm_km3_s2) / (r2d * rd);
     let hd = Ds::<M>::split(c.h_s);
     let sxy2 = kkd * radial2 * hd;
@@ -506,7 +514,7 @@ pub fn advance<const M: u8>(
             }
         }
         Mode::C => {
-            let gm = c.field_d.gm_km3_s2;
+            let gm = c.field_d.drift_gm_km3_s2;
             (p, v) = kepler_drift(gm, p, v, half)?;
             for k in 0..n {
                 let a = kick_acc_c(c, tab, k, p);
@@ -695,7 +703,7 @@ pub fn kepler<const M: u8>(
     v: Vec3<Ds<M>>,
     dt: Ds<M>,
 ) -> Option<(Vec3<Ds<M>>, Vec3<Ds<M>>)> {
-    kepler_drift(c.field_d.gm_km3_s2, p, v, dt)
+    kepler_drift(c.field_d.drift_gm_km3_s2, p, v, dt)
 }
 
 /// Twin of `moon_rel` in `wh.wgsl`: the position of the particle relative to
@@ -860,7 +868,19 @@ mod radius_tests {
         let c = Consts::<M4>::for_step(&sp, &gms, 360.0);
         let off = params(&c, &gms);
         assert_eq!(off.len(), PARAM_WORDS);
-        assert!(off[36..].iter().all(|x| *x == 0.0));
+        assert!(off[36..41].iter().all(|x| *x == 0.0));
+        // GM for the kick at words 41, 42; epsilon (0 for for_step) at 44 to 46.
+        assert_eq!(off[41], sp.gm_km3_s2 as f32);
+        assert!(off[44..].iter().all(|x| *x == 0.0));
+        // With a drift radius: mu_eff in words 0, 1 and epsilon in 44 to 46.
+        let cd = Consts::<M4>::for_step_drift(&sp, &gms, 360.0, Some(140_220.0));
+        let wd = params(&cd, &gms);
+        assert_eq!(wd[41..43], off[41..43]);
+        let eps = 4.5848e-3f64;
+        assert!((f64::from(wd[44]) - eps).abs() < 1e-6);
+        assert!((f64::from(wd[46]) - eps).abs() < 1e-6);
+        let mu = f64::from(wd[0]) + f64::from(wd[1]);
+        assert!((mu - 38_105_113.13).abs() < 0.01, "{mu}");
         let on = params_with_radii(&c, &gms, Some(&[43.09, 40.63]));
         assert_eq!(on[..36], off[..36]);
         assert_eq!(on[36], (43.09f64 * 43.09) as f32);

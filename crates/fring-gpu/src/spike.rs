@@ -77,7 +77,7 @@ pub struct Consts<const M: u8> {
     pub field_w: SaturnField<Wf32<M>>,
     /// Saturn's field in DS.
     pub field_d: SaturnField<Ds<M>>,
-    /// 1/GM in DS (s² km⁻³).
+    /// 1/drift GM in DS (s² km⁻³); GM unless built with a drift radius (ICR-011).
     pub inv_gm_d: Ds<M>,
     /// GM of the moons in f32 (km³ s⁻²).
     pub gm_moons_w: Vec<Wf32<M>>,
@@ -113,15 +113,40 @@ impl<const M: u8> Consts<M> {
     /// rounded, so that the kick, which uses `f32(h_s)`, has the right
     /// strength. Option C needs no such scale (it carries h in DS).
     pub fn for_step(p: &SaturnParams, gm_moons_km3_s2: &[f64], h_s: f64) -> Self {
+        Self::for_step_drift(p, gm_moons_km3_s2, h_s, None)
+    }
+
+    /// As [`for_step`](Self::for_step), with the Kepler drift about
+    /// `mu_eff` at `drift_radius_km` (ICR-011, `SaturnField::with_drift_radius`)
+    /// if given. The kick then carries the difference `(mu_eff - GM) r / |r|^3`
+    /// as `epsilon = mu_eff / GM - 1`, computed once in f64. `epsilon` of the
+    /// f32 field is scaled by `h / f32(h)` like J2, J4, J6. `None` gives the
+    /// drift about GM (epsilon = 0).
+    pub fn for_step_drift(
+        p: &SaturnParams,
+        gm_moons_km3_s2: &[f64],
+        h_s: f64,
+        drift_radius_km: Option<f64>,
+    ) -> Self {
         let scale = kick_scale(h_s);
         let mut field_w = SaturnField::<Wf32<M>>::from_params(p);
         field_w.j2 = Wf32::from_f64(p.j2 * scale);
         field_w.j4 = Wf32::from_f64(p.j4 * scale);
         field_w.j6 = Wf32::from_f64(p.j6 * scale);
+        let mut field_d = SaturnField::<Ds<M>>::from_params(p);
+        if let Some(a0) = drift_radius_km {
+            let f64_field = SaturnField::<f64>::from_params(p).with_drift_radius(a0);
+            field_d.drift_gm_km3_s2 = Ds::split(f64_field.drift_gm_km3_s2);
+            field_d.drift_gm_excess = Ds::split(f64_field.drift_gm_excess);
+            field_w.drift_gm_km3_s2 = Wf32::from_f64(f64_field.drift_gm_km3_s2);
+            field_w.drift_gm_excess = Wf32::from_f64(f64_field.drift_gm_excess * scale);
+        }
         Self {
             field_w,
-            field_d: SaturnField::from_params(p),
-            inv_gm_d: Ds::split(1.0 / p.gm_km3_s2),
+            inv_gm_d: Ds::split(
+                1.0 / (field_d.drift_gm_km3_s2.hi as f64 + field_d.drift_gm_km3_s2.lo as f64),
+            ),
+            field_d,
             gm_moons_w: gm_moons_km3_s2
                 .iter()
                 .map(|&g| Wf32::from_f64(g * scale))
@@ -399,7 +424,7 @@ pub(crate) fn ds_scalars<const M: u8>(
         return None;
     }
     let a = one / alpha;
-    let sqrt_gma = (c.field_d.gm_km3_s2 * a).sqrt();
+    let sqrt_gma = (c.field_d.drift_gm_km3_s2 * a).sqrt();
     let n = sqrt_gma * alpha * alpha;
     let ecos0 = one - r0 * alpha;
     let esin0 = p.dot(v) * n * a * c.inv_gm_d;
