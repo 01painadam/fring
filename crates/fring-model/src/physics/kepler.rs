@@ -1,8 +1,8 @@
 //! Exact Kepler motion around Saturn's point mass: the drift of the
 //! Wisdom-Holman split (ADR 0003).
 
+use crate::real::sin_cos;
 use crate::{Real, Vec3};
-use core::hint::black_box;
 
 /// Moves a particle on its Kepler orbit (point mass GM only) for `dt_s`
 /// seconds, with the f and g functions and a Newton solve for the change
@@ -45,10 +45,8 @@ pub fn kepler_drift<T: Real>(
     // Solve F(x) = x - ecos0 sin x + esin0 (1 - cos x) - m = 0. F' = r/a > 0.
     let mut x = m;
     for _ in 0..40 {
-        // GOLDEN-REL: two separate black_box calls, so LLVM cannot fuse sin and cos
-        // into macOS `__sincos_stret` (up to 2 ulp from `sin`; release fused, debug did not).
-        let s = black_box(x).sin();
-        let c = black_box(x).cos();
+        // GOLDEN-REL: `sin_cos` stops LLVM fusing sin and cos (see `crate::real::sin_cos`).
+        let (s, c) = sin_cos(x);
         let f = x - ecos0 * s + esin0 * (T::ONE - c) - m;
         let fp = T::ONE - ecos0 * c + esin0 * s;
         let dx = f / fp;
@@ -60,10 +58,8 @@ pub fn kepler_drift<T: Real>(
     if !x.to_f64().is_finite() {
         return None;
     }
-    // GOLDEN-REL: two separate black_box calls, so LLVM cannot fuse sin and cos
-    // into macOS `__sincos_stret` (up to 2 ulp from `sin`; release fused, debug did not).
-    let s = black_box(x).sin();
-    let c = black_box(x).cos();
+    // GOLDEN-REL: `sin_cos` stops LLVM fusing sin and cos (see `crate::real::sin_cos`).
+    let (s, c) = sin_cos(x);
     // 1 - cos x without cancellation for small x.
     let sh = (T::from_f64(0.5) * x).sin();
     let one_minus_c = two * sh * sh;
@@ -88,6 +84,7 @@ pub fn kepler_drift<T: Real>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use core::hint::black_box;
 
     /// GOLDEN-REL guard: the bits of `kepler_drift` must not depend on the
     /// build profile. In release, LLVM used to fuse `sin` and `cos` into
