@@ -264,6 +264,29 @@ fn check(name: &str, cpu: &ChaosReport, base: &Stats, gpu: &ChaosReport) -> Vec<
     failed
 }
 
+/// The five regular-on-both particles with the largest |dL| (CPU against GPU),
+/// with the class and MEGNO of each, the start radius and |dL| of the CPU
+/// baseline run (diagnostic, WH-EFF-GPU).
+fn top_dl(name: &str, init: &InitialState, cpu: &ChaosReport, base: &ChaosReport, g: &ChaosReport) {
+    let mut v: Vec<(f64, usize)> = (0..cpu.megno_mean.len())
+        .filter(|&i| {
+            class(cpu.megno_mean[i]) == Class::Regular && class(g.megno_mean[i]) == Class::Regular
+        })
+        .map(|i| ((cpu.log_growth[i] - g.log_growth[i]).abs(), i))
+        .collect();
+    v.sort_by(|a, b| b.0.total_cmp(&a.0));
+    for (d, i) in v.into_iter().take(5) {
+        let r = init.particles.position_km(i).norm();
+        println!(
+            "{name:8} top |dL| {d:.3e}: particle {i}, start r {r:.1} km, <Y> cpu {:.3} gpu {:.3}, cpu L {:.2}, |dL| of the CPU baseline {:.3e}",
+            cpu.megno_mean[i],
+            g.megno_mean[i],
+            cpu.log_growth[i],
+            (cpu.log_growth[i] - base.log_growth[i]).abs()
+        );
+    }
+}
+
 #[test]
 #[ignore = "needs a GPU, about 1 minute"]
 fn gpu_chaos_indicator_matches_cpu_for_1000_particles() {
@@ -287,7 +310,13 @@ fn gpu_chaos_indicator_matches_cpu_for_1000_particles() {
     };
     let init = InitialState {
         time_s: 0.0,
-        particles: generate_particles(&field, &dist, n, 20_261_102).unwrap(),
+        particles: generate_particles(
+            &field,
+            &dist,
+            n,
+            env_f64("FRING_G3_SEED", 20_261_102.0) as u64,
+        )
+        .unwrap(),
     };
     println!("N = {n}, d0 = {d0} km, K = {k}, steps = {STEPS}, h = {H_S} s");
 
@@ -327,6 +356,7 @@ fn gpu_chaos_indicator_matches_cpu_for_1000_particles() {
         println!("{name}: {:.1} s", t0.elapsed().as_secs_f64());
         assert_eq!(g.n_renorm, cpu.n_renorm);
         if asserted {
+            top_dl(name, &init, &cpu, &base, &g);
             failed.extend(check(name, &cpu, &bs, &g));
         } else {
             let s = compare(&cpu, &g);

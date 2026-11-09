@@ -87,7 +87,11 @@ fn spread_ensemble(
 ) -> fring_model::InitialState {
     let field = SaturnField::<f64>::from_params(&system.saturn);
     let mut p = fring_model::Particles::with_capacity(n);
-    let mut rng = Rng(0x00DD_BA11_C0FF_EE01);
+    let seed: u64 = std::env::var("FRING_ARC_SEED")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(0);
+    let mut rng = Rng(0x00DD_BA11_C0FF_EE01 ^ seed);
     for i in 0..n {
         let (_, e, inc) = ORBIT_TYPES[i % 3];
         let el = fring_model::physics::EpicycleElements {
