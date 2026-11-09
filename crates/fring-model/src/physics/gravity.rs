@@ -185,8 +185,8 @@ mod tests {
         let n = frequencies(&f, A0).n_rad_s;
         let mu = n * n * A0 * A0 * A0;
         assert!(((f.drift_gm_km3_s2 - mu) / mu).abs() < 1e-14, "{mu}");
-        let rel = (f.gm_km3_s2 * (1.0 + f.drift_gm_excess) - f.drift_gm_km3_s2).abs()
-            / f.drift_gm_km3_s2;
+        let rel =
+            (f.gm_km3_s2 * (1.0 + f.drift_gm_excess) - f.drift_gm_km3_s2).abs() / f.drift_gm_km3_s2;
         assert!(rel < 1e-15, "{rel:e}");
         assert!((f.drift_gm_km3_s2 - 38_105_113.13).abs() < 0.01);
         assert!((f.drift_gm_excess - 4.5848e-3).abs() < 1e-7);
@@ -204,7 +204,10 @@ mod tests {
             let t = f64::from(i) * 0.37;
             let r = 60_000.0 + 1_000.0 * f64::from(i);
             let p = Vec3::new(r * t.cos(), r * t.sin(), 0.05 * r * (2.1 * t).sin());
-            let (a, b) = (f.kick_acceleration_saturn(p), f.acceleration_without_point_mass(p));
+            let (a, b) = (
+                f.kick_acceleration_saturn(p),
+                f.acceleration_without_point_mass(p),
+            );
             for (x, y) in [(a.x, b.x), (a.y, b.y), (a.z, b.z)] {
                 assert_eq!(x.to_bits(), y.to_bits());
             }
