@@ -1,0 +1,4 @@
+d2cpu-ecc-ring-s0
+d2cpu-ecc-arc10-c000
+d2cpu-circ-ring-s0
+d2cpu-circ-arc10-c000
