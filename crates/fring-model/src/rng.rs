@@ -44,6 +44,7 @@
 //! ```
 
 use crate::Real;
+use crate::real::sin_cos;
 
 /// Multiplier for words 0 and 1 (Random123 `PHILOX_M4x32_0`).
 const M0: u32 = 0xD251_1F53;
@@ -209,7 +210,8 @@ pub fn u01_f32(word: u32) -> f32 {
 pub fn box_muller<T: Real>(u1: T, u2: T) -> (T, T) {
     let radius = (T::from_f64(-2.0) * u1.ln()).sqrt();
     let angle_rad = T::from_f64(2.0) * T::PI * u2;
-    (radius * angle_rad.cos(), radius * angle_rad.sin())
+    let (s, c) = sin_cos(angle_rad);
+    (radius * c, radius * s)
 }
 
 #[cfg(test)]
