@@ -139,7 +139,9 @@ struct Serial {
 /// `BLOCK_STEPS`), one particle at a time, the levels recorded.
 #[allow(clippy::needless_range_loop)]
 fn run_serial(sys: &System, ini: &InitialState, calls: &[u64], offset: Option<f64>) -> Serial {
-    let field = SaturnField::<f64>::from_params(&sys.saturn);
+    let field = SaturnField::<f64>::from_params(&sys.saturn)
+        // ICR-011: the backend drifts about mu_eff at a0 (config a0 = 140,220 km).
+        .with_drift_radius(140_220.0);
     let p = &ini.particles;
     let n = p.len();
     let state: Vec<State> = (0..n)

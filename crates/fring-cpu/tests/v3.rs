@@ -267,7 +267,9 @@ fn backend_without_moons_matches_the_model_loop() {
     let ini = initial_state();
     let mut b = CpuBackend::new(&config(h), &sys, &ini).unwrap();
     b.step(300).unwrap();
-    let field = SaturnField::<f64>::from_params(&sys.saturn);
+    let field = SaturnField::<f64>::from_params(&sys.saturn)
+        // ICR-011: the backend drifts about mu_eff at a0 (config a0 = 140,220 km).
+        .with_drift_radius(140_220.0);
     let p = b.particles().unwrap().particles.clone();
     for i in 0..N_PARTICLES {
         let (mut pos, mut vel) = (ini.particles.position_km(i), ini.particles.velocity_km_s(i));
