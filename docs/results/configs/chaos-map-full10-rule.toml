@@ -1,0 +1,44 @@
+# A3-ANALYSIS full-band map, 10 yr, freeze and the radius rule. Same seed, band and N as chaos-map-full10-rule, so the same particles.
+[run]
+name = "chaos-map-full10-rule"
+backend = "gpu"
+seed = 20261102
+params_dir = "params"
+
+[time]
+step_s = 356.2537
+duration_years = 10.0
+
+[frame]
+reference_semi_major_axis_km = 140222.43
+
+[domain]
+kind = "full_ring"
+
+[moons]
+include = ["prometheus", "pandora"]
+
+[particles]
+count = 200000
+
+[particles.distribution]
+kind = "band"
+min_semi_major_axis_km = 139700.0
+max_semi_major_axis_km = 141100.0
+
+[collisions]
+model = "none"
+
+[output]
+frame_every_steps = 100000000
+stats_every_steps = 100000000
+velocities = false
+
+[diagnostics.chaos]
+method = "shadow"
+offset_km = 1.0
+renorm_steps = 100
+
+[loss]
+on_unbound = "freeze"
+moon_radius = "params"
