@@ -171,18 +171,19 @@ fn point_config(base: &RunConfig, p: &Point) -> RunConfig {
     cfg
 }
 
-/// The initial particles of a state: the B1 cold core (seed 1) or the
-/// A3-ANALYSIS band (seed 20261102), generated directly.
+/// The initial particles of a state: the B1 cold core (seed 1), the dense
+/// core (sigma 0.3 km, seed 1) or the A3-ANALYSIS band (seed 20261102),
+/// generated directly.
 fn make_particles(
     field: &SaturnField<f64>,
     n: usize,
     state: State,
 ) -> Result<InitialState, String> {
     let (dist, seed) = match state {
-        State::Core => (
+        State::Core | State::Dense => (
             Distribution::Core {
                 semi_major_axis_km: 140_220.0,
-                sigma_semi_major_axis_km: 5.0,
+                sigma_semi_major_axis_km: if state == State::Dense { 0.3 } else { 5.0 },
                 eccentricity: 0.0024,
                 apse_longitude_deg: 0.0,
                 inclination_deg: 0.0,
@@ -409,7 +410,7 @@ mod tests {
             Feature::CollLoss,
             Feature::Substep,
         ] {
-            for state in [State::Core, State::Band] {
+            for state in [State::Core, State::Band, State::Dense] {
                 let p = feature_point(f, state, 1_000_000);
                 let mut cfg = point_config(&s.base, &p);
                 cfg.particles.count = 1_000_000;
@@ -430,7 +431,7 @@ mod tests {
     fn tiny_cpu_feature_points_run() {
         let s = setup(2).unwrap();
         let mut env = RunEnv::default();
-        for state in [State::Core, State::Band] {
+        for state in [State::Core, State::Band, State::Dense] {
             let init = make_particles(&s.field, 400, state).unwrap();
             for f in [
                 Feature::Freeze,

@@ -80,7 +80,7 @@ OPTIONS:
                           base, freeze, loss (freeze + radius rule), coll
                           (stochastic collisions), coll+loss, substep (CPU
                           only). Backends: GPU D+ and CPU (CPU up to 10^6)
-        --states <list>   B2: core, band (default core,band)
+        --states <list>   B2: core, band, dense (default all three)
         --every <list>    B2: integrator steps per collision step
                           (default 1,10)
         --repeats <n>     timed repeats per point (default 3; 5 with
@@ -142,7 +142,7 @@ where
         no_mode_d,
         out,
         features,
-        states: states.unwrap_or_else(|| vec![State::Core, State::Band]),
+        states: states.unwrap_or_else(|| vec![State::Core, State::Band, State::Dense]),
         every: every.unwrap_or_else(|| vec![1, 10]),
         repeats,
         sensitivity,
@@ -234,7 +234,7 @@ mod tests {
             panic!()
         };
         assert_eq!(a.repeats(), 1);
-        assert_eq!(a.states, [State::Core, State::Band]);
+        assert_eq!(a.states, [State::Core, State::Band, State::Dense]);
         assert!(p(&["--features", "x"]).unwrap_err().contains("unknown"));
         assert!(p(&["--every", "0"]).unwrap_err().contains("bad"));
         assert!(p(&["--repeats", "0"]).unwrap_err().contains("bad"));

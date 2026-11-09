@@ -111,6 +111,9 @@ pub enum State {
     /// The band of the A3-ANALYSIS runs (139,700 to 141,100 km, circular
     /// orbits, seed 20261102), generated directly.
     Band,
+    /// A dense core for collision cost: like `Core` but sigma = 0.3 km (the
+    /// resolved-core width of SPEC section 10), seed 1.
+    Dense,
 }
 
 impl State {
@@ -119,12 +122,13 @@ impl State {
         match self {
             State::Core => "core",
             State::Band => "band",
+            State::Dense => "dense",
         }
     }
 
     /// Parses a name.
     pub fn parse(s: &str) -> Option<State> {
-        [State::Core, State::Band]
+        [State::Core, State::Band, State::Dense]
             .into_iter()
             .find(|x| x.name() == s)
     }
