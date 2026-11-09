@@ -48,9 +48,9 @@ def main():
             m = b == k
             if m.sum() < 50: continue
             r = rho[m]; v = vp[m]
-            A = np.vstack([r - r.mean(), np.ones(m.sum())]).T
-            coef, *_ = np.linalg.lstsq(A, v, rcond=None)
-            res_ = v - A @ coef
+            dr = r - r.mean(); dv = v - v.mean()
+            slope = np.dot(dr, dv) / np.dot(dr, dr)   # closed form; avoids the spurious matmul warnings of numpy+Accelerate
+            res_ = dv - slope * dr
             num += np.sum(res_ ** 2) - m.sum() * corr; cnt += m.sum()
         c_phi2 = num / cnt
         kappa = n0

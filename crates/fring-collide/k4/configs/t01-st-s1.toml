@@ -29,6 +29,7 @@ kind = "core"
 semi_major_axis_km = 140220.0
 sigma_semi_major_axis_km = 3.0
 eccentricity = 4e-7
+inclination_deg = 1.1459e-5
 apse_longitude_deg = 0.0
 
 [collisions]
