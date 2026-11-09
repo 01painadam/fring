@@ -9,6 +9,8 @@
 //!    in steps 1 to 3 leaves nothing behind;
 //! 4. write `config.toml`, `moons.bin`, then frames and `stats.csv` while
 //!    stepping, and `meta.json` last (its presence means "finished").
+//!    With `[loss] on_unbound = "freeze"` it also writes `drops.csv` at the end
+//!    of the run, and when a step fails (ICR-004, `docs/snapshot-format.md` 8b).
 
 pub mod cli;
 pub mod e1;
@@ -17,16 +19,16 @@ use cli::Args;
 use fring_cpu::CpuBackend;
 use fring_gpu::backend::GpuBackend;
 use fring_io::{
-    CHAOS_VERSION, ChaosMeta, ChaosRow, Frame, MoonRecord, MoonsFile, RotatingVelocities, RunDir,
-    RunMeta,
+    CHAOS_VERSION, ChaosMeta, ChaosRow, DropRow, Frame, MoonRecord, MoonsFile, RotatingVelocities,
+    RunDir, RunMeta,
 };
 use fring_model::config::{BackendKind, Collisions};
-use fring_model::params::{moons_from_toml_str, saturn_from_toml_str};
+use fring_model::params::{moon_radii_from_toml_str, moons_from_toml_str, saturn_from_toml_str};
 use fring_model::physics::{
     DEFAULT_INTERVAL_S, MoonInit, SaturnField, build_ephemeris, generate_particles,
     inertial_to_rotating, interpolate_moons, reference_mean_motion,
 };
-use fring_model::{Backend, InitialState, ParticleView, RunConfig, System};
+use fring_model::{Backend, DropReport, InitialState, ParticleView, Particles, RunConfig, System};
 use std::fmt;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -156,6 +158,82 @@ fn select_moons(include: &[String], all: Vec<MoonInit>) -> Result<Vec<MoonInit>,
     Ok(chosen)
 }
 
+/// The radii of the moons in the track order of the ephemeris (which is the
+/// `[moons] include` order), from the text of `moons.toml`. Reason `2 + k` of a
+/// lost particle uses the same order.
+pub(crate) fn moon_radii_for(moons_text: &str, system: &System) -> Result<Vec<f64>, RunError> {
+    let radii = setup(moon_radii_from_toml_str(moons_text))?;
+    system
+        .moons
+        .tracks
+        .iter()
+        .map(|t| {
+            radii
+                .iter()
+                .find(|(name, _)| *name == t.name)
+                .map(|(_, r)| *r)
+                .ok_or_else(|| RunError::Setup(format!("no radius_km for moon {:?}", t.name)))
+        })
+        .collect()
+}
+
+/// The `drops.csv` rows: one per lost particle, ordered by id, with the frozen
+/// inertial state from `particles` (the same order as `report`). `time_s` is
+/// `start_s + drop_step x step_s`.
+pub fn drop_rows(
+    report: &DropReport,
+    particles: &Particles,
+    start_s: f64,
+    step_s: f64,
+) -> Result<Vec<DropRow>, RunError> {
+    let n = particles.len();
+    if report.reason.len() != n || report.drop_step.len() != n {
+        return Err(RunError::Run(format!(
+            "the drop report has {} reasons and {} steps for {n} particles",
+            report.reason.len(),
+            report.drop_step.len()
+        )));
+    }
+    let mut rows = Vec::new();
+    for (i, &reason) in report.reason.iter().enumerate() {
+        if reason == 0 {
+            continue;
+        }
+        let drop_step = report.drop_step[i];
+        if drop_step == u64::MAX {
+            return Err(RunError::Run(format!(
+                "particle {} is lost (reason {reason}) but has no drop step",
+                particles.id[i]
+            )));
+        }
+        let (r, v) = (particles.position_km(i), particles.velocity_km_s(i));
+        rows.push(DropRow {
+            id: particles.id[i],
+            reason,
+            drop_step,
+            time_s: start_s + drop_step as f64 * step_s,
+            position_km: [r.x, r.y, r.z],
+            velocity_km_s: [v.x, v.y, v.z],
+        });
+    }
+    rows.sort_by_key(|r| r.id);
+    Ok(rows)
+}
+
+/// Reads the lost particles from the backend (`None` without freeze). The GPU
+/// backend reads buffers back here: call it once, not every step.
+fn collect_drops<B: Backend>(
+    backend: &mut B,
+    start_s: f64,
+    step_s: f64,
+) -> Result<Option<Vec<DropRow>>, RunError> {
+    let Some(report) = during(backend.dropped())? else {
+        return Ok(None);
+    };
+    let view = during(backend.particles())?;
+    drop_rows(&report, view.particles, start_s, step_s).map(Some)
+}
+
 /// True at multiples of `every` and at the last step `n`.
 fn is_event(step: u64, every: u64, n: u64) -> bool {
     step.is_multiple_of(every) || step == n
@@ -267,13 +345,12 @@ pub fn run(args: &Args) -> Result<Summary, RunError> {
     let saturn = setup(saturn_from_toml_str(&read_text(
         &params_dir.join("saturn.toml"),
     )?))?;
-    let moons = if config.moons.include.is_empty() {
-        Vec::new()
+    let (moons, moons_text) = if config.moons.include.is_empty() {
+        (Vec::new(), None)
     } else {
-        let all = setup(moons_from_toml_str(&read_text(
-            &params_dir.join("moons.toml"),
-        )?))?;
-        select_moons(&config.moons.include, all)?
+        let text = read_text(&params_dir.join("moons.toml"))?;
+        let all = setup(moons_from_toml_str(&text))?;
+        (select_moons(&config.moons.include, all)?, Some(text))
     };
     let n_steps = config.time.n_steps();
     let step_s = config.time.step_s;
@@ -312,6 +389,15 @@ pub fn run(args: &Args) -> Result<Summary, RunError> {
         particles,
     };
     let system = System { saturn, moons: eph };
+    // Moon radii for the radius rule (`moon_radius = "params"`) and for
+    // `[substep]` (ICR-004 section 5). Read only when one of them is on, so a
+    // config without them behaves exactly as before.
+    let radii_km = match &moons_text {
+        Some(text) if config.moon_radius_rule() || config.substep.is_some() => {
+            Some(moon_radii_for(text, &system)?)
+        }
+        _ => None,
+    };
 
     // 3. Backend, chosen by `[run] backend`.
     let ctx = Context {
@@ -321,16 +407,23 @@ pub fn run(args: &Args) -> Result<Summary, RunError> {
         a0_km,
         n0_rad_s,
         n_steps,
+        start_s: init.time_s,
         out: RunDir::new(&out_dir),
     };
     let (mut summary, machine) = match config.run.backend {
         BackendKind::Cpu => {
-            let backend = setup(CpuBackend::new(&config, &system, &init))?;
+            let mut backend = setup(CpuBackend::new(&config, &system, &init))?;
+            if let Some(r) = &radii_km {
+                setup(backend.set_moon_radii_km(r))?;
+            }
             let machine = fring_io::sysinfo::machine("cpu");
             (execute(backend, &ctx, &mut progress)?, machine)
         }
         BackendKind::Gpu => {
-            let backend = setup(GpuBackend::new(&config, &system, &init))?;
+            let mut backend = setup(GpuBackend::new(&config, &system, &init))?;
+            if let Some(r) = &radii_km {
+                setup(backend.set_moon_radii_km(r))?;
+            }
             let machine = fring_io::sysinfo::machine(&format!(
                 "gpu {}, mode {}",
                 backend.adapter_name(),
@@ -371,6 +464,8 @@ struct Context<'a> {
     a0_km: f64,
     n0_rad_s: f64,
     n_steps: u64,
+    /// Simulation time of step 0, s.
+    start_s: f64,
     out: RunDir,
 }
 
@@ -410,7 +505,7 @@ fn append_stats(file: &mut std::fs::File, stats: &fring_model::StepStats) -> Res
 
 /// Per particle: id, Keplerian a (point mass) and longitude relative to
 /// Prometheus (degrees, [-180, 180), NaN without Prometheus) at the start.
-fn chaos_initial<B: Backend>(
+fn chaos_initial_fn<B: Backend>(
     ctx: &Context<'_>,
     backend: &mut B,
 ) -> Result<Vec<(u32, f64, f64)>, RunError> {
@@ -474,29 +569,47 @@ fn execute<B: Backend>(
         Ok(())
     };
 
-    let chaos_initial = if cfg.diagnostics.as_ref().is_some_and(|d| d.chaos.is_some()) {
-        Some(chaos_initial(ctx, &mut backend)?)
-    } else {
-        None
-    };
-    let mut step = 0u64;
-    write_frame(&mut backend, 0, &mut frames)?;
-    append_stats(&mut stats_file, &during(backend.stats())?)?;
-    stats_rows += 1;
-    while step < n {
-        let next = next_multiple(step, fe, n).min(next_multiple(step, se, n));
-        let t0 = Instant::now();
-        during(backend.step(next - step))?;
-        stepping_s += t0.elapsed().as_secs_f64();
-        step = next;
-        if is_event(step, fe, n) {
-            write_frame(&mut backend, step, &mut frames)?;
+    // The stepping loop. If it fails and `drops.csv` is on, the lost
+    // particles are still written (best effort) before the error is returned.
+    let mut chaos_initial = None;
+    let loop_result = (|| -> Result<(), RunError> {
+        if cfg.diagnostics.as_ref().is_some_and(|d| d.chaos.is_some()) {
+            chaos_initial = Some(chaos_initial_fn(ctx, &mut backend)?);
         }
-        if is_event(step, se, n) {
-            append_stats(&mut stats_file, &during(backend.stats())?)?;
-            stats_rows += 1;
+        let mut step = 0u64;
+        write_frame(&mut backend, 0, &mut frames)?;
+        append_stats(&mut stats_file, &during(backend.stats())?)?;
+        stats_rows += 1;
+        while step < n {
+            let next = next_multiple(step, fe, n).min(next_multiple(step, se, n));
+            let t0 = Instant::now();
+            during(backend.step(next - step))?;
+            stepping_s += t0.elapsed().as_secs_f64();
+            step = next;
+            if is_event(step, fe, n) {
+                write_frame(&mut backend, step, &mut frames)?;
+            }
+            if is_event(step, se, n) {
+                append_stats(&mut stats_file, &during(backend.stats())?)?;
+                stats_rows += 1;
+            }
+            progress.update(step, n, backend.time_s(), frames, step == n);
         }
-        progress.update(step, n, backend.time_s(), frames, step == n);
+        Ok(())
+    })();
+    if let Err(e) = loop_result {
+        // The state is the one after the last completed `step` call. A failure
+        // to write here must not hide the first error.
+        if let Ok(Some(rows)) = collect_drops(&mut backend, ctx.start_s, cfg.time.step_s) {
+            let _ = out.write_drops_file(&rows);
+        }
+        return Err(e);
+    }
+    // Once, at the end: the GPU reads its status buffer back here.
+    let drops = collect_drops(&mut backend, ctx.start_s, cfg.time.step_s)?;
+    if let Some(rows) = &drops {
+        // Header only if nobody was lost: the file exists if and only if freeze is on.
+        during(out.write_drops_file(rows))?;
     }
     let chaos = match (
         chaos_initial,
@@ -506,6 +619,12 @@ fn execute<B: Backend>(
             let report = during(backend.chaos())?
                 .ok_or_else(|| RunError::Run("the backend returned no chaos indicator".into()))?;
             let day_s = 86_400.0;
+            // Bit 1 (value 2) = lost. The backends set it at their next
+            // renormalisation, so a particle lost after the last one has no
+            // bit yet (found on the GPU). Setting it here from the drop report
+            // makes the CPU and GPU files agree.
+            let lost: std::collections::HashSet<u32> =
+                drops.iter().flatten().map(|r| r.id).collect();
             let rows: Vec<ChaosRow> = initial
                 .iter()
                 .enumerate()
@@ -516,7 +635,7 @@ fn execute<B: Backend>(
                     ftle_per_day: report.ftle_per_s[i] * day_s,
                     log_growth: report.log_growth[i],
                     megno_mean: report.megno_mean[i],
-                    flags: report.flags[i],
+                    flags: report.flags[i] | if lost.contains(&id) { 2 } else { 0 },
                 })
                 .collect();
             during(out.write_chaos_file(&rows))?;
@@ -540,4 +659,215 @@ fn execute<B: Backend>(
         wall_time_s: 0.0,
         particle_steps_per_s: particle_steps / stepping_s.max(1e-9),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use fring_model::{ChaosReport, Error as ModelError, StepStats, Vec3};
+
+    fn params_dir() -> PathBuf {
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../params")
+    }
+
+    fn particles(n: u32) -> Particles {
+        let mut p = Particles::with_capacity(n as usize);
+        // Ids in reverse order, so the sort by id is tested.
+        for k in 0..n {
+            let id = n - 1 - k;
+            p.push(
+                id,
+                Vec3::new(f64::from(id) + 0.5, 2.0, 3.0),
+                Vec3::new(4.0, 5.0, f64::from(id)),
+            );
+        }
+        p
+    }
+
+    #[test]
+    fn drop_rows_are_sorted_by_id_and_use_the_given_start_and_step() {
+        let p = particles(5); // index 0 has id 4, index 4 has id 0
+        let report = DropReport {
+            time_s: 0.0,
+            // indices 0 (id 4): unbound; 2 (id 2): inside moon 1; others live
+            reason: vec![1, 0, 3, 0, 0],
+            drop_step: vec![9, u64::MAX, 7, u64::MAX, u64::MAX],
+            n_unbound: 1,
+            n_inside_moon: vec![0, 1],
+        };
+        let rows = drop_rows(&report, &p, 1000.0, 360.0).unwrap();
+        assert_eq!(rows.len(), 2);
+        assert_eq!((rows[0].id, rows[0].reason, rows[0].drop_step), (2, 3, 7));
+        assert_eq!(rows[0].time_s, 1000.0 + 7.0 * 360.0);
+        assert_eq!(rows[0].position_km, [2.5, 2.0, 3.0]);
+        assert_eq!(rows[0].velocity_km_s, [4.0, 5.0, 2.0]);
+        assert_eq!((rows[1].id, rows[1].reason, rows[1].drop_step), (4, 1, 9));
+        // A lost particle without a drop step, and a wrong length, are errors.
+        let mut bad = report.clone();
+        bad.drop_step[0] = u64::MAX;
+        assert!(drop_rows(&bad, &p, 0.0, 1.0).is_err());
+        bad = report;
+        bad.reason.pop();
+        assert!(drop_rows(&bad, &p, 0.0, 1.0).is_err());
+    }
+
+    #[test]
+    fn radii_follow_the_track_order_of_the_system() {
+        let dir = params_dir();
+        let text = std::fs::read_to_string(dir.join("moons.toml")).unwrap();
+        let saturn =
+            saturn_from_toml_str(&std::fs::read_to_string(dir.join("saturn.toml")).unwrap())
+                .unwrap();
+        let all = moons_from_toml_str(&text).unwrap();
+        for include in [["prometheus", "pandora"], ["pandora", "prometheus"]] {
+            let include: Vec<String> = include.iter().map(|s| s.to_string()).collect();
+            let moons = select_moons(&include, all.clone()).unwrap();
+            let eph = build_ephemeris(&saturn, &moons, 1.0e5, DEFAULT_INTERVAL_S).unwrap();
+            let names: Vec<String> = eph.tracks.iter().map(|t| t.name.clone()).collect();
+            assert_eq!(
+                names,
+                include.iter().map(String::as_str).collect::<Vec<_>>()
+            );
+            let system = System { saturn, moons: eph };
+            let radii = moon_radii_for(&text, &system).unwrap();
+            // Radii of params/moons.toml: Prometheus 43.09 km.
+            let k = names.iter().position(|n| *n == "prometheus").unwrap();
+            assert_eq!(radii[k], 43.09);
+            assert!(radii[1 - k] > 30.0 && radii[1 - k] < 60.0 && radii[1 - k] != 43.09);
+        }
+    }
+
+    /// A backend that loses particles 1 (unbound, step 3) and 2 (inside moon 0,
+    /// step 5), and fails in the `fail_at`-th call of `step`.
+    struct Mock {
+        time_s: f64,
+        calls: u64,
+        fail_at: u64,
+        p: Particles,
+    }
+
+    impl Backend for Mock {
+        fn new(_: &RunConfig, _: &System, _: &InitialState) -> fring_model::Result<Self> {
+            unreachable!()
+        }
+        fn step(&mut self, n: u64) -> fring_model::Result<()> {
+            self.calls += 1;
+            if self.calls == self.fail_at {
+                return Err(ModelError::Backend("mock failure".into()));
+            }
+            self.time_s += n as f64 * 360.0;
+            Ok(())
+        }
+        fn time_s(&self) -> f64 {
+            self.time_s
+        }
+        fn moons(&self) -> fring_model::MoonState {
+            fring_model::MoonState {
+                time_s: self.time_s,
+                moons: Vec::new(),
+            }
+        }
+        fn particles(&mut self) -> fring_model::Result<ParticleView<'_>> {
+            Ok(ParticleView {
+                time_s: self.time_s,
+                particles: &self.p,
+            })
+        }
+        fn stats(&mut self) -> fring_model::Result<StepStats> {
+            Ok(StepStats {
+                time_s: self.time_s,
+                ..Default::default()
+            })
+        }
+        fn chaos(&mut self) -> fring_model::Result<Option<ChaosReport>> {
+            Ok(None)
+        }
+        fn dropped(&mut self) -> fring_model::Result<Option<DropReport>> {
+            Ok(Some(DropReport {
+                time_s: self.time_s,
+                reason: vec![0, 1, 2, 0],
+                drop_step: vec![u64::MAX, 3, 5, u64::MAX],
+                n_unbound: 1,
+                n_inside_moon: vec![1],
+            }))
+        }
+    }
+
+    fn mock_run(fail_at: u64, name: &str) -> (Result<Summary, RunError>, RunDir, PathBuf) {
+        let dir = params_dir();
+        let config_text = format!(
+            "[run]\nname = \"mock\"\nbackend = \"cpu\"\nseed = 1\nparams_dir = {:?}\n\
+             [time]\nstep_s = 360.0\nduration_years = 0.001\n\
+             [frame]\nreference_semi_major_axis_km = 140220.0\n\
+             [domain]\nkind = \"full_ring\"\n[moons]\ninclude = []\n[particles]\ncount = 4\n\
+             [particles.distribution]\nkind = \"clump\"\nsemi_major_axis_km = 140200.0\n\
+             longitude_deg = 10.0\nsigma_km = 6.0\n[collisions]\nmodel = \"none\"\n\
+             [loss]\non_unbound = \"freeze\"\n\
+             [output]\nframe_every_steps = 10\nstats_every_steps = 10\nvelocities = false\n",
+            dir.to_string_lossy()
+        );
+        let config = RunConfig::from_toml_str(&config_text).unwrap();
+        let saturn =
+            saturn_from_toml_str(&std::fs::read_to_string(dir.join("saturn.toml")).unwrap())
+                .unwrap();
+        let system = System {
+            saturn,
+            moons: fring_model::MoonEphemeris::none(),
+        };
+        let out_dir =
+            std::env::temp_dir().join(format!("fring-run-mock-{}-{name}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&out_dir);
+        let ctx = Context {
+            config: &config,
+            system: &system,
+            config_bytes: config_text.as_bytes(),
+            a0_km: 140_220.0,
+            n0_rad_s: 1.0e-4,
+            n_steps: config.time.n_steps(),
+            start_s: 100.0,
+            out: RunDir::new(&out_dir),
+        };
+        let backend = Mock {
+            time_s: 100.0,
+            calls: 0,
+            fail_at,
+            p: particles(4),
+        };
+        let mut progress = Progress {
+            quiet: true,
+            start: Instant::now(),
+            last: Instant::now(),
+        };
+        let r = execute(backend, &ctx, &mut progress);
+        (r, RunDir::new(&out_dir), out_dir)
+    }
+
+    #[test]
+    fn a_failed_step_still_writes_drops_csv_and_returns_the_first_error() {
+        let (r, dir, out) = mock_run(2, "fail");
+        let e = r.unwrap_err();
+        assert!(
+            matches!(&e, RunError::Run(m) if m.contains("mock failure")),
+            "{e}"
+        );
+        let rows = dir.read_drops_file().unwrap();
+        assert_eq!(rows.len(), 2);
+        // The mock lists ids 3, 2, 1, 0: index 2 is id 1, index 1 is id 2.
+        assert_eq!((rows[0].id, rows[0].reason, rows[0].drop_step), (1, 2, 5));
+        assert_eq!((rows[1].id, rows[1].reason, rows[1].drop_step), (2, 1, 3));
+        assert_eq!(rows[1].time_s, 100.0 + 3.0 * 360.0);
+        assert!(
+            !dir.meta_path().exists(),
+            "no meta.json: the run did not finish"
+        );
+        let _ = std::fs::remove_dir_all(out);
+    }
+
+    #[test]
+    fn a_finished_run_writes_the_same_file() {
+        let (r, dir, out) = mock_run(u64::MAX, "ok");
+        r.unwrap();
+        assert_eq!(dir.read_drops_file().unwrap().len(), 2);
+        let _ = std::fs::remove_dir_all(out);
+    }
 }

@@ -8,6 +8,7 @@
 
 mod bytes;
 pub mod chaos;
+pub mod drops;
 pub mod frame;
 pub mod fs;
 pub mod layout;
@@ -17,6 +18,11 @@ pub mod stats;
 pub mod sysinfo;
 
 pub use chaos::{CHAOS_COLUMNS, CHAOS_VERSION, ChaosRow, read_chaos_csv, write_chaos_csv};
+
+pub use drops::{
+    DROPS_COLUMNS, DROPS_VERSION, DropRow, DropsRead, read_drops_csv, read_drops_csv_report,
+    write_drops_csv,
+};
 
 pub use stats::{
     STATS_COLUMNS, STATS_VERSION, StatsRead, read_stats_csv, read_stats_csv_report,
