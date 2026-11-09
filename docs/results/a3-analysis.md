@@ -13,3 +13,97 @@ What I compare, and with what noise. All comparisons are of statistics, never of
 - **Hits.** Lost inside Prometheus among the first 20,000 ids at 10 years (`full10-rule`) against 911 of 20,000 = 4.6 % in A1 (`a1-analysis.md`, closest approach). Confirmed if the counting sd of the new count (sqrt of the count) covers the difference within 3 sigma. This is not the same quantity (A1: a segment distance below 43 km at CPU f64 with the old drift; here: the rule with the radius of `params/moons.toml` on the GPU), and I say so.
 - **Not covered.** Encounters within 1 R_H of Prometheus (5.4 %) need the CPU closest-approach harness and are not rerun here (K4 holds the CPU). The hits above are the comparable number.
 - **Differences between old and new runs.** main10 against `full10-freeze` differs in more than mu_eff: it also has DET-SINCOS (release initial states may differ by a few ulp, which does not change the statistics) and freeze (no effect unless a particle becomes unbound). `full10-freeze` against `full10-rule` isolates the radius rule. There is no raw main30: only `docs/results/data/main30_{hist,profile}.csv` and the window values in `a1-analysis.md`, so the 30-year comparison uses those values with binomial errors, and the lambda bootstrap of the old value exists for main10 only.
+
+## 1. What was run
+
+GPU (D+), WH-EFF-GPU included, `fring-run` from main d91d482 (RUN-LOSS). Seed 20261102, N = 200,000, band 139,700 to 141,100 km, step 356.2537 s, chaos indicator as in ADR 0008 (offset 1 km, K = 100), `[loss] on_unbound = "freeze"`, no sub-stepping. Configs: `docs/results/configs/chaos-map-full10-freeze.toml`, `-full10-rule.toml`, `-full30.toml` (the last two add `moon_radius = "params"`). Tables: `fring-analyse windows` (`data/a3_windows_*.csv`, `data/a3_full30_losses_by_year.csv`). The lost list comes from `drops.csv`; flag bit 1 of `chaos.csv` is checked against it (the sets are equal in all three runs, else the tool stops).
+
+| Run | Rule | Wall time | Lost |
+|---|---|---|---|
+| pilot `full10-freeze` (before RUN-LOSS, K4 running) | off | 404.6 s | 2 (unbound) |
+| `full10-freeze` | off | 395 s | 2 (unbound) |
+| `full10-rule` | on | 416 s (+5.3 % on freeze) | 9,053 Prometheus, 734 Pandora, 0 unbound |
+| `full30` | on | 1,237 s (20.6 min) | 19,177 Prometheus, 3,873 Pandora, 0 unbound |
+
+- **The 30-year run completes.** The first try in A1 stopped at "unbound or invalid orbit". With the rule on, 23,050 of 200,000 particles (11.5 %) are frozen, and none of them as unbound. A1 main10 took 384 s.
+- Estimate from the plan: 21 to 23 min (main30 rate 4.4e8 particle-steps/s and G6 cost 11 to 16 %). Measured: 20.6 min. The rule cost at N = 2e5 is 5.3 % on the 10-year run (416 s against 395 s), below the G6 range because the shadow runs the plain kernel. Three times the rule run is 1,248 s, within 1 % of the measured 1,237 s.
+- **Determinism.** `chaos.csv` of the final `full10-freeze` and of the pilot are identical (`cmp`), so RUN-LOSS changed no result. The first 10 years of `full30` lose exactly the same particles as `full10-rule` (9,053 and 734).
+- **Old outputs unchanged.** `fring-analyse map` on the raw main10 run gives `main10_hist.csv` and `main10_profile.csv` equal (`cmp`) to the committed files (arguments `139700 141100 7 10 2`).
+
+## 2. Losses
+
+Lost by window (`data/a3_windows_full30.csv`, `a3_windows_full10-rule.csv`):
+
+| Window (km) | N | Prometheus 10 yr | Prometheus 30 yr | Pandora 10 yr | Pandora 30 yr |
+|---|---|---|---|---|---|
+| 139,700 to 139,950 | 35,575 | 9,053 (25.4 %) | 18,987 (53.4 %) | 0 | 0 |
+| 139,950 to 140,150 | 28,609 | 0 | 190 (0.7 %) | 0 | 0 |
+| 140,150 to 140,900 | 107,284 | 0 | 0 | 0 | 1 |
+| 140,900 to 141,100 | 28,532 | 0 | 0 | 734 (2.6 %) | 3,872 (13.6 %) |
+
+- Below 140,000 km: 9,053 of 42,688 (21.2 %) are in Prometheus after 10 years and 19,166 (44.9 %) after 30 years. Nothing is lost between 140,150 and 140,900 km. The core window loses no particle in 30 years.
+- Losses per year (`data/a3_full30_losses_by_year.csv`). Prometheus: 979, 956, 848, 743, 444, 341, 309 in years 1, 5, 10, 15, 20, 25, 30 (the supply from the inner edge dries up). Pandora: 85, 65, 99, 138, 167, 177, 141 (it rises, then falls).
+- Moon hits among the same sets as in A1 (counting sd = sqrt of the counts):
+
+| Quantity | A1 / A2 | New (rule, 10 yr) | z |
+|---|---|---|---|
+| Prometheus, first 20,000 ids | 911 (4.6 %) | 879 (4.4 %) | -0.76 |
+| Pandora, 140,850 to 141,100 km | 376 of 20,000 (1.9 %) | 734 of 35,783 (2.05 %) | +1.4 |
+
+  Both are confirmed by the rule of section 0. They are not the same quantity (A1 counted a segment distance below the body radius with the old drift and CPU f64; here the GPU rule with the radius of `params/moons.toml`), and both agree to within 1.4 sigma. Over 30 years the first 20,000 ids lose 1,875 particles in Prometheus (9.4 %).
+- **Not rerun:** the 5.4 % within 1 R_H and the 12.8 % within 3 R_H of A1 (CPU closest-approach harness; K4 holds the CPU).
+
+## 3. Inner-edge numbers of A1-ANALYSIS: confirmed or replaced
+
+Chaotic fraction (z of the two-proportion test, section 0; "bound" counts lost particles as chaotic). 10 years, A1 main10 against `full10-rule` on the same ids:
+
+| Window (km) | A1 | Survivors | Bound | z (bound) | Verdict |
+|---|---|---|---|---|---|
+| 139,700 to 139,950 | 0.9789 | 0.9713 (26,522 live) | 0.9786 | -0.23 | confirmed |
+| 139,950 to 140,150 | 0.7321 | 0.7311 | 0.7311 | -0.2 | confirmed |
+
+30 years, A1 main30 (committed values, 139,950 to 141,050 km, different particles, N from `window_summary.csv`) against `full30`:
+
+| Window (km) | A1 (N) | Survivors | Bound | z (rule) | Verdict |
+|---|---|---|---|---|---|
+| 139,950 to 140,150 inner flank | 0.911 (19,934) | 0.9131 | 0.9137 | +1.02 (bound) | confirmed |
+| 140,197 to 140,247 core | 0.909 (4,778) | 0.9049 | 0.9049 | -0.76 | confirmed |
+| 140,150 to 140,700 quiet zone | 0.885 (55,145) | 0.8849 | 0.8849 | -0.08 | confirmed |
+| 140,700 to 140,900 outer flank | 0.875 (20,093) | 0.8789 | 0.8789 | +1.30 | confirmed |
+| 140,900 to 141,050 outer edge | 0.900 (14,828) | 0.8899 | 0.8982 | -0.56 (bound); survivors alone: -3.01 | confirmed (see below) |
+| 139,700 to 139,950 inner edge | not run in A1 | 0.9878 (16,588 live) | 0.9943 | | new: 53.4 % lost in Prometheus |
+
+Lambda of the survivors (1/yr), A1 values are rounded to 0.01 and have no error; sigma is the bootstrap sigma of the new value:
+
+| Window | A1 | New | sigma | difference / sigma | Verdict by the rule |
+|---|---|---|---|---|---|
+| 139,700 to 139,950, 10 yr | 8.4 | 7.41 (rule), 7.99 (freeze only) | 0.015 | | replaced, see below |
+| 139,950 to 140,150, 30 yr | 2.23 | 2.172 | 0.010 | 5.6 | replaced (-2.6 %) |
+| core, 30 yr | 0.88 | 0.878 | 0.006 | 0.3 | confirmed |
+| quiet zone, 30 yr | 0.91 | 0.889 | 0.002 | 10.6 | replaced (-2.3 %) |
+| outer flank, 30 yr | 2.15 | 2.132 | 0.008 | 2.4 | confirmed |
+| 139,700 to 139,950, 30 yr | not run | 5.93 | 0.017 | | new |
+| 140,900 to 141,050, 30 yr | 4.75 | 4.42 | 0.013 | 24 | replaced (-6.9 %) |
+
+Reading:
+- **Chaotic fractions: all A1 numbers are confirmed.** The inner edge is 98 % chaotic at 10 years (bound 0.9786 against 0.9789) and about 99 % at 30 years. The sampling noise is below 0.01 everywhere. Over the band as a whole the chaotic fraction of the survivors at 30 years is 0.899 and the bound is 0.911 (A1, narrower band: 0.890).
+- **The lambda of the inner edge is replaced.** The rule removes the particles that hit Prometheus, and these have the largest MEGNO. So the median of the survivors falls: 7.41 against 7.99 with freeze only (10 yr), and 5.93 at 30 years. This is a selection effect of the rule, not a change in the dynamics: the freeze-only run, which keeps those particles, gives 7.99 (A1 7.97 on the same ids, sigma 0.013). Use the freeze-only value for "how chaotic the unselected edge is", and the rule value for "how chaotic the surviving ring is".
+- **The small lambda shifts of 2 to 3 % (inner flank, quiet zone) and the 6.9 % shift at the outer edge are replaced by the rule.** The pilot gave shifts of up to 3 % in the 10-year windows between the old and the new code on the same ids (outer flank +1.0 %), so shifts of this size are the order of the code changes (WH-EFF, DET-SINCOS) and not of the sampling noise. The outer edge at 30 years differs more because 3,872 of its particles (13.6 %) are absorbed by Pandora and the A1 value included them; the chaotic fraction (bound) is unchanged. The conclusions of A1 do not change: the quiet zone is at lambda 0.89 to 0.91 per year, the core is on its inner side, the zone is chaotic.
+- The A1 statement "above about 140,250 km the result does not depend on the missing sub-stepping" is supported: the core and quiet zone lose no particle, and the numbers agree.
+
+## 4. Limits
+
+- No sub-stepping (ICR-004 amendment 2). A frozen particle is a removed particle: its chaos indicator stops at the loss, so lambda and class are for the survivors only.
+- No raw main30: the 30-year comparison is with the committed window values and binomial errors, on different particles, and the lambda of A1 has no error. The lambda verdicts of 2 to 3 % therefore compare a number with its rounding (0.005) and a code change, not two independent estimates.
+- The 5.4 % within 1 R_H of A1 is not reproduced (needs the CPU harness).
+- No figure was made for this note; the tables are in `data/a3_windows_*.csv`.
+
+## 5. Commands
+
+```sh
+export PATH="/opt/homebrew/opt/rustup/bin:$HOME/.cargo/bin:$PATH"
+cargo build --release -p fring-run -p fring-analysis
+for n in full10-freeze full10-rule full30; do target/release/fring-run --config docs/results/configs/chaos-map-$n.toml --out runs/final-$n --quiet; done   # 395 s, 416 s, 1237 s
+target/release/fring-analyse windows runs/final-full30 docs/results/data/a3_windows_full30.csv 30 139700-140000 140850-141100 140900-141050
+target/release/fring-analyse windows runs/final-full10-rule docs/results/data/a3_windows_full10-rule.csv 10 139700-140000 140850-141100
+```
