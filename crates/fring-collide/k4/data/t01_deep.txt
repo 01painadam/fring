@@ -1,0 +1,45 @@
+run          group              deep   collisions   deep %
+t01-hs-s1    whole run         11527     12939132   0.0891
+t01-hs-s1    orbit 1            5149        82461   6.2442
+t01-hs-s1    orbit 2               0        71462   0.0000
+t01-hs-s1    orbit 3               0        69315   0.0000
+t01-hs-s1    orbit 4               0        68566   0.0000
+t01-hs-s1    orbit 5               1        67260   0.0015
+t01-hs-s1    orbits 6-79        1845      4856003   0.0380
+t01-hs-s1    window 80-200      4526      7712829   0.0587
+t01-hs-s1    after orbit 200        6        11236   0.0534
+t01-hs-s1    sum of parts      11527     12939132   whole run 11527 12939132  ADDS UP
+t01-hs-s1    missed-pair estimate window: <g> = 14.24 mm/s, <g> h / 4 s = 0.0214, miss = 0.095 %
+t01-hs-s2    whole run         11092     12906754   0.0859
+t01-hs-s2    orbit 1            4636        81703   5.6742
+t01-hs-s2    orbit 2               0        71120   0.0000
+t01-hs-s2    orbit 3               0        68857   0.0000
+t01-hs-s2    orbit 4               0        67780   0.0000
+t01-hs-s2    orbit 5               1        67660   0.0015
+t01-hs-s2    orbits 6-79        1941      4843176   0.0401
+t01-hs-s2    window 80-200      4509      7695324   0.0586
+t01-hs-s2    after orbit 200        5        11134   0.0449
+t01-hs-s2    sum of parts      11092     12906754   whole run 11092 12906754  ADDS UP
+t01-hs-s2    missed-pair estimate window: <g> = 14.27 mm/s, <g> h / 4 s = 0.0214, miss = 0.096 %
+t01-hs-s3    whole run         10868     12908340   0.0842
+t01-hs-s3    orbit 1            4598        81565   5.6372
+t01-hs-s3    orbit 2               0        71258   0.0000
+t01-hs-s3    orbit 3               0        68666   0.0000
+t01-hs-s3    orbit 4               1        68176   0.0015
+t01-hs-s3    orbit 5               1        67437   0.0015
+t01-hs-s3    orbits 6-79        1888      4842941   0.0390
+t01-hs-s3    window 80-200      4369      7697187   0.0568
+t01-hs-s3    after orbit 200       11        11110   0.0990
+t01-hs-s3    sum of parts      10868     12908340   whole run 10868 12908340  ADDS UP
+t01-hs-s3    missed-pair estimate window: <g> = 14.22 mm/s, <g> h / 4 s = 0.0213, miss = 0.095 %
+t01-hs-s4    whole run         11316     12890860   0.0878
+t01-hs-s4    orbit 1            4840        81335   5.9507
+t01-hs-s4    orbit 2               1        71485   0.0014
+t01-hs-s4    orbit 3               1        68643   0.0015
+t01-hs-s4    orbit 4               0        67856   0.0000
+t01-hs-s4    orbit 5               0        67362   0.0000
+t01-hs-s4    orbits 6-79        1878      4831643   0.0389
+t01-hs-s4    window 80-200      4593      7691326   0.0597
+t01-hs-s4    after orbit 200        3        11210   0.0268
+t01-hs-s4    sum of parts      11316     12890860   whole run 11316 12890860  ADDS UP
+t01-hs-s4    missed-pair estimate window: <g> = 14.24 mm/s, <g> h / 4 s = 0.0214, miss = 0.095 %

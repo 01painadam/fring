@@ -1,0 +1,5 @@
+seed 1: N=100000, whole file identical=True, header identical=True, ids identical=True, x,y,z,vx,vy,vz identical=[True, True, True, True, True, True]
+seed 2: N=100000, whole file identical=True, header identical=True, ids identical=True, x,y,z,vx,vy,vz identical=[True, True, True, True, True, True]
+seed 3: N=100000, whole file identical=True, header identical=True, ids identical=True, x,y,z,vx,vy,vz identical=[True, True, True, True, True, True]
+seed 4: N=100000, whole file identical=True, header identical=True, ids identical=True, x,y,z,vx,vy,vz identical=[True, True, True, True, True, True]
+ST seed 1 equals ST seed 2 (expected False): False
