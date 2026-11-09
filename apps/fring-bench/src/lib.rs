@@ -222,39 +222,58 @@ fn run_point(
         repeats,
         collisions_every: p.feature.collisions().then_some(p.every_steps),
     };
+    let fresh = p.feature.collisions();
+    let mut adapter: Option<(String, u64, u64)> = None;
     let caught = catch_unwind(AssertUnwindSafe(|| -> Result<measure::Timing, String> {
-        match p.variant {
-            Variant::Cpu => {
-                let mut b = CpuBackend::new(&cfg, &s.system, init).map_err(|e| e.to_string())?;
-                if p.feature.radius_rule() {
-                    b.set_moon_radii_km(&s.radii_km)
-                        .map_err(|e| e.to_string())?;
+        // Makes a backend in the initial state (radii set when the rule is on).
+        let mut make = || -> Result<Box<dyn Backend>, String> {
+            match p.variant {
+                Variant::Cpu => {
+                    let mut b =
+                        CpuBackend::new(&cfg, &s.system, init).map_err(|e| e.to_string())?;
+                    if p.feature.radius_rule() {
+                        b.set_moon_radii_km(&s.radii_km)
+                            .map_err(|e| e.to_string())?;
+                    }
+                    Ok(Box::new(b))
                 }
-                measure::measure_with(&mut b, p.n, p.chaos, target_s, measure::MAX_STEPS, opt)
-            }
-            v => {
-                let mode = match v {
-                    Variant::GpuD => Mode::D,
-                    Variant::GpuC => Mode::C,
-                    _ => Mode::Dp,
-                };
-                let opts = Options {
-                    mode,
-                    ..Options::default()
-                };
-                let mut b = GpuBackend::with_options(&cfg, &s.system, init, opts)
-                    .map_err(|e| e.to_string())?;
-                env.adapter = b.adapter_name();
-                env.max_binding_bytes = b.limits().max_storage_buffer_binding_size;
-                env.max_buffer_bytes = b.limits().max_buffer_size;
-                if p.feature.radius_rule() {
-                    b.set_moon_radii_km(&s.radii_km)
+                v => {
+                    let mode = match v {
+                        Variant::GpuD => Mode::D,
+                        Variant::GpuC => Mode::C,
+                        _ => Mode::Dp,
+                    };
+                    let opts = Options {
+                        mode,
+                        ..Options::default()
+                    };
+                    let mut b = GpuBackend::with_options(&cfg, &s.system, init, opts)
                         .map_err(|e| e.to_string())?;
+                    adapter = Some((
+                        b.adapter_name(),
+                        b.limits().max_storage_buffer_binding_size,
+                        b.limits().max_buffer_size,
+                    ));
+                    if p.feature.radius_rule() {
+                        b.set_moon_radii_km(&s.radii_km)
+                            .map_err(|e| e.to_string())?;
+                    }
+                    Ok(Box::new(b))
                 }
-                measure::measure_with(&mut b, p.n, p.chaos, target_s, measure::MAX_STEPS, opt)
             }
+        };
+        if fresh {
+            measure::measure_fresh(&mut make, p.n, p.chaos, target_s, measure::MAX_STEPS, opt)
+        } else {
+            let mut b = make()?;
+            measure::measure_with(b.as_mut(), p.n, p.chaos, target_s, measure::MAX_STEPS, opt)
         }
     }));
+    if let Some((name, bind, buf)) = adapter {
+        env.adapter = name;
+        env.max_binding_bytes = bind;
+        env.max_buffer_bytes = buf;
+    }
     match caught {
         Ok(r) => r,
         Err(_) => Err("the backend panicked (probably out of memory)".to_string()),
@@ -452,6 +471,46 @@ mod tests {
                 }
             }
         }
+    }
+
+    /// Collision rows build a new backend for each repeat (one more for the
+    /// calibration); other rows build one.
+    #[test]
+    fn collision_rows_use_a_fresh_backend_per_repeat() {
+        let s = setup(2).unwrap();
+        let init = make_particles(&s.field, 200, State::Dense).unwrap();
+        let count = std::cell::Cell::new(0usize);
+        let p = feature_point(Feature::Coll, State::Dense, 200);
+        let mut cfg = point_config(&s.base, &p);
+        cfg.particles.count = 200;
+        let opt = measure::Options {
+            repeats: 2,
+            collisions_every: Some(10),
+        };
+        let mut make = || -> Result<Box<dyn Backend>, String> {
+            count.set(count.get() + 1);
+            let b = CpuBackend::new(&cfg, &s.system, &init).map_err(|e| e.to_string())?;
+            Ok(Box::new(b))
+        };
+        let t =
+            measure::measure_fresh(&mut make, 200, false, 0.02, measure::MAX_STEPS, opt).unwrap();
+        assert_eq!(count.get(), 3);
+        assert_eq!(t.raw_rates.len(), 2);
+        assert_eq!(t.repeat_coll.len(), 2);
+        assert!(
+            t.repeat_coll
+                .iter()
+                .all(|c| c.coll_steps == t.steps_per_call / 10)
+        );
+        assert_eq!(t.coll.unwrap().coll_steps, 2 * t.steps_per_call / 10);
+        // run_point takes this path for a collision row.
+        let mut env = RunEnv::default();
+        let t = run_point(&s, &init, p, 0.02, 2, &mut env).unwrap();
+        assert_eq!(t.repeat_coll.len(), 2);
+        // A row without collisions runs on one backend.
+        let q = feature_point(Feature::Loss, State::Dense, 200);
+        let t = run_point(&s, &init, q, 0.02, 2, &mut env).unwrap();
+        assert!(t.repeat_coll.is_empty());
     }
 
     /// Needs a GPU: `cargo test -p fring-bench --release -- --ignored`.

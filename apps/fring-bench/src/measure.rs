@@ -34,6 +34,10 @@ pub struct Timing {
     pub rate_median: f64,
     /// Collision statistics summed over the timed calls (collision rows only).
     pub coll: Option<CollTotals>,
+    /// The statistics of each repeat when the repeats ran on fresh backends
+    /// ([`measure_fresh`]); one entry per repeat. One entry (all repeats
+    /// together) from [`measure_with`]; empty without collisions.
+    pub repeat_coll: Vec<CollTotals>,
 }
 
 /// Collision statistics summed over the timed calls of one point.
@@ -154,21 +158,15 @@ pub fn measure(
     measure_with(b, n, chaos_on, target_s, max_steps, B1_OPTIONS)
 }
 
-/// [`measure`] with options (repeat count, collision statistics).
-pub fn measure_with(
+/// Warm-up and calibration: grow the probe until it takes at least a quarter
+/// of the target (short probes are dominated by launch costs), then pick the
+/// step count of one timed call (a multiple of `every`).
+fn calibrate(
     b: &mut dyn Backend,
-    n: usize,
-    chaos_on: bool,
     target_s: f64,
     max_steps: u64,
-    opt: Options,
-) -> Result<Timing, String> {
-    // Step counts are multiples of 10 and of `every` (collision steps fall on
-    // the end of a call, as in a real run).
-    let every = opt.collisions_every.unwrap_or(1);
-    let align = |k: u64| align_steps(k, every.max(1));
-    // Warm-up and calibration: grow the probe until it takes at least a
-    // quarter of the target (short probes are dominated by launch costs).
+    every: u64,
+) -> Result<u64, String> {
     let mut steps = MIN_STEPS;
     let mut t = time_step(b, steps)?;
     for _ in 0..4 {
@@ -178,38 +176,35 @@ pub fn measure_with(
         steps = choose_steps(steps, t, target_s, max_steps).max(steps + MIN_STEPS);
         t = time_step(b, steps)?;
     }
-    let steps = align(choose_steps(steps, t, target_s, max_steps));
-    if opt.collisions_every.is_some() {
-        // Clear the statistics of the calibration.
-        b.stats().map_err(|e| e.to_string())?;
-    }
-    let mut rates = Vec::with_capacity(opt.repeats);
-    for _ in 0..opt.repeats {
-        let s = time_step(b, steps)?;
-        rates.push(n as f64 * steps as f64 / s);
-    }
-    let coll = if opt.collisions_every.is_some() {
-        let st = b.stats().map_err(|e| e.to_string())?;
-        let c = st.collision;
-        Some(CollTotals {
-            coll_steps: opt.repeats as u64 * steps / every,
-            collisions: st.collisions_since_last,
-            candidates: c.candidates,
-            occupied_cells: c.occupied_cells,
-            occupancy_sum: c.occupancy_sum,
-            occupancy_sq_sum: c.occupancy_sq_sum,
-            lonely_particles: c.lonely_particles,
-            overfull_cells: c.overfull_cells,
-        })
-    } else {
-        None
-    };
-    let rate_best = rates.iter().copied().fold(f64::MIN, f64::max);
-    let rate_min = rates.iter().copied().fold(f64::MAX, f64::min);
-    // Read-back: step a little (so the host copy is stale), then time the copy.
+    Ok(align_steps(
+        choose_steps(steps, t, target_s, max_steps),
+        every,
+    ))
+}
+
+/// The collision statistics since the previous `stats()` call, for
+/// `coll_steps` collision steps.
+fn take_coll(b: &mut dyn Backend, coll_steps: u64) -> Result<CollTotals, String> {
+    let st = b.stats().map_err(|e| e.to_string())?;
+    let c = st.collision;
+    Ok(CollTotals {
+        coll_steps,
+        collisions: st.collisions_since_last,
+        candidates: c.candidates,
+        occupied_cells: c.occupied_cells,
+        occupancy_sum: c.occupancy_sum,
+        occupancy_sq_sum: c.occupancy_sq_sum,
+        lonely_particles: c.lonely_particles,
+        overfull_cells: c.overfull_cells,
+    })
+}
+
+/// Read-back: step a little (so the host copy is stale), then time the copy.
+fn time_readback(b: &mut dyn Backend, chaos_on: bool, every: u64) -> Result<f64, String> {
     let mut readback_s = f64::MAX;
     for _ in 0..2 {
-        b.step(align(MIN_STEPS)).map_err(|e| e.to_string())?;
+        b.step(align_steps(MIN_STEPS, every))
+            .map_err(|e| e.to_string())?;
         let t0 = Instant::now();
         {
             let v = b.particles().map_err(|e| e.to_string())?;
@@ -220,7 +215,32 @@ pub fn measure_with(
         }
         readback_s = readback_s.min(t0.elapsed().as_secs_f64());
     }
-    Ok(Timing {
+    Ok(readback_s)
+}
+
+fn sum_coll(parts: &[CollTotals]) -> CollTotals {
+    parts.iter().fold(CollTotals::default(), |a, c| CollTotals {
+        coll_steps: a.coll_steps + c.coll_steps,
+        collisions: a.collisions + c.collisions,
+        candidates: a.candidates + c.candidates,
+        occupied_cells: a.occupied_cells + c.occupied_cells,
+        occupancy_sum: a.occupancy_sum + c.occupancy_sum,
+        occupancy_sq_sum: a.occupancy_sq_sum + c.occupancy_sq_sum,
+        lonely_particles: a.lonely_particles + c.lonely_particles,
+        overfull_cells: a.overfull_cells + c.overfull_cells,
+    })
+}
+
+fn finish(
+    n: usize,
+    steps: u64,
+    rates: Vec<f64>,
+    readback_s: f64,
+    repeat_coll: Vec<CollTotals>,
+) -> Timing {
+    let rate_best = rates.iter().copied().fold(f64::MIN, f64::max);
+    let rate_min = rates.iter().copied().fold(f64::MAX, f64::min);
+    Timing {
         steps_per_call: steps,
         rate_best,
         rate_min,
@@ -229,8 +249,81 @@ pub fn measure_with(
         rate_with_readback: rate_with_readback(n, rate_best, FRAME_STEPS, readback_s),
         rate_median: median(&rates),
         raw_rates: rates,
-        coll,
-    })
+        coll: (!repeat_coll.is_empty()).then(|| sum_coll(&repeat_coll)),
+        repeat_coll,
+    }
+}
+
+/// [`measure`] with options (repeat count, collision statistics). All repeats
+/// run on the same backend, one after the other.
+pub fn measure_with(
+    b: &mut dyn Backend,
+    n: usize,
+    chaos_on: bool,
+    target_s: f64,
+    max_steps: u64,
+    opt: Options,
+) -> Result<Timing, String> {
+    // Step counts are multiples of 10 and of `every` (collision steps fall on
+    // the end of a call, as in a real run).
+    let every = opt.collisions_every.unwrap_or(1).max(1);
+    let steps = calibrate(b, target_s, max_steps, every)?;
+    if opt.collisions_every.is_some() {
+        // Clear the statistics of the calibration.
+        b.stats().map_err(|e| e.to_string())?;
+    }
+    let mut rates = Vec::with_capacity(opt.repeats);
+    for _ in 0..opt.repeats {
+        let s = time_step(b, steps)?;
+        rates.push(n as f64 * steps as f64 / s);
+    }
+    let repeat_coll = if opt.collisions_every.is_some() {
+        vec![take_coll(b, opt.repeats as u64 * steps / every)?]
+    } else {
+        Vec::new()
+    };
+    let readback_s = time_readback(b, chaos_on, every)?;
+    Ok(finish(n, steps, rates, readback_s, repeat_coll))
+}
+
+/// A way to make a backend in its initial state.
+pub type MakeBackend<'a> = dyn FnMut() -> Result<Box<dyn Backend>, String> + 'a;
+
+/// Like [`measure_with`] for collision rows: every repeat runs on a new
+/// backend in the initial state, so that the repeats measure the same state
+/// (collisions cool the ring, so repeats on one backend would not). One
+/// backend is made for the calibration and the read-back, then one per
+/// repeat, each warmed up with one untimed call of the smallest step count.
+/// The old backend is dropped before the next is made. The statistics of every
+/// repeat are kept in `Timing::repeat_coll`.
+pub fn measure_fresh(
+    make: &mut MakeBackend<'_>,
+    n: usize,
+    chaos_on: bool,
+    target_s: f64,
+    max_steps: u64,
+    opt: Options,
+) -> Result<Timing, String> {
+    let every = opt.collisions_every.unwrap_or(1).max(1);
+    let (steps, readback_s) = {
+        let mut b = make()?;
+        let steps = calibrate(b.as_mut(), target_s, max_steps, every)?;
+        (steps, time_readback(b.as_mut(), chaos_on, every)?)
+    };
+    let mut rates = Vec::with_capacity(opt.repeats);
+    let mut repeat_coll = Vec::with_capacity(opt.repeats);
+    for _ in 0..opt.repeats {
+        let mut b = make()?;
+        // Untimed warm-up of the new backend (pipelines, caches); its
+        // statistics are cleared.
+        b.step(align_steps(MIN_STEPS, every))
+            .map_err(|e| e.to_string())?;
+        b.stats().map_err(|e| e.to_string())?;
+        let s = time_step(b.as_mut(), steps)?;
+        rates.push(n as f64 * steps as f64 / s);
+        repeat_coll.push(take_coll(b.as_mut(), steps / every)?);
+    }
+    Ok(finish(n, steps, rates, readback_s, repeat_coll))
 }
 
 #[cfg(test)]

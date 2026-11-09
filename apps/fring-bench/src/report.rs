@@ -101,20 +101,27 @@ pub fn csv_b2(outcomes: &[Outcome]) -> String {
         );
         match &o.result {
             Ok(t) => {
-                let (cand, pairs, occ, cells, over) = match &t.coll {
-                    Some(c) => (
-                        format!("{:.4e}", c.candidates_per_particle(p.n)),
-                        format!("{:.4e}", c.collisions_per_particle(p.n)),
-                        format!("{:.4}", c.weighted_occupancy()),
-                        format!(
-                            "{:.1}",
-                            c.occupied_cells as f64 / c.coll_steps.max(1) as f64
-                        ),
-                        c.overfull_cells.to_string(),
-                    ),
-                    None => Default::default(),
-                };
                 for (k, r) in t.raw_rates.iter().enumerate() {
+                    // The statistics of this repeat if they were kept per
+                    // repeat, else those of all repeats together.
+                    let coll = if t.repeat_coll.len() == t.raw_rates.len() {
+                        t.repeat_coll.get(k)
+                    } else {
+                        t.coll.as_ref()
+                    };
+                    let (cand, pairs, occ, cells, over) = match coll {
+                        Some(c) => (
+                            format!("{:.4e}", c.candidates_per_particle(p.n)),
+                            format!("{:.4e}", c.collisions_per_particle(p.n)),
+                            format!("{:.4}", c.weighted_occupancy()),
+                            format!(
+                                "{:.1}",
+                                c.occupied_cells as f64 / c.coll_steps.max(1) as f64
+                            ),
+                            c.overfull_cells.to_string(),
+                        ),
+                        None => Default::default(),
+                    };
                     s.push_str(&format!(
                         "{head},{},ok,{},{r:.4e},{cand},{pairs},{occ},{cells},{over},\n",
                         k + 1,
@@ -286,6 +293,7 @@ mod tests {
                 raw_rates: vec![9.4e8, 9.52e8, 9.5e8],
                 rate_median: 9.5e8,
                 coll: None,
+                repeat_coll: Vec::new(),
             }),
         }
     }
