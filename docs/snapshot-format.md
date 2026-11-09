@@ -133,7 +133,7 @@ Written by `fring-run` at the end of a run that has a `[diagnostics.chaos]` tabl
 - `ftle_per_day`: finite-time Lyapunov exponent L / t, day^-1, with t the time of the last renormalisation.
 - `log_growth`: L, the sum of ln(d / d0) over the renormalisations (dimensionless).
 - `megno_mean`: the mean MEGNO. About 2 for a regular orbit, about lambda t / 2 for a chaotic one. Classes used in G3: regular <= 2.5, chaotic >= 5 (ADR 0008).
-- `flags`: bit 0 means that an interval had a zero or non-finite separation and was skipped. Bit 1 (value 2) means that the particle was lost (ICR-004, `on_unbound = "freeze"`; the reason is in `drops.csv`, section 8b). A backend sets this bit at its next renormalisation, so `fring-run` also sets it from the drop report. The file then marks every lost particle, also one that was lost after the last renormalisation, and the CPU and GPU files agree. Older readers ignore the bit.
+- `flags`: bit 0 means that an interval had a zero or non-finite separation and was skipped. Bit 1 (value 2) means that the particle was lost (ICR-004, `on_unbound = "freeze"`; the reason is in `drops.csv`, section 8b). The CPU backend sets this bit when it makes the report; the GPU backend sets it only at its next renormalisation. So `fring-run` also sets it from the drop report. The file then marks every lost particle, also one that was lost after the last renormalisation, and the CPU and GPU files agree. Older readers ignore the bit.
 
 The definition of the indicator (shadow offset, renormalisation, MEGNO formula) is in `docs/adr/0008-chaos-indicator.md`. `meta.json` gets an optional `chaos` object (section 9).
 
