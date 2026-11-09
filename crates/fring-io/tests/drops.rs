@@ -11,7 +11,7 @@ fn rows() -> Vec<DropRow> {
             reason: 1,
             drop_step: 17,
             time_s: 17.0 * 356.0,
-            position_km: [1.0e-300, -0.0, 140_221.123_456_789_01],
+            position_km: [1.0e-300, -0.0, 140_221.123_456_789],
             velocity_km_s: [-20.5, 0.1 + 0.2, 1.0e5],
         },
         DropRow {
@@ -65,7 +65,7 @@ fn crash_rule_drops_an_unfinished_last_line_at_every_cut() {
     let head = DROPS_COLUMNS.join(",").len() + 1;
     let first_end = head + full[head..].find('\n').unwrap() + 1;
     for cut in head..full.len() {
-        let r = read_drops_csv_report(&mut full[..cut].as_bytes()).unwrap();
+        let r = read_drops_csv_report(&mut &full.as_bytes()[..cut]).unwrap();
         let complete = if cut >= first_end { 1 } else { 0 };
         let ends_on_newline = full.as_bytes()[cut - 1] == b'\n';
         let expect = if cut == full.len() {
