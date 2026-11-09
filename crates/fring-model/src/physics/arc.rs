@@ -36,6 +36,7 @@
 use super::frames::reference_mean_motion;
 use super::gravity::SaturnField;
 use crate::config::Domain;
+use crate::real::sin_cos;
 use crate::{Error, Real, Result, Vec3};
 
 /// Most rotations of one wrap. A particle that needs more has left the arc by
@@ -177,18 +178,21 @@ impl ArcGeometry {
     /// computed in f64 (the GPU table holds these).
     pub fn centre_cos_sin(&self, t_s: f64) -> (f64, f64) {
         let a = self.centre_at_rad(t_s);
-        (a.cos(), a.sin())
+        let (s, c) = sin_cos(a);
+        (c, s)
     }
 
     /// Cosine and sine of the half width, `(cos Δθ/2, sin Δθ/2)`.
     pub fn half_width_cos_sin(&self) -> (f64, f64) {
         let h = 0.5 * self.width_rad;
-        (h.cos(), h.sin())
+        let (s, c) = sin_cos(h);
+        (c, s)
     }
 
     /// Cosine and sine of the width, `(cos Δθ, sin Δθ)`.
     pub fn width_cos_sin(&self) -> (f64, f64) {
-        (self.width_rad.cos(), self.width_rad.sin())
+        let (s, c) = sin_cos(self.width_rad);
+        (c, s)
     }
 
     /// True if the position is outside the wedge at time `t_s`. The test is
@@ -230,7 +234,8 @@ impl ArcGeometry {
         };
         let m = (d / self.width_rad).round();
         let a = -m * self.width_rad;
-        let (c, s) = (T::from_f64(a.cos()), T::from_f64(a.sin()));
+        let (sa, ca) = sin_cos(a);
+        let (c, s) = (T::from_f64(ca), T::from_f64(sa));
         let w = self.wrap(rot(pos_km, c, s), rot(vel_km_s, c, s), t_s)?;
         Some(Wrapped {
             k: w.k - m as i32,
