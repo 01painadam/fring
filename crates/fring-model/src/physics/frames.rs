@@ -15,6 +15,7 @@
 
 use super::circular::frequencies;
 use super::gravity::SaturnField;
+use crate::real::sin_cos;
 use crate::{Real, Vec3};
 
 /// A state in local coordinates (km and km/s).
@@ -55,7 +56,7 @@ pub fn inertial_to_rotating<T: Real>(
     t_s: T,
 ) -> (Vec3<T>, Vec3<T>) {
     let theta = n0_rad_s * t_s;
-    let (c, s) = (theta.cos(), theta.sin());
+    let (s, c) = sin_cos(theta);
     let p = rot(pos_km, c, -s);
     let v = rot(vel_km_s, c, -s);
     // minus n0 z_hat x r_rot = + n0 (y, -x, 0)
@@ -73,7 +74,7 @@ pub fn rotating_to_inertial<T: Real>(
     t_s: T,
 ) -> (Vec3<T>, Vec3<T>) {
     let theta = n0_rad_s * t_s;
-    let (c, s) = (theta.cos(), theta.sin());
+    let (s, c) = sin_cos(theta);
     // add n0 z_hat x r_rot = n0 (-y, x, 0)
     let v = Vec3::new(
         vel_km_s.x - n0_rad_s * pos_km.y,
@@ -104,7 +105,7 @@ pub fn rotating_to_local<T: Real>(pos_km: Vec3<T>, vel_km_s: Vec3<T>, a0_km: T) 
 pub fn local_to_rotating<T: Real>(l: &LocalState<T>, a0_km: T) -> (Vec3<T>, Vec3<T>) {
     let rho = l.x_km + a0_km;
     let phi = l.y_km / a0_km;
-    let (c, s) = (phi.cos(), phi.sin());
+    let (s, c) = sin_cos(phi);
     let phi_dot = l.vy_km_s / a0_km;
     (
         Vec3::new(rho * c, rho * s, l.z_km),
