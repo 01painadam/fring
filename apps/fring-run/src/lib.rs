@@ -660,3 +660,214 @@ fn execute<B: Backend>(
         particle_steps_per_s: particle_steps / stepping_s.max(1e-9),
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use fring_model::{ChaosReport, Error as ModelError, StepStats, Vec3};
+
+    fn params_dir() -> PathBuf {
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../params")
+    }
+
+    fn particles(n: u32) -> Particles {
+        let mut p = Particles::with_capacity(n as usize);
+        // Ids in reverse order, so the sort by id is tested.
+        for k in 0..n {
+            let id = n - 1 - k;
+            p.push(
+                id,
+                Vec3::new(f64::from(id) + 0.5, 2.0, 3.0),
+                Vec3::new(4.0, 5.0, f64::from(id)),
+            );
+        }
+        p
+    }
+
+    #[test]
+    fn drop_rows_are_sorted_by_id_and_use_the_given_start_and_step() {
+        let p = particles(5); // index 0 has id 4, index 4 has id 0
+        let report = DropReport {
+            time_s: 0.0,
+            // indices 0 (id 4): unbound; 2 (id 2): inside moon 1; others live
+            reason: vec![1, 0, 3, 0, 0],
+            drop_step: vec![9, u64::MAX, 7, u64::MAX, u64::MAX],
+            n_unbound: 1,
+            n_inside_moon: vec![0, 1],
+        };
+        let rows = drop_rows(&report, &p, 1000.0, 360.0).unwrap();
+        assert_eq!(rows.len(), 2);
+        assert_eq!((rows[0].id, rows[0].reason, rows[0].drop_step), (2, 3, 7));
+        assert_eq!(rows[0].time_s, 1000.0 + 7.0 * 360.0);
+        assert_eq!(rows[0].position_km, [2.5, 2.0, 3.0]);
+        assert_eq!(rows[0].velocity_km_s, [4.0, 5.0, 2.0]);
+        assert_eq!((rows[1].id, rows[1].reason, rows[1].drop_step), (4, 1, 9));
+        // A lost particle without a drop step, and a wrong length, are errors.
+        let mut bad = report.clone();
+        bad.drop_step[0] = u64::MAX;
+        assert!(drop_rows(&bad, &p, 0.0, 1.0).is_err());
+        bad = report;
+        bad.reason.pop();
+        assert!(drop_rows(&bad, &p, 0.0, 1.0).is_err());
+    }
+
+    #[test]
+    fn radii_follow_the_track_order_of_the_system() {
+        let dir = params_dir();
+        let text = std::fs::read_to_string(dir.join("moons.toml")).unwrap();
+        let saturn =
+            saturn_from_toml_str(&std::fs::read_to_string(dir.join("saturn.toml")).unwrap())
+                .unwrap();
+        let all = moons_from_toml_str(&text).unwrap();
+        for include in [["prometheus", "pandora"], ["pandora", "prometheus"]] {
+            let include: Vec<String> = include.iter().map(|s| s.to_string()).collect();
+            let moons = select_moons(&include, all.clone()).unwrap();
+            let eph = build_ephemeris(&saturn, &moons, 1.0e5, DEFAULT_INTERVAL_S).unwrap();
+            let names: Vec<String> = eph.tracks.iter().map(|t| t.name.clone()).collect();
+            assert_eq!(
+                names,
+                include.iter().map(String::as_str).collect::<Vec<_>>()
+            );
+            let system = System { saturn, moons: eph };
+            let radii = moon_radii_for(&text, &system).unwrap();
+            // Radii of params/moons.toml: Prometheus 43.09 km.
+            let k = names.iter().position(|n| *n == "prometheus").unwrap();
+            assert_eq!(radii[k], 43.09);
+            assert!(radii[1 - k] > 30.0 && radii[1 - k] < 60.0 && radii[1 - k] != 43.09);
+        }
+    }
+
+    /// A backend that loses particles 1 (unbound, step 3) and 2 (inside moon 0,
+    /// step 5), and fails in the `fail_at`-th call of `step`.
+    struct Mock {
+        time_s: f64,
+        calls: u64,
+        fail_at: u64,
+        p: Particles,
+    }
+
+    impl Backend for Mock {
+        fn new(_: &RunConfig, _: &System, _: &InitialState) -> fring_model::Result<Self> {
+            unreachable!()
+        }
+        fn step(&mut self, n: u64) -> fring_model::Result<()> {
+            self.calls += 1;
+            if self.calls == self.fail_at {
+                return Err(ModelError::Backend("mock failure".into()));
+            }
+            self.time_s += n as f64 * 360.0;
+            Ok(())
+        }
+        fn time_s(&self) -> f64 {
+            self.time_s
+        }
+        fn moons(&self) -> fring_model::MoonState {
+            fring_model::MoonState {
+                time_s: self.time_s,
+                moons: Vec::new(),
+            }
+        }
+        fn particles(&mut self) -> fring_model::Result<ParticleView<'_>> {
+            Ok(ParticleView {
+                time_s: self.time_s,
+                particles: &self.p,
+            })
+        }
+        fn stats(&mut self) -> fring_model::Result<StepStats> {
+            Ok(StepStats {
+                time_s: self.time_s,
+                ..Default::default()
+            })
+        }
+        fn chaos(&mut self) -> fring_model::Result<Option<ChaosReport>> {
+            Ok(None)
+        }
+        fn dropped(&mut self) -> fring_model::Result<Option<DropReport>> {
+            Ok(Some(DropReport {
+                time_s: self.time_s,
+                reason: vec![0, 1, 2, 0],
+                drop_step: vec![u64::MAX, 3, 5, u64::MAX],
+                n_unbound: 1,
+                n_inside_moon: vec![1],
+            }))
+        }
+    }
+
+    fn mock_run(fail_at: u64, name: &str) -> (Result<Summary, RunError>, RunDir, PathBuf) {
+        let dir = params_dir();
+        let config_text = format!(
+            "[run]\nname = \"mock\"\nbackend = \"cpu\"\nseed = 1\nparams_dir = {:?}\n\
+             [time]\nstep_s = 360.0\nduration_years = 0.001\n\
+             [frame]\nreference_semi_major_axis_km = 140220.0\n\
+             [domain]\nkind = \"full_ring\"\n[moons]\ninclude = []\n[particles]\ncount = 4\n\
+             [particles.distribution]\nkind = \"clump\"\nsemi_major_axis_km = 140200.0\n\
+             longitude_deg = 10.0\nsigma_km = 6.0\n[collisions]\nmodel = \"none\"\n\
+             [loss]\non_unbound = \"freeze\"\n\
+             [output]\nframe_every_steps = 10\nstats_every_steps = 10\nvelocities = false\n",
+            dir.to_string_lossy()
+        );
+        let config = RunConfig::from_toml_str(&config_text).unwrap();
+        let saturn =
+            saturn_from_toml_str(&std::fs::read_to_string(dir.join("saturn.toml")).unwrap())
+                .unwrap();
+        let system = System {
+            saturn,
+            moons: fring_model::MoonEphemeris::none(),
+        };
+        let out_dir =
+            std::env::temp_dir().join(format!("fring-run-mock-{}-{name}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&out_dir);
+        let ctx = Context {
+            config: &config,
+            system: &system,
+            config_bytes: config_text.as_bytes(),
+            a0_km: 140_220.0,
+            n0_rad_s: 1.0e-4,
+            n_steps: config.time.n_steps(),
+            start_s: 100.0,
+            out: RunDir::new(&out_dir),
+        };
+        let backend = Mock {
+            time_s: 100.0,
+            calls: 0,
+            fail_at,
+            p: particles(4),
+        };
+        let mut progress = Progress {
+            quiet: true,
+            start: Instant::now(),
+            last: Instant::now(),
+        };
+        let r = execute(backend, &ctx, &mut progress);
+        (r, RunDir::new(&out_dir), out_dir)
+    }
+
+    #[test]
+    fn a_failed_step_still_writes_drops_csv_and_returns_the_first_error() {
+        let (r, dir, out) = mock_run(2, "fail");
+        let e = r.unwrap_err();
+        assert!(
+            matches!(&e, RunError::Run(m) if m.contains("mock failure")),
+            "{e}"
+        );
+        let rows = dir.read_drops_file().unwrap();
+        assert_eq!(rows.len(), 2);
+        // The mock lists ids 3, 2, 1, 0: index 2 is id 1, index 1 is id 2.
+        assert_eq!((rows[0].id, rows[0].reason, rows[0].drop_step), (1, 2, 5));
+        assert_eq!((rows[1].id, rows[1].reason, rows[1].drop_step), (2, 1, 3));
+        assert_eq!(rows[1].time_s, 100.0 + 3.0 * 360.0);
+        assert!(
+            !dir.meta_path().exists(),
+            "no meta.json: the run did not finish"
+        );
+        let _ = std::fs::remove_dir_all(out);
+    }
+
+    #[test]
+    fn a_finished_run_writes_the_same_file() {
+        let (r, dir, out) = mock_run(u64::MAX, "ok");
+        r.unwrap();
+        assert_eq!(dir.read_drops_file().unwrap().len(), 2);
+        let _ = std::fs::remove_dir_all(out);
+    }
+}
