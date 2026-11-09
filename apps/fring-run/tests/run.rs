@@ -480,8 +480,15 @@ fn gpu_stochastic_with_chaos_is_a_clean_setup_error() {
     assert_eq!(e.exit_code(), 2);
 }
 
-/// The CPU backend wraps particles into the arc (D1-CPU): the run completes
-/// and every particle of every frame stays inside the arc.
+/// The CPU backend wraps particles into the arc (D1-CPU): the run completes,
+/// every particle of every frame stays inside the arc, and particles do wrap.
+///
+/// Power: the start is a uniform band of a0 +- 300 km (circular orbits), so the
+/// drift against the arc is (n - n0) = -(3/2) n0 da / a0, up to about 1.9
+/// deg/day at the band edges. Over 0.02 years (7.3 d, frames every 2.5 d) the
+/// edge particles drift about 13 deg, more than the 10 deg arc, so some must
+/// wrap between two frames. Without the wrap the bound check and the wrap
+/// count would both fail.
 #[test]
 fn cpu_arc_run_keeps_particles_in_the_arc() {
     let width_deg: f64 = 10.0;
@@ -490,20 +497,44 @@ fn cpu_arc_run_keeps_particles_in_the_arc() {
         "kind = \"full_ring\"",
         &format!("kind = \"arc\"\nwidth_deg = {width_deg}\ncentre_longitude_deg = 0.0"),
     );
-    let text = replace(&text, "duration_years = 0.02", "duration_years = 0.004");
+    let text = replace(
+        &text,
+        "kind = \"core\"",
+        "kind = \"band\"\nmin_semi_major_axis_km = 139920.0\nmax_semi_major_axis_km = 140520.0",
+    );
+    let text = replace(
+        &text,
+        "semi_major_axis_km = 140220.0\nsigma_semi_major_axis_km = 5.0\neccentricity = 0.0024\napse_longitude_deg = 0.0\n",
+        "",
+    );
     let tmp = Tmp::new();
     let (dir, _) = run_config(&tmp, &text, "arc", true).unwrap();
     let frames = dir.list_frames().unwrap();
-    assert!(!frames.is_empty());
+    assert!(frames.len() >= 3);
+    let mut wraps = 0usize;
+    let mut previous: Option<Vec<f32>> = None;
     for i in frames {
         let f = dir.read_frame_file(i).unwrap();
-        // Rotating frame: y is the azimuthal offset from the arc centre (km).
-        let half_km = f.a0_km * (0.5 * width_deg).to_radians();
+        // The rotating frame turns at n0 and the arc centre moves with it, so
+        // y (km, azimuthal offset from the arc centre) must satisfy
+        // |y| <= a0 sin(width/2), plus 0.1% slack for f32 frames and for the
+        // difference between the chord and the arc length at the edge.
+        let half_km = f.a0_km * (0.5 * width_deg).to_radians().sin();
         for (k, y) in f.y_km.iter().enumerate() {
             assert!(
                 (*y as f64).abs() <= half_km * 1.001,
                 "frame {i} particle {k}: y = {y} km, half arc {half_km} km"
             );
         }
+        if let Some(prev) = &previous {
+            wraps += prev
+                .iter()
+                .zip(&f.y_km)
+                .filter(|(a, b)| ((**b - **a) as f64).abs() > half_km)
+                .count();
+        }
+        previous = Some(f.y_km.clone());
     }
+    println!("arc wraps between frames: {wraps}");
+    assert!(wraps >= 1, "no particle wrapped: the test has no power");
 }
