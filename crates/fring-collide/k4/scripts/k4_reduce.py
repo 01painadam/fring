@@ -1,10 +1,10 @@
 """K4: reduce one run directory (frames with velocities + stats.csv) to a time series CSV.
 
-Usage: uv run python scripts/k4_reduce.py <rundir> <out.csv> [--radius-km 0.01]
+Usage: uv run python scripts/k4_reduce.py <rundir> <out.csv>
 Frame format: docs/snapshot-format.md section 5 (rotating frame, f32).
 Columns: orbit, c_rho, c_phi, c_z (km/s), sigma2_km2 (variance of rho minus c_rho^2/kappa^2),
-n_active, coll_per_particle_per_orbit, loss_per_particle_per_s (from stats.csv rows in the
-interval before the frame), deep, gmax_exceeded.
+n (particles), n0_rad_s (mean motion), and from the stats.csv rows with steps_total in (previous frame, this frame]:
+coll (accepted pairs), loss (sum of energy_loss_km2_s2), deep, gmax_exceeded.
 """
 import sys, struct, csv, glob, os
 import numpy as np
@@ -58,12 +58,11 @@ def main():
         # stats rows in (prev_step, step]
         sel = [r for r in rows if prev_step < int(r["steps_total"]) <= step]
         nrows = len(sel)
-        dt = (step - prev_step) * float(sys.argv[3]) if len(sys.argv) > 3 else None
         coll = sum(int(r["collisions_since_last"]) for r in sel)
         loss = sum(float(r.get("energy_loss_km2_s2", 0) or 0) for r in sel)
         deep = sum(int(r.get("deep_collisions", 0) or 0) for r in sel)
         gx = sum(int(r.get("gmax_exceeded", 0) or 0) for r in sel)
-        res.append(dict(step=step, t_s=t, orbit=t * n0 / (2 * np.pi), n=len(x),
+        res.append(dict(step=step, t_s=t, orbit=t * n0 / (2 * np.pi), n=len(x), n0_rad_s=n0,
                         c_rho=np.sqrt(c_rho2), c_phi=np.sqrt(max(c_phi2, 0)), c_z=np.sqrt(c_z2),
                         sigma2_km2=s2, coll=coll, loss=loss, deep=deep, gmax_exceeded=gx, dsteps=step - prev_step))
         prev_step = step
