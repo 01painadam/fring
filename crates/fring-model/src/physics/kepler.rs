@@ -2,6 +2,7 @@
 //! Wisdom-Holman split (ADR 0003).
 
 use crate::{Real, Vec3};
+use core::hint::black_box;
 
 /// Moves a particle on its Kepler orbit (point mass GM only) for `dt_s`
 /// seconds, with the f and g functions and a Newton solve for the change
@@ -44,7 +45,10 @@ pub fn kepler_drift<T: Real>(
     // Solve F(x) = x - ecos0 sin x + esin0 (1 - cos x) - m = 0. F' = r/a > 0.
     let mut x = m;
     for _ in 0..40 {
-        let (s, c) = (x.sin(), x.cos());
+        // GOLDEN-REL: two separate black_box calls, so LLVM cannot fuse sin and cos
+        // into macOS `__sincos_stret` (up to 2 ulp from `sin`; release fused, debug did not).
+        let s = black_box(x).sin();
+        let c = black_box(x).cos();
         let f = x - ecos0 * s + esin0 * (T::ONE - c) - m;
         let fp = T::ONE - ecos0 * c + esin0 * s;
         let dx = f / fp;
@@ -56,7 +60,10 @@ pub fn kepler_drift<T: Real>(
     if !x.to_f64().is_finite() {
         return None;
     }
-    let (s, c) = (x.sin(), x.cos());
+    // GOLDEN-REL: two separate black_box calls, so LLVM cannot fuse sin and cos
+    // into macOS `__sincos_stret` (up to 2 ulp from `sin`; release fused, debug did not).
+    let s = black_box(x).sin();
+    let c = black_box(x).cos();
     // 1 - cos x without cancellation for small x.
     let sh = (T::from_f64(0.5) * x).sin();
     let one_minus_c = two * sh * sh;
@@ -76,4 +83,41 @@ pub fn kepler_drift<T: Real>(
         fdot * pos_km.z + gdot * vel_km_s.z,
     );
     Some((pos, vel))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// GOLDEN-REL guard: the bits of `kepler_drift` must not depend on the
+    /// build profile. In release, LLVM used to fuse `sin` and `cos` into
+    /// macOS `__sincos_stret`, which differs from `sin` by up to 2 ulp.
+    /// The hash was recorded in a debug build; the test runs in both.
+    #[test]
+    fn kepler_drift_bits_do_not_depend_on_the_profile() {
+        let gm = 37_931_208.0_f64;
+        let mut h = 0xcbf2_9ce4_8422_2325_u64;
+        let mut eat = |x: f64| {
+            for b in x.to_bits().to_le_bytes() {
+                h ^= u64::from(b);
+                h = h.wrapping_mul(0x0000_0100_0000_01b3);
+            }
+        };
+        for i in 0..40_000_u32 {
+            let u = f64::from(i);
+            let a = 139_000.0 + 2.0 * (u * 0.618_033_988_7).fract() * 1000.0;
+            let phi = u * 2.399_963;
+            let (sp, cp) = (black_box(phi).sin(), black_box(phi).cos());
+            let ecc = 0.02 * (u * 0.414_213_562).fract();
+            let pos = Vec3::new(a * cp, a * sp, 5.0 * (u * 0.7).sin());
+            let v = (gm / a).sqrt() * (1.0 + ecc);
+            let vel = Vec3::new(-v * sp, v * cp, 1e-4 * (u * 1.3).cos());
+            let dt = 10.0 + 9000.0 * (u * 0.302_775).fract();
+            let (p, w) = kepler_drift(gm, pos, vel, dt).unwrap();
+            for x in [p.x, p.y, p.z, w.x, w.y, w.z] {
+                eat(x);
+            }
+        }
+        assert_eq!(h, 0xc5c7_1a22_e953_0ca3, "hash {h:#018x}");
+    }
 }
