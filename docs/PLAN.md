@@ -24,7 +24,7 @@ In scope:
 - Prometheus and Pandora as massive bodies that interact with Saturn and with each other.
 - Ring particles that feel Saturn and the moons but do not affect the moons.
 - Collisions between ring particles: a stochastic superparticle model (primary) and a hard-sphere model (check).
-- Two domains: full ring and a co-moving arc of the core.
+- Two domains: full ring and a co-moving arc of the core. Science runs use the full ring; the arc is kept for local collision tests such as K4 (D2 result, AJ decision 2026-11-09).
 - GPU backend (wgpu on Metal) as the main engine, with a CPU f64 backend as the reference.
 
 Not in scope (v1): particle self-gravity, other moons (Mimas, Janus, Epimetheus etc.), radiation forces, plasma drag, particle growth or fragmentation, J8 and higher.
@@ -181,7 +181,7 @@ For a circular equatorial orbit in the potential of section 7.1 these are exact,
 
 ### 7.3 Integrators
 
-- **Baseline (ADR 0003):** Wisdom-Holman split: an exact Kepler drift about Saturn alternates with kicks from J2, J4, J6 and the moons, drift-kick-drift, fixed step. Target 150 steps per orbit. At 150 steps per orbit it gives the apse precession at the core to 0.001 %; the plain leapfrog gives −9.7 % (ADR 0003). The former option C5 is now the baseline.
+- **Baseline (ADR 0003):** Wisdom-Holman split: an exact Kepler drift about Saturn alternates with kicks from J2, J4, J6 and the moons, drift-kick-drift, fixed step. Target 150 steps per orbit. At 150 steps per orbit it gives the apse precession at the core to 0.001 %; the plain leapfrog gives −9.7 % (ADR 0003). The former option C5 is now the baseline. Amendment (ICR-011, accepted by AJ 2026-11-09): the drift is about μ_eff = n(a₀)² a₀³, the exact in-plane circular rate of the J2, J4, J6 field at a₀, and the kick adds (μ_eff − GM) r/|r|³. The total force does not change. The drift about GM gave a secular along-track error of 12.8 km per year at the production step; with μ_eff it is 0.11 km per year or less over 139,500 to 141,500 km (CPU: WH-EFF-CPU; GPU: WH-EFF-GPU).
 - **Reference:** the drift-kick-drift leapfrog (task C1) stays in the code for comparison and fast tests.
 - Close encounters with Prometheus: measure the closest approach distribution. If some particles need smaller steps, use per-particle sub-stepping (block time steps) rather than reducing the global step.
 
@@ -205,7 +205,7 @@ Both models share one specification (`fring-collide/SPEC.md`) and one set of sta
 ### 7.6 Domains
 
 - **Full ring:** all longitudes. Used for test particles and for low-density collisional runs.
-- **Co-moving arc:** an azimuthal arc of width Δθ that rotates at n₀. Particles that leave one end come in at the other end with the same local x, z and velocity. Moon forces stay exact (moons move in the inertial frame). This is an approximation: wrapped particles change their phase relative to Prometheus. Task D2 measures the error against the full ring.
+- **Co-moving arc:** an azimuthal arc of width Δθ that rotates at n₀. Particles that leave one end come in at the other end with the same local x, z and velocity. Moon forces stay exact (moons move in the inertial frame). This is an approximation: wrapped particles change their phase relative to Prometheus. Task D2 measures the error against the full ring. D2 result (2026-11-09, `validation/reports/d2.md`): no width in {5°, 10°, 30°} meets the 5 % rule over 5 years. With an eccentric core the fold and the wrap rotate the apse by whole widths (coherent e falls by 98 to 99 %); with e = 0 the moon-forced structure depends on longitude relative to Prometheus, which the arc cannot follow (mean e 7.5 to 10.7 % low at 5 years). AJ decision: science runs use the full ring.
 
 ### 7.7 Diagnostics
 
@@ -308,7 +308,7 @@ Task format: ID, owner, description, acceptance criteria. Tasks in the same phas
 
 - **W2-MOONLET (A7; added by AJ, 2026-11-03).** A "Moonlet" scenario in the web page: all particles start in a loosely packed moonlet (`moonlet` distribution, ICR-008) at a selected orbital radius, uniform in a selected packing radius, 180° from Prometheus at t = 0. A "Velocity" control selects the start velocities: synchronous, centre or circular. A view "On the moonlet" is centred on the moonlet centre's circular orbit from t = 0 and turns with it (Hill's frame: a synchronous moonlet starts at rest there). *Done when:* host tests pass (the view keeps the centre at the origin; a synchronous particle has zero view velocity at t = 0); in Chrome on the Mac mini the scenario runs in each velocity mode and the view works with Compare; `?bench` at 10⁵ still gives mean 30 fps or more.
 
-**Gate G4 (AJ):** collision models validated; arc size chosen; close encounters handled (E1-CPU, E1-GPU, A3-ANALYSIS); cost of collisions and sub-stepping measured (B2).
+**Gate G4 (AJ):** collision models validated; arc not used for science runs (D2, AJ 2026-11-09); close encounters handled (E1-CPU, E1-GPU, A3-ANALYSIS); cost of collisions and sub-stepping measured (B2).
 
 ### Phase 5: science runs
 
