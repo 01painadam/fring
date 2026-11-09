@@ -133,12 +133,7 @@ fn cmd_windows(a: &[String]) -> Res<()> {
         windows.push((lo.parse()?, hi.parse()?));
     }
     let lost = fring_analysis::loss::read_lost(Path::new(&a[0]))?;
-    let t = fring_analysis::loss::window_table(
-        &pts,
-        &lost,
-        &windows,
-        years,
-    );
+    let t = fring_analysis::loss::window_table(&pts, &lost, &windows, years);
     let mut f = BufWriter::new(File::create(&a[1])?);
     fring_analysis::loss::write_window_csv(&mut f, &t)?;
     println!("windows: {} particles, {} lost", pts.len(), lost.len());
