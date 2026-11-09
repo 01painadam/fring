@@ -23,6 +23,7 @@ use fring_collide::hard_sphere::HardSphereModel;
 use fring_collide::stochastic::{CellList, CellScratch, Domain, StochasticModel};
 use fring_collide::tally::Tally;
 use fring_model::config::Collisions;
+use fring_model::physics::ArcGeometry;
 use fring_model::physics::SaturnField;
 use fring_model::physics::frames::reference_mean_motion;
 use fring_model::{Error, Result, RunConfig, Vec3};
@@ -97,13 +98,6 @@ impl CollisionState {
             Collisions::HardSphere { .. } => "hard_sphere",
             _ => "stochastic",
         };
-        if matches!(config.domain, fring_model::config::Domain::Arc { .. }) {
-            return Err(Error::Config(
-                "collisions with domain.kind = \"arc\" are not implemented on the CPU backend \
-                 yet (task D1-CPU)"
-                    .to_string(),
-            ));
-        }
         if config
             .diagnostics
             .as_ref()
@@ -120,20 +114,24 @@ impl CollisionState {
         let a0 = config.frame.reference_semi_major_axis_km;
         let n0 = reference_mean_motion(field, a0);
         let bad = || Error::Config("collisions: invalid cell sizes or reference orbit".into());
+        let arc = ArcGeometry::from_domain(&config.domain, n0)?;
         let kind = match config.collisions {
             Collisions::HardSphere { .. } => {
                 let model = HardSphereModel::from_config(&config.collisions).ok_or_else(bad)?;
                 // The cell grid of K3 counts the cells along the ring in a u32:
                 // 2 pi a0 / (2 s) must stay below 2^32 (s of about 10 cm at the
                 // F ring). Smaller particles need the arc domain (D1-CPU).
-                let domain = model.full_ring_domain(a0, n0).ok_or_else(|| {
-                    Error::Config(format!(
-                        "collisions.particle_radius_km is too small for the full ring: the \
+                let domain = match arc {
+                    Some(g) => model.arc_domain(a0, g).ok_or_else(bad)?,
+                    None => model.full_ring_domain(a0, n0).ok_or_else(|| {
+                        Error::Config(format!(
+                            "collisions.particle_radius_km is too small for the full ring: the \
                          cell grid needs 2 pi a0 / (2 s) < 2^32 cells along the ring \
-                         (s >= {:.2e} km); use a smaller domain (task D1-CPU)",
-                        std::f64::consts::TAU * a0 / (2.0 * f64::from(u32::MAX))
-                    ))
-                })?;
+                         (s >= {:.2e} km); use domain.kind = \"arc\"",
+                            std::f64::consts::TAU * a0 / (2.0 * f64::from(u32::MAX))
+                        ))
+                    })?,
+                };
                 Kind::HardSphere {
                     model,
                     domain,
@@ -142,8 +140,25 @@ impl CollisionState {
                 }
             }
             _ => {
-                let domain =
-                    Domain::full_ring_from_config(&config.collisions, a0, n0).ok_or_else(bad)?;
+                let domain = match (arc, &config.collisions) {
+                    (
+                        Some(g),
+                        Collisions::Stochastic {
+                            cell_radial_km,
+                            cell_azimuthal_km,
+                            cell_vertical_km,
+                            ..
+                        },
+                    ) => Domain::arc_domain(
+                        *cell_radial_km,
+                        *cell_azimuthal_km,
+                        *cell_vertical_km,
+                        a0,
+                        g,
+                    ),
+                    _ => Domain::full_ring_from_config(&config.collisions, a0, n0),
+                }
+                .ok_or_else(bad)?;
                 let model = StochasticModel::from_config(&config.collisions, config.run.seed)
                     .ok_or_else(bad)?;
                 Kind::Stochastic { model, domain }
@@ -312,8 +327,17 @@ impl CollisionState {
         times.write_s = t2.elapsed().as_secs_f64();
 
         let t3 = Instant::now();
-        let separation = |i: usize, j: usize, _shift: i8| pos(i) - pos(j);
-        let tally = model.resolve_pairs(&pairs, step_s, None, separation, vel);
+        // In an arc the partner of a seam pair is turned by `shift` widths.
+        let arc = domain.arc.map(|a| (a.width_cos_sin(), a.width_rad()));
+        let separation = |i: usize, j: usize, shift: i8| match arc {
+            Some(((cw, sw), _)) if shift != 0 => {
+                let (c, s) = (cw, sw * f64::from(shift));
+                let q = pos(j);
+                pos(i) - Vec3::new(c * q.x - s * q.y, s * q.x + c * q.y, q.z)
+            }
+            _ => pos(i) - pos(j),
+        };
+        let tally = model.resolve_pairs(&pairs, step_s, arc.map(|(_, w)| w), separation, vel);
         times.resolve_s = t3.elapsed().as_secs_f64();
 
         let t4 = Instant::now();

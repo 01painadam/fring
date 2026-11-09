@@ -28,7 +28,7 @@ use extended::{ExtParams, LEVEL_UNKNOWN, MAX_MOONS, advance_ext};
 use fring_model::Vec3;
 use fring_model::config::ChaosConfig;
 use fring_model::physics::chaos::{ChaosAccum, renormalise, shadow_offset_km};
-use fring_model::physics::{KickTable, SaturnField, interpolate_moons};
+use fring_model::physics::{ArcGeometry, KickTable, SaturnField, interpolate_moons};
 use fring_model::{
     Backend, ChaosReport, DropReport, Error, InitialState, MoonEphemeris, MoonState, ParticleView,
     Particles, Result, RunConfig, StepStats, System,
@@ -92,8 +92,92 @@ pub struct CpuBackend {
     chaos: Option<ChaosState>,
     /// `Some` only with `[loss]` or `[substep]` keys that change the behaviour.
     ext: Option<ExtState>,
+    /// `Some` only with `domain.kind = "arc"` (D1-CPU). The step then runs in
+    /// blocks of one step and the wrap follows every step.
+    arc: Option<ArcGeometry>,
     /// `Some` only with `model = "stochastic"` (K2-CPU).
     collide: Option<CollisionState>,
+}
+
+/// Wraps every live particle into the arc at time `t_s` (the state after
+/// global step `step`, counted from 1). `shadow` gets the same rotation as its
+/// main particle (never a wrap of its own). A particle that cannot be wrapped
+/// (more than `MAX_WRAPS` widths in one step, or not finite) is treated as an
+/// unbound orbit, like the GPU kernel (`arc.wgsl` `arc_run`: `drop_particle`
+/// with reason 1 and step `first_step + seg - 1`): with `freeze` it gets
+/// reason 1 and `drop_step = step - 1`, else the call returns
+/// `Error::Backend` with the lowest such particle.
+#[allow(clippy::too_many_arguments)]
+pub fn wrap_states(
+    arc: &ArcGeometry,
+    t_s: f64,
+    step: u64,
+    ids: &[u32],
+    state: &mut [State],
+    shadow: Option<&mut [State]>,
+    mut ext: Option<(&mut [u8], &mut [u64], bool)>,
+) -> Result<()> {
+    const FAILED: i32 = i32::MAX;
+    let live = ext.as_ref().map(|(r, _, _)| &**r);
+    let ks: Vec<i32> = state
+        .par_iter_mut()
+        .enumerate()
+        .map(|(i, s)| {
+            if live.is_some_and(|r| r[i] != 0) {
+                return 0;
+            }
+            let pos = Vec3::new(s[0], s[1], s[2]);
+            let vel = Vec3::new(s[3], s[4], s[5]);
+            match arc.wrap(pos, vel, t_s) {
+                Some(w) => {
+                    if w.k != 0 {
+                        *s = [
+                            w.pos_km.x,
+                            w.pos_km.y,
+                            w.pos_km.z,
+                            w.vel_km_s.x,
+                            w.vel_km_s.y,
+                            w.vel_km_s.z,
+                        ];
+                    }
+                    w.k
+                }
+                None => FAILED,
+            }
+        })
+        .collect();
+    if let Some(sh) = shadow {
+        let (cw, sw) = arc.width_cos_sin();
+        sh.par_iter_mut().zip(ks.par_iter()).for_each(|(s, &k)| {
+            if k == 0 || k == FAILED {
+                return;
+            }
+            // Same operations as the wrap of the main particle: |k| turns of
+            // one width, k > 0 rotating by +width (see `ArcGeometry::wrap`).
+            let sn = if k > 0 { sw } else { -sw };
+            for _ in 0..k.unsigned_abs() {
+                for o in [0, 3] {
+                    let (x, y) = (s[o], s[o + 1]);
+                    s[o] = cw * x - sn * y;
+                    s[o + 1] = sn * x + cw * y;
+                }
+            }
+        });
+    }
+    let Some(first) = ks.iter().position(|&k| k == FAILED) else {
+        return Ok(());
+    };
+    if let Some((reason, drop_step, true)) = ext.as_mut() {
+        for (i, _) in ks.iter().enumerate().filter(|(_, k)| **k == FAILED) {
+            reason[i] = fring_model::DROP_UNBOUND;
+            drop_step[i] = step - 1;
+        }
+        return Ok(());
+    }
+    Err(Error::Backend(format!(
+        "particle {} (index {first}) has an unbound or invalid orbit",
+        ids[first]
+    )))
 }
 
 impl CpuBackend {
@@ -205,6 +289,17 @@ impl CpuBackend {
                 self.ids[index]
             )));
         }
+        if let Some(arc) = &self.arc {
+            let step = first_step + block;
+            let t_s = self.start_s + step as f64 * self.step_s;
+            let shadow = self.chaos.as_mut().map(|c| c.shadow.as_mut_slice());
+            let e = Some((
+                ext.reason.as_mut_slice(),
+                ext.drop_step.as_mut_slice(),
+                ext.freeze,
+            ));
+            wrap_states(arc, t_s, step, &self.ids, &mut self.state, shadow, e)?;
+        }
         if let Some(c) = &mut self.chaos
             && (first_step + block).is_multiple_of(u64::from(c.cfg.renorm_steps))
         {
@@ -259,7 +354,7 @@ impl Backend for CpuBackend {
         let field = SaturnField::<f64>::from_params(&system.saturn);
         let collide = CollisionState::from_config(config, &field)?;
         let p = &init.particles;
-        let state: Vec<State> = (0..p.len())
+        let mut state: Vec<State> = (0..p.len())
             .map(|i| {
                 [
                     p.x_km[i],
@@ -271,6 +366,38 @@ impl Backend for CpuBackend {
                 ]
             })
             .collect();
+        // D1-CPU: a co-moving arc. Particles made all round the ring are
+        // folded into the arc first, as `GpuBackend` does.
+        let arc = ArcGeometry::from_domain_in_field(
+            &config.domain,
+            &field,
+            config.frame.reference_semi_major_axis_km,
+        )?;
+        if let Some(g) = &arc {
+            if config.moon_radius_rule() {
+                return Err(Error::Config(
+                    "[loss] moon_radius = \"params\" cannot be combined with the arc (ICR-004)"
+                        .to_string(),
+                ));
+            }
+            for (i, s) in state.iter_mut().enumerate() {
+                let w = g
+                    .fold(
+                        Vec3::new(s[0], s[1], s[2]),
+                        Vec3::new(s[3], s[4], s[5]),
+                        init.time_s,
+                    )
+                    .ok_or_else(|| Error::Input(format!("particle {i} has no finite position")))?;
+                *s = [
+                    w.pos_km.x,
+                    w.pos_km.y,
+                    w.pos_km.z,
+                    w.vel_km_s.x,
+                    w.vel_km_s.y,
+                    w.vel_km_s.z,
+                ];
+            }
+        }
         let energy0 = if eph.tracks.is_empty() {
             (0..p.len())
                 .map(|i| particle_energy(&field, p, i))
@@ -325,11 +452,12 @@ impl Backend for CpuBackend {
             ids: p.id.clone(),
             state,
             snapshot: p.clone(),
-            snapshot_stale: false,
+            snapshot_stale: arc.is_some(),
             energy0,
             max_rel_energy_error: 0.0,
             chaos,
             ext,
+            arc,
             collide,
         })
     }
@@ -347,6 +475,12 @@ impl Backend for CpuBackend {
                 // do not depend on how the caller splits the run.
                 let k = u64::from(c.cfg.renorm_steps);
                 block = block.min(k - first_step % k);
+            }
+            if self.arc.is_some() {
+                // The wrap follows every step (D1-CPU): `MAX_WRAPS` limits
+                // the distance of one step, and the time of the wrap is a
+                // synchronised time.
+                block = 1;
             }
             if let Some(c) = &self.collide {
                 // Blocks end at multiples of `every_steps`, so the collision
@@ -382,6 +516,12 @@ impl Backend for CpuBackend {
                     "particle {} (index {index}) has an unbound or invalid orbit",
                     self.ids[index]
                 )));
+            }
+            if let Some(arc) = &self.arc {
+                let step = first_step + block;
+                let t_s = self.start_s + step as f64 * self.step_s;
+                let shadow = self.chaos.as_mut().map(|c| c.shadow.as_mut_slice());
+                wrap_states(arc, t_s, step, &self.ids, &mut self.state, shadow, None)?;
             }
             if let Some(c) = &mut self.chaos
                 && (first_step + block).is_multiple_of(u64::from(c.cfg.renorm_steps))
