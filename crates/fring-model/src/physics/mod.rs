@@ -32,6 +32,8 @@ pub mod leapfrog;
 pub mod moon_dynamics;
 pub mod moon_kick;
 pub mod moon_radius;
+#[cfg(test)]
+mod profile_bits;
 pub mod wisdom_holman;
 
 pub use arc::{ArcGeometry, MAX_WRAPS, Wrapped};
