@@ -181,21 +181,6 @@ pub fn wrap_states(
 }
 
 impl CpuBackend {
-    /// Like [`Backend::new`], but the Wisdom-Holman drift is about Saturn's
-    /// GM, as before ICR-011 (the same split as the GPU backend until
-    /// WH-EFF-GPU). The total force is the same; only the split differs.
-    ///
-    /// Transitional (ICR-011): remove in WH-EFF-GPU.
-    pub fn with_point_mass_drift(
-        config: &RunConfig,
-        system: &System,
-        init: &InitialState,
-    ) -> Result<Self> {
-        let mut b = <Self as Backend>::new(config, system, init)?;
-        b.field = SaturnField::<f64>::from_params(&system.saturn);
-        Ok(b)
-    }
-
     /// Sets the radius of each moon in km, in the order of the `System`
     /// (ICR-004). The backend reads no files: `fring-run` reads
     /// `<params_dir>/moons.toml` with `moon_radii_from_toml_str`, matches the
