@@ -141,3 +141,24 @@ def test_configs_valid():
         assert t["particles"]["distribution"]["eccentricity"] == (0.00235 if core == "ecc" else 0.0)
         names.append(name)
     assert len(names) == len(set(names)) == 28
+
+
+def test_window_mask_and_paired_compare():
+    dom = A.Domain(10.0, 180.0)
+    th = np.deg2rad([174.0, 176.0, 180.0, -176.0, -174.0])
+    assert list(A.window_mask(dom, th)) == [False, True, True, True, False]
+    pairs = [[100.0, 102.0], [100.0, 98.0], [50.0, 52.0], [10.0, 10.2]]
+    c = A.compare_paired(pairs, [101.0, 99.0, 51.0, 10.1])
+    assert abs(c["d"]) < 1e-12 and c["bound"] < 0.05
+    c2 = A.compare_paired(pairs, [150.0, 150.0, 75.0, 15.0])
+    assert c2["d"] == pytest.approx(0.5, abs=0.03) and c2["bound"] > 0.5
+
+
+def test_frame_stats_selection_matches_subset():
+    fr = _frame_from_epicycle(0.00235, 0.3, n_part=20000, seed=5)
+    o = A.orbit_elements(SAT, fr)
+    dom = A.Domain(10.0, 0.0)
+    sel = A.window_mask(dom, o.theta)
+    s1 = A.frame_stats(SAT, fr, dom, A0, o, sel)
+    assert s1["n_core"] == int(sel.sum()) and 400 < s1["n_core"] < 700
+    assert s1["loc_nbins"] == 10

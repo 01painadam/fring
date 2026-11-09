@@ -200,10 +200,13 @@ def longitude_bin(dom: Domain, theta, bin_deg: float = 1.0):
     return idx, nb
 
 
-def frame_stats(sat: Saturn, fr: Frame, dom: Domain, a0: float, orb: Orbit | None = None) -> dict:
-    """The D2 statistics of one frame (km, km/s)."""
+def frame_stats(sat: Saturn, fr: Frame, dom: Domain, a0: float, orb: Orbit | None = None,
+                sel: np.ndarray | None = None) -> dict:
+    """The D2 statistics of one frame (km, km/s). `sel` restricts to a subset of particles."""
     o = orb if orb is not None else orbit_elements(sat, fr)
     ok = np.isfinite(o.rg) & (np.abs(o.rg - a0) < 500.0)
+    if sel is not None:
+        ok = ok & sel
     n_all = len(o.rg)
     d = {"n": n_all, "n_core": int(ok.sum())}
     rg = o.rg[ok]
@@ -232,7 +235,8 @@ def frame_stats(sat: Saturn, fr: Frame, dom: Domain, a0: float, orb: Orbit | Non
     return d
 
 
-def apse_slope(sat: Saturn, orb0: Orbit, orb: Orbit, fr: Frame, a0: float) -> dict:
+def apse_slope(sat: Saturn, orb0: Orbit, orb: Orbit, fr: Frame, a0: float,
+               sel: np.ndarray | None = None) -> dict:
     """Fit of the apse drift against the guiding radius at t = 0.
 
     d_varpi = varpi(t) - varpi(0) (inertial, mod 2 pi) against rho = r_g(0) - a0.
@@ -241,6 +245,8 @@ def apse_slope(sat: Saturn, orb0: Orbit, orb: Orbit, fr: Frame, a0: float) -> di
     """
     t_days = (fr.time_s - fr.t_ref_s) / 86400.0
     ok = np.isfinite(orb0.rg) & (np.abs(orb0.rg - a0) < 500.0)
+    if sel is not None:
+        ok = ok & sel
     dv = wrap_pi((orb.varpi_rot - orb0.varpi_rot) + fr.n0 * (fr.time_s - fr.t_ref_s))[ok]
     mu = np.angle(np.exp(1j * dv).mean())
     res = wrap_pi(dv - mu)
@@ -255,6 +261,12 @@ def apse_slope(sat: Saturn, orb0: Orbit, orb: Orbit, fr: Frame, a0: float) -> di
         "apse_common_deg_day": float((mu + 0.0) * deg / t_days),
         "apse_scatter_deg": scatter * deg,
     }
+
+
+def window_mask(dom: Domain, theta) -> np.ndarray:
+    """Particles of a ring frame whose rotating-frame longitude is inside the arc window."""
+    half = np.deg2rad(dom.width_deg) / 2
+    return np.abs(wrap_pi(theta - np.deg2rad(dom.centre_deg))) < half
 
 
 def predicted_slopes(sat: Saturn, a0: float) -> dict:
@@ -293,6 +305,25 @@ def compare(ring: list[float], arcs: list[float]) -> dict:
         "d_max": float(np.abs(d).max()), "sem_arc": float(sem_arc), "noise_ring": float(noise),
         "bound": float(abs(mean_d) + 2 * np.hypot(sem_arc, noise)),
     }
+
+
+def compare_paired(ring_pairs: list[list[float]], arcs: list[float]) -> dict:
+    """Arc against the ring in the same longitude window, paired by centre.
+
+    ring_pairs[c] = ring values (one per seed) in the window of arc c; arcs[c] the arc value.
+    d_c = arc_c / mean(ring_c) - 1.  bound = |mean d| + 2 sqrt(sem^2 + noise^2) with sem the
+    standard error of d over centres (it contains the window sampling noise of both sides) and
+    noise the rms over centres of the seed-to-seed standard error of the ring window value.
+    """
+    rm = np.array([np.mean(r) for r in ring_pairs])
+    arcs = np.asarray(arcs, float)
+    d = arcs / rm - 1.0
+    sem = d.std(ddof=1) / np.sqrt(len(d))
+    nz = np.array([np.std(r, ddof=1) / np.sqrt(len(r)) / abs(np.mean(r)) for r in ring_pairs])
+    noise = float(np.sqrt(np.mean(nz**2)) / np.sqrt(len(d)))
+    return {"ring": float(rm.mean()), "arc": float(arcs.mean()), "d": float(d.mean()),
+            "d_max": float(np.abs(d).max()), "sem_arc": float(sem), "noise_ring": noise,
+            "bound": float(abs(d.mean()) + 2 * np.hypot(sem, noise))}
 
 
 def passes(bounds: list[float], limit: float = 0.05) -> bool:

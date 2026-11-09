@@ -96,10 +96,30 @@ def all_runs(t0: bool):
                 yield run_name(core, "arc", w, c, 0), "arc", w, c, seed + base, core
 
 
+def write_cpu_set() -> None:
+    """CPU cross-check (needs RUN-MODELS): ring seed 0 and the 10 deg arc centre 0, both cores, N = 2e4."""
+    d = OUT / "configs_cpu"
+    d.mkdir(parents=True, exist_ok=True)
+    names = []
+    for name, dom, w, c, seed, core in all_runs(False):
+        if not ((dom == "ring" and name.endswith("s0")) or (w == 10.0 and c == 0.0)):
+            continue
+        cpu_name = name.replace("d2-", "d2cpu-", 1)
+        text = config_text(core, dom, w, c, seed, cpu_name, 5.0, FRAME_EVERY)
+        text = text.replace('backend = "gpu"', 'backend = "cpu"').replace(f"count = {N_PARTICLES}", "count = 20000")
+        (d / f"{cpu_name}.toml").write_text(text)
+        names.append(cpu_name)
+    (d / "list.txt").write_text("\n".join(names) + "\n")
+    print(f"{len(names)} configs in {d}")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--t0", action="store_true", help="zero-step check set (2 steps, frame every step)")
+    ap.add_argument("--cpu", action="store_true", help="CPU cross-check set: N = 2e4, ring and 10 deg arc (centre 0)")
     args = ap.parse_args()
+    if args.cpu:
+        return write_cpu_set()
     sub = "configs_t0" if args.t0 else "configs"
     years = 2.0 * STEP_S / 31_557_600.0 * 0.99 if args.t0 else 5.0
     fe = 1 if args.t0 else FRAME_EVERY
