@@ -265,7 +265,7 @@ pub struct ParticlesConfig {
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Distribution {
     /// Narrow core (`kind = "core"`): Gaussian in semi-major axis, with one
-    /// eccentricity and one apse longitude for all particles.
+    /// eccentricity, one apse longitude and one inclination for all particles.
     Core {
         /// Mean semi-major axis in km.
         semi_major_axis_km: f64,
@@ -277,6 +277,12 @@ pub enum Distribution {
         eccentricity: f64,
         /// Longitude of pericentre in degrees.
         apse_longitude_deg: f64,
+        /// Inclination in degrees, in [0, 90) (ICR-012, default 0). This is
+        /// the vertical epicyclic amplitude i, the same for all particles:
+        /// the height amplitude is `a i`, with a random vertical phase. At 0
+        /// every particle has `z = 0` and `vz = 0` exactly.
+        #[serde(default)]
+        inclination_deg: f64,
     },
     /// Uniform band in semi-major axis with circular orbits (`kind = "band"`),
     /// for example for chaos maps across the region between the moons.
@@ -616,6 +622,7 @@ impl Distribution {
                 sigma_semi_major_axis_km,
                 eccentricity,
                 apse_longitude_deg,
+                inclination_deg,
             } => {
                 positive(&format!("{P}.semi_major_axis_km"), semi_major_axis_km)?;
                 non_negative(
@@ -625,6 +632,10 @@ impl Distribution {
                 require(
                     eccentricity.is_finite() && (0.0..1.0).contains(&eccentricity),
                     format!("{P}.eccentricity must be in [0, 1), found {eccentricity}"),
+                )?;
+                require(
+                    inclination_deg.is_finite() && (0.0..90.0).contains(&inclination_deg),
+                    format!("{P}.inclination_deg must be in [0, 90), found {inclination_deg}"),
                 )?;
                 finite(&format!("{P}.apse_longitude_deg"), apse_longitude_deg)
             }

@@ -187,7 +187,7 @@ For a circular equatorial orbit in the potential of section 7.1 these are exact,
 
 ### 7.4 Initial conditions
 
-Configurable distributions: a narrow core (Gaussian in semi-major axis, with given eccentricity and apse), a uniform band across the moons' region (for chaos maps), the same band with one eccentricity and apse for all particles (`eccentric_band`, ICR-007, for chaos maps of core-like eccentric orbits), a "clump" (a localised cloud, for example to mimic a collision event), and a "moonlet" (`moonlet`, ICR-008: uniform in a sphere of a given packing radius, with synchronous, centre or circular start velocities). Moon initial states come from cited elements at the run epoch.
+Configurable distributions: a narrow core (Gaussian in semi-major axis, with given eccentricity and apse, and an optional inclination `inclination_deg`, ICR-012: vertical epicycle amplitude `a i` with a random phase, default 0), a uniform band across the moons' region (for chaos maps), the same band with one eccentricity and apse for all particles (`eccentric_band`, ICR-007, for chaos maps of core-like eccentric orbits), a "clump" (a localised cloud, for example to mimic a collision event), and a "moonlet" (`moonlet`, ICR-008: uniform in a sphere of a given packing radius, with synchronous, centre or circular start velocities). Moon initial states come from cited elements at the run epoch.
 
 ### 7.5 Collision models
 

@@ -320,6 +320,7 @@ impl Setup {
                 sigma_semi_major_axis_km: self.ring.dust_strand_width_min_km,
                 eccentricity: self.ring.eccentricity,
                 apse_longitude_deg: self.ring.apse_longitude_deg,
+                inclination_deg: 0.0,
             },
             Band::Circular { min_km, max_km } => Distribution::Band {
                 min_semi_major_axis_km: min_km,
