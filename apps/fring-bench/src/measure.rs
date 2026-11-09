@@ -28,6 +28,90 @@ pub struct Timing {
     pub readback_s: f64,
     /// Rate if a frame is read back every [`FRAME_STEPS`] steps.
     pub rate_with_readback: f64,
+    /// The rate of every timed call, in order (B2 writes one CSV row each).
+    pub raw_rates: Vec<f64>,
+    /// Median of `raw_rates`.
+    pub rate_median: f64,
+    /// Collision statistics summed over the timed calls (collision rows only).
+    pub coll: Option<CollTotals>,
+}
+
+/// Collision statistics summed over the timed calls of one point.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct CollTotals {
+    /// Number of collision steps in the timed calls.
+    pub coll_steps: u64,
+    /// Accepted pairs.
+    pub collisions: u64,
+    /// Candidate pairs tested.
+    pub candidates: u64,
+    /// Sum over collision steps of the occupied cells.
+    pub occupied_cells: u64,
+    /// Sum of N_c.
+    pub occupancy_sum: u64,
+    /// Sum of N_c squared.
+    pub occupancy_sq_sum: u64,
+    /// Particles with no partner in their cell.
+    pub lonely_particles: u64,
+    /// Overfull cells (SPEC 5.6).
+    pub overfull_cells: u64,
+}
+
+impl CollTotals {
+    /// Candidates per particle per collision step.
+    pub fn candidates_per_particle(&self, n: usize) -> f64 {
+        self.candidates as f64 / (n as f64 * self.coll_steps.max(1) as f64)
+    }
+
+    /// Accepted pairs per particle per collision step.
+    pub fn collisions_per_particle(&self, n: usize) -> f64 {
+        self.collisions as f64 / (n as f64 * self.coll_steps.max(1) as f64)
+    }
+
+    /// Particle-weighted occupancy, sum N_c^2 / sum N_c.
+    pub fn weighted_occupancy(&self) -> f64 {
+        self.occupancy_sq_sum as f64 / (self.occupancy_sum.max(1) as f64)
+    }
+}
+
+/// What to measure besides the rate (B2).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Options {
+    /// Timed calls (3 for B1).
+    pub repeats: usize,
+    /// `Some(every_steps)` if the backend runs collisions: the step counts
+    /// are multiples of it and the statistics are summed.
+    pub collisions_every: Option<u64>,
+}
+
+/// B1 options: 3 repeats, no collisions.
+pub const B1_OPTIONS: Options = Options {
+    repeats: 3,
+    collisions_every: None,
+};
+
+/// Median of a non-empty slice.
+pub fn median(v: &[f64]) -> f64 {
+    let mut s = v.to_vec();
+    s.sort_by(|a, b| a.total_cmp(b));
+    let k = s.len();
+    if k % 2 == 1 {
+        s[k / 2]
+    } else {
+        0.5 * (s[k / 2 - 1] + s[k / 2])
+    }
+}
+
+/// Relative spread (max - min) / median of the raw rates.
+pub fn spread(v: &[f64]) -> f64 {
+    let max = v.iter().copied().fold(f64::MIN, f64::max);
+    let min = v.iter().copied().fold(f64::MAX, f64::min);
+    (max - min) / median(v)
+}
+
+/// Rounds a step count down to a multiple of `every` (at least `every`).
+pub fn align_steps(steps: u64, every: u64) -> u64 {
+    ((steps / every) * every).max(every)
 }
 
 /// Picks the number of steps so that one call takes about `target_s`, from a
@@ -67,6 +151,22 @@ pub fn measure(
     target_s: f64,
     max_steps: u64,
 ) -> Result<Timing, String> {
+    measure_with(b, n, chaos_on, target_s, max_steps, B1_OPTIONS)
+}
+
+/// [`measure`] with options (repeat count, collision statistics).
+pub fn measure_with(
+    b: &mut dyn Backend,
+    n: usize,
+    chaos_on: bool,
+    target_s: f64,
+    max_steps: u64,
+    opt: Options,
+) -> Result<Timing, String> {
+    // Step counts are multiples of 10 and of `every` (collision steps fall on
+    // the end of a call, as in a real run).
+    let every = opt.collisions_every.unwrap_or(1);
+    let align = |k: u64| align_steps(k, every.max(1));
     // Warm-up and calibration: grow the probe until it takes at least a
     // quarter of the target (short probes are dominated by launch costs).
     let mut steps = MIN_STEPS;
@@ -78,18 +178,38 @@ pub fn measure(
         steps = choose_steps(steps, t, target_s, max_steps).max(steps + MIN_STEPS);
         t = time_step(b, steps)?;
     }
-    let steps = choose_steps(steps, t, target_s, max_steps);
-    let mut rates = Vec::with_capacity(3);
-    for _ in 0..3 {
+    let steps = align(choose_steps(steps, t, target_s, max_steps));
+    if opt.collisions_every.is_some() {
+        // Clear the statistics of the calibration.
+        b.stats().map_err(|e| e.to_string())?;
+    }
+    let mut rates = Vec::with_capacity(opt.repeats);
+    for _ in 0..opt.repeats {
         let s = time_step(b, steps)?;
         rates.push(n as f64 * steps as f64 / s);
     }
+    let coll = if opt.collisions_every.is_some() {
+        let st = b.stats().map_err(|e| e.to_string())?;
+        let c = st.collision;
+        Some(CollTotals {
+            coll_steps: opt.repeats as u64 * steps / every,
+            collisions: st.collisions_since_last,
+            candidates: c.candidates,
+            occupied_cells: c.occupied_cells,
+            occupancy_sum: c.occupancy_sum,
+            occupancy_sq_sum: c.occupancy_sq_sum,
+            lonely_particles: c.lonely_particles,
+            overfull_cells: c.overfull_cells,
+        })
+    } else {
+        None
+    };
     let rate_best = rates.iter().copied().fold(f64::MIN, f64::max);
     let rate_min = rates.iter().copied().fold(f64::MAX, f64::min);
     // Read-back: step a little (so the host copy is stale), then time the copy.
     let mut readback_s = f64::MAX;
     for _ in 0..2 {
-        b.step(MIN_STEPS).map_err(|e| e.to_string())?;
+        b.step(align(MIN_STEPS)).map_err(|e| e.to_string())?;
         let t0 = Instant::now();
         {
             let v = b.particles().map_err(|e| e.to_string())?;
@@ -107,6 +227,9 @@ pub fn measure(
         rate_max: rate_best,
         readback_s,
         rate_with_readback: rate_with_readback(n, rate_best, FRAME_STEPS, readback_s),
+        rate_median: median(&rates),
+        raw_rates: rates,
+        coll,
     })
 }
 
@@ -124,6 +247,28 @@ mod tests {
         assert_eq!(choose_steps(10, 1e-9, 1.5, 30_000), 30_000);
         // Multiple of 10.
         assert_eq!(choose_steps(10, 0.0333, 1.0, 30_000) % MIN_STEPS, 0);
+    }
+
+    #[test]
+    fn median_spread_and_alignment() {
+        assert_eq!(median(&[3.0, 1.0, 2.0]), 2.0);
+        assert_eq!(median(&[4.0, 1.0, 2.0, 3.0]), 2.5);
+        // (max - min) / median = 0.2 / 1.0.
+        assert!((spread(&[0.9, 1.0, 1.1]) - 0.2).abs() < 1e-12);
+        assert_eq!(align_steps(1234, 10), 1230);
+        assert_eq!(align_steps(3, 10), 10);
+        assert_eq!(align_steps(7, 1), 7);
+        let c = CollTotals {
+            coll_steps: 10,
+            candidates: 500,
+            collisions: 100,
+            occupancy_sum: 20,
+            occupancy_sq_sum: 60,
+            ..CollTotals::default()
+        };
+        assert_eq!(c.candidates_per_particle(100), 0.5);
+        assert_eq!(c.collisions_per_particle(100), 0.1);
+        assert_eq!(c.weighted_occupancy(), 3.0);
     }
 
     #[test]

@@ -1,5 +1,6 @@
 //! Command-line arguments, parsed by hand (no external crate).
 
+use crate::matrix::{Feature, State};
 use std::path::PathBuf;
 
 /// What the user asked for.
@@ -24,6 +25,28 @@ pub struct Args {
     pub no_mode_d: bool,
     /// CSV path (`--out`); default `runs/bench/bench-<date>.csv`.
     pub out: Option<PathBuf>,
+    /// B2 feature sets (`--features`). Empty means the B1 matrix.
+    pub features: Vec<Feature>,
+    /// Particle states of the B2 rows (`--states`); default core and band.
+    pub states: Vec<State>,
+    /// Integrator steps per collision step (`--every`); default 1 and 10.
+    pub every: Vec<u64>,
+    /// Timed repeats per point (`--repeats`); default 3 (B1) or 5 (B2).
+    pub repeats: Option<usize>,
+    /// Add the cell-size sensitivity point (`--sensitivity`).
+    pub sensitivity: bool,
+}
+
+impl Args {
+    /// True if this is a B2 run (feature rows).
+    pub fn is_b2(&self) -> bool {
+        !self.features.is_empty()
+    }
+
+    /// Timed repeats per point.
+    pub fn repeats(&self) -> usize {
+        self.repeats.unwrap_or(if self.is_b2() { 5 } else { 3 })
+    }
 }
 
 /// The default sizes.
@@ -37,6 +60,8 @@ fring-bench: particle-steps per second of the CPU and GPU backends
 
 USAGE:
     fring-bench [--quick] [--sizes <n,n,...>] [--no-mode-d] [--out <file.csv>]
+                [--features <list>] [--states <list>] [--every <list>]
+                [--repeats <n>] [--sensitivity]
 
 Runs core particles with both moons at 150 steps per orbit (h = 356.2537 s)
 through the Backend trait. Backends: CPU (f64, all threads), GPU D+ (production),
@@ -51,6 +76,16 @@ OPTIONS:
                           10000,100000,1000000,10000000)
         --no-mode-d       skip GPU mode D
     -o, --out <file>      CSV file (default: runs/bench/bench-<date>.csv)
+        --features <list> B2: feature rows instead of the B1 matrix. Names:
+                          base, freeze, loss (freeze + radius rule), coll
+                          (stochastic collisions), coll+loss, substep (CPU
+                          only). Backends: GPU D+ and CPU (CPU up to 10^6)
+        --states <list>   B2: core, band (default core,band)
+        --every <list>    B2: integrator steps per collision step
+                          (default 1,10)
+        --repeats <n>     timed repeats per point (default 3; 5 with
+                          --features); every repeat is a row in the CSV
+        --sensitivity     B2: add GPU D+ coll at N = 10^6 with L_x = 0.2 km
     -h, --help            print this text
     -V, --version         print the version
 
@@ -66,6 +101,8 @@ where
     let mut it = args.into_iter();
     let (mut quick, mut no_mode_d) = (false, false);
     let (mut sizes, mut out) = (None, None);
+    let (mut features, mut states, mut every) = (Vec::new(), None, None);
+    let (mut repeats, mut sensitivity) = (None, false);
     while let Some(arg) = it.next() {
         let (flag, inline) = match arg.split_once('=') {
             Some((f, v)) if f.starts_with("--") => (f.to_string(), Some(v.to_string())),
@@ -83,6 +120,11 @@ where
             "--quick" => quick = true,
             "--no-mode-d" => no_mode_d = true,
             "--sizes" => sizes = Some(parse_sizes(&value("--sizes")?)?),
+            "--features" => features = parse_features(&value("--features")?)?,
+            "--states" => states = Some(parse_states(&value("--states")?)?),
+            "--every" => every = Some(parse_every(&value("--every")?)?),
+            "--repeats" => repeats = Some(parse_repeats(&value("--repeats")?)?),
+            "--sensitivity" => sensitivity = true,
             "-o" | "--out" => out = Some(PathBuf::from(value("--out")?)),
             _ => return Err(format!("unknown argument {arg:?}")),
         }
@@ -99,7 +141,40 @@ where
         quick,
         no_mode_d,
         out,
+        features,
+        states: states.unwrap_or_else(|| vec![State::Core, State::Band]),
+        every: every.unwrap_or_else(|| vec![1, 10]),
+        repeats,
+        sensitivity,
     }))
+}
+
+fn parse_features(text: &str) -> Result<Vec<Feature>, String> {
+    text.split(',')
+        .map(|p| Feature::parse(p.trim()).ok_or_else(|| format!("unknown feature {p:?}")))
+        .collect()
+}
+
+fn parse_states(text: &str) -> Result<Vec<State>, String> {
+    text.split(',')
+        .map(|p| State::parse(p.trim()).ok_or_else(|| format!("unknown state {p:?}")))
+        .collect()
+}
+
+fn parse_every(text: &str) -> Result<Vec<u64>, String> {
+    text.split(',')
+        .map(|p| match p.trim().parse::<u64>() {
+            Ok(k) if (1..=1000).contains(&k) => Ok(k),
+            _ => Err(format!("bad --every value {p:?} (1 to 1000)")),
+        })
+        .collect()
+}
+
+fn parse_repeats(text: &str) -> Result<usize, String> {
+    match text.trim().parse::<usize>() {
+        Ok(k) if (1..=50).contains(&k) => Ok(k),
+        _ => Err(format!("bad --repeats value {text:?} (1 to 50)")),
+    }
 }
 
 fn parse_sizes(text: &str) -> Result<Vec<usize>, String> {
@@ -133,6 +208,36 @@ mod tests {
         };
         assert_eq!(a.sizes, DEFAULT_SIZES);
         assert!(!a.quick && !a.no_mode_d && a.out.is_none());
+        // No new flags: the B1 run (3 repeats, no feature rows).
+        assert!(!a.is_b2() && a.repeats() == 3 && !a.sensitivity);
+    }
+
+    #[test]
+    fn b2_flags() {
+        let Command::Run(a) = p(&[
+            "--features",
+            "base,coll+loss,substep",
+            "--states=band",
+            "--every",
+            "1,10",
+            "--sensitivity",
+        ])
+        .unwrap() else {
+            panic!()
+        };
+        assert!(a.is_b2() && a.repeats() == 5);
+        assert_eq!(a.features.len(), 3);
+        assert_eq!(a.states, [State::Band]);
+        assert_eq!(a.every, [1, 10]);
+        assert!(a.sensitivity);
+        let Command::Run(a) = p(&["--features", "base", "--repeats", "1"]).unwrap() else {
+            panic!()
+        };
+        assert_eq!(a.repeats(), 1);
+        assert_eq!(a.states, [State::Core, State::Band]);
+        assert!(p(&["--features", "x"]).unwrap_err().contains("unknown"));
+        assert!(p(&["--every", "0"]).unwrap_err().contains("bad"));
+        assert!(p(&["--repeats", "0"]).unwrap_err().contains("bad"));
     }
 
     #[test]
