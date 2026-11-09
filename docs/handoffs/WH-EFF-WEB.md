@@ -33,6 +33,16 @@ apps/fring-web/scripts/build.sh                  # wasm size: 942859 bytes
 
 ## Open questions / blockers
 - Browser `?bench` check is not done (A0 runs it).
+- Finding for A3 (GPU behaviour, not web; A0 request 2026-11-09). Through `GpuStepper::new_with_drift` (Mode::Dp, no moons, mu_eff at a0 = 140222.43 km) the along-track error after one year at a0 is about +0.009 km, not the +0.0002 km of `gpu_wh_eff` (D+, 356.25 s, one `kernels.apply`). Scratch runs, T1-style start (position (a0,0,0), velocity `circular_speed(a0)`, n at a0), M4/Metal, release; not committed:
+
+  | step h (s) | block_steps | steps | mu_eff (km) | GM (km) |
+  |---|---|---|---|---|
+  | 360 | 128 | 87,660 | +0.0097 | -13.0565 |
+  | 360 | 4096 | 87,660 | +0.0094 | -13.0558 |
+  | 356.25 | 128 | 88,582 | +0.0088 | -12.7850 |
+  | 356.25 | 4096 | 88,582 | +0.0087 | -12.7847 |
+
+  `MAX_BLOCK_STEPS` is 4096, so one block of 88,582 steps is not possible; 4096 is the largest. Conclusions: (1) the block size changes the result by 0.0003 km at most, and the step by 0.001 km, so neither explains the factor 40 to 50; (2) the GM arm agrees with T1 after h^2 scaling (-12.7847 against T1 -12.8), so the harness and reference are right; (3) the `Band::Circular` start (r0 - a0 = -6.3e-4 km, circular speed at r0, n at r0) gives +0.0101 km, so the start is not the cause either. Not tested, for A3: the T1 test uses mode D+ and the web uses Dp; T1 calls `kernels.apply` with a zero-filled moon table, the stepper fills its own rows; a0 = 140222.43 here against 140220 there (this should change the error by about 2e-4 km). The size, +0.009 km, is below the O(h^2) split error at the band edge (0.07 to 0.11 km, ICR-011), so the web test bound (0.1 km) is unchanged.
 
 ## Decisions made
 - ICR-011 (accepted). a0 = `Setup::a0_km()` (A0, 2026-11-09).
