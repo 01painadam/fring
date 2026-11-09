@@ -126,9 +126,26 @@ pub struct GpuStepper {
     shadow_plain: Option<wgpu::ComputePipeline>,
 }
 
+/// The options of [`GpuStepper::new_with_drift`].
+#[derive(Clone, Copy, Debug)]
+pub struct StepperOptions {
+    /// The step in seconds. Must be exact in f32 (ADR 0006).
+    pub step_s: f64,
+    /// Steps per dispatch block, clamped to `1..=MAX_BLOCK_STEPS`.
+    pub block_steps: usize,
+    /// The number format of the kernels.
+    pub mode: Mode,
+    /// Chaos shadow, if any.
+    pub chaos: Option<ChaosConfig>,
+    /// a0 in km for the drift about mu_eff (ICR-011); `None` drifts about GM.
+    pub drift_radius_km: Option<f64>,
+}
+
 impl GpuStepper {
     /// Makes the buffers and uploads the constants and the states. Does not
-    /// block. `block_steps` is clamped to `1..=MAX_BLOCK_STEPS`.
+    /// block. `block_steps` is clamped to `1..=MAX_BLOCK_STEPS`. The drift is
+    /// about GM (epsilon = 0); [`Self::new_with_drift`] gives the drift about
+    /// mu_eff of ICR-011.
     ///
     /// # Errors
     /// [`Error::Config`] or [`Error::Backend`] if the workgroup size or the
@@ -145,6 +162,42 @@ impl GpuStepper {
         mode: Mode,
         chaos: Option<ChaosConfig>,
     ) -> Result<Self> {
+        Self::new_with_drift(
+            gpu,
+            kernels,
+            system,
+            init,
+            StepperOptions {
+                step_s,
+                block_steps,
+                mode,
+                chaos,
+                drift_radius_km: None,
+            },
+        )
+    }
+
+    /// As [`Self::new`], with the options in a struct. With
+    /// `drift_radius_km = Some(a0)` the Kepler drift is about
+    /// `mu_eff = n(a0)^2 a0^3` and the kick adds `(mu_eff - GM) r / |r|^3`
+    /// (ICR-011); the total force is the same.
+    ///
+    /// # Errors
+    /// As [`Self::new`].
+    pub fn new_with_drift(
+        gpu: &crate::gpu::Gpu,
+        kernels: &WhKernels,
+        system: &System,
+        init: &InitialState,
+        opts: StepperOptions,
+    ) -> Result<Self> {
+        let StepperOptions {
+            step_s,
+            block_steps,
+            mode,
+            chaos,
+            drift_radius_km,
+        } = opts;
         let eph = &system.moons;
         wh::check_moons(eph.tracks.len())?;
         if chaos.is_some_and(|c| c.renorm_steps == 0) {
@@ -172,7 +225,8 @@ impl GpuStepper {
 
         // Constants.
         let gms: Vec<f64> = eph.tracks.iter().map(|t| t.gm_km3_s2).collect();
-        let c = Consts::<{ model::M4 }>::for_step(&system.saturn, &gms, step_s);
+        let c =
+            Consts::<{ model::M4 }>::for_step_drift(&system.saturn, &gms, step_s, drift_radius_km);
         let prm_buf = mk((wh::PARAM_WORDS * 4) as u64, uni);
         let prm_words = wh::params(&c, &gms);
         q.write_buffer(&prm_buf, 0, &le_bytes(&prm_words));

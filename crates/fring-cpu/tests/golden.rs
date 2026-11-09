@@ -4,8 +4,9 @@
 //!
 //! ICR-011 (WH-EFF-CPU): `CpuBackend::new` now drifts about mu_eff, so the
 //! `GOLDEN_*` hashes are new (recorded once, debug build). The old hashes
-//! are kept as `OLD_*`; `CpuBackend::with_point_mass_drift` must still give
-//! them bit for bit (the old split is unchanged).
+//! were removed with the transitional `CpuBackend::with_point_mass_drift`
+//! (WH-EFF-GPU). The bit identity of the drift about GM is covered by the
+//! field test `kick_is_bit_identical_for_from_params`.
 //!
 //! The hashes are f64 bit patterns of this machine's libm (macOS). Change
 //! them only with a decision of A0.
@@ -19,9 +20,6 @@ const STEPS: u64 = 2000;
 const GOLDEN_NO_MOONS: u64 = 0x445b_bb7b_e1df_7a8b;
 const GOLDEN_MOONS: u64 = 0x940a_556a_46c4_91a9;
 const GOLDEN_MOONS_CHAOS: u64 = 0x8ca8_3887_bf9b_1a61;
-const OLD_NO_MOONS: u64 = 0x7ed4_9723_2da4_4f96;
-const OLD_MOONS: u64 = 0x14f5_b688_39fd_1b87;
-const OLD_MOONS_CHAOS: u64 = 0x0e57_b85b_5b10_bcf4;
 
 fn system(moons: bool) -> System {
     let saturn =
@@ -56,7 +54,7 @@ fn fnv(h: &mut u64, x: u64) {
     }
 }
 
-fn run_hash(moons: bool, chaos: bool, point_mass_drift: bool) -> u64 {
+fn run_hash(moons: bool, chaos: bool) -> u64 {
     let sys = system(moons);
     let field = SaturnField::<f64>::from_params(&sys.saturn);
     let dist = Distribution::Band {
@@ -68,11 +66,7 @@ fn run_hash(moons: bool, chaos: bool, point_mass_drift: bool) -> u64 {
         particles: generate_particles(&field, &dist, 300, 20_261_108).unwrap(),
     };
     let cfg = config(moons, chaos);
-    let mut b = if point_mass_drift {
-        CpuBackend::with_point_mass_drift(&cfg, &sys, &ini).unwrap()
-    } else {
-        CpuBackend::new(&cfg, &sys, &ini).unwrap()
-    };
+    let mut b = CpuBackend::new(&cfg, &sys, &ini).unwrap();
     b.step(777).unwrap();
     b.step(STEPS - 777).unwrap();
     let mut h = 0xcbf2_9ce4_8422_2325u64;
@@ -94,23 +88,11 @@ fn run_hash(moons: bool, chaos: bool, point_mass_drift: bool) -> u64 {
 
 #[test]
 fn off_means_off_golden_hashes() {
-    let a = run_hash(false, false, false);
-    let b = run_hash(true, false, false);
-    let c = run_hash(true, true, false);
+    let a = run_hash(false, false);
+    let b = run_hash(true, false);
+    let c = run_hash(true, true);
     eprintln!("hashes {a:#018x} {b:#018x} {c:#018x}");
     assert_eq!(a, GOLDEN_NO_MOONS, "no moons");
     assert_eq!(b, GOLDEN_MOONS, "moons");
     assert_eq!(c, GOLDEN_MOONS_CHAOS, "moons with chaos");
-}
-
-/// The drift about GM is the old behaviour, bit for bit.
-#[test]
-fn point_mass_drift_keeps_the_old_hashes() {
-    assert_eq!(run_hash(false, false, true), OLD_NO_MOONS, "no moons");
-    assert_eq!(run_hash(true, false, true), OLD_MOONS, "moons");
-    assert_eq!(
-        run_hash(true, true, true),
-        OLD_MOONS_CHAOS,
-        "moons with chaos"
-    );
 }

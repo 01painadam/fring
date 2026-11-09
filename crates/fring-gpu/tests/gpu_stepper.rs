@@ -7,7 +7,7 @@ mod common;
 use common::*;
 use fring_gpu::backend::{GpuBackend, Options};
 use fring_gpu::gpu::Gpu;
-use fring_gpu::stepper::GpuStepper;
+use fring_gpu::stepper::{GpuStepper, StepperOptions};
 use fring_gpu::wh::Mode;
 use fring_gpu::wh_gpu::{DEFAULT_WORKGROUP, WhKernels};
 use fring_model::Backend;
@@ -69,15 +69,19 @@ fn stepper_gives_the_same_bits_as_the_backend() {
             ..Default::default()
         };
         let mut backend = GpuBackend::with_options(&cfg, &system, &init, opts).unwrap();
-        let mut stepper = GpuStepper::new(
+        // The backend drifts about mu_eff at a0 (ICR-011).
+        let mut stepper = GpuStepper::new_with_drift(
             &gpu,
             &kernels,
             &system,
             &init,
-            H_S,
-            backend.block_steps(),
-            mode,
-            chaos,
+            StepperOptions {
+                step_s: H_S,
+                block_steps: backend.block_steps(),
+                mode,
+                chaos,
+                drift_radius_km: Some(cfg.frame.reference_semi_major_axis_km),
+            },
         )
         .unwrap();
         assert_eq!(stepper.len(), 100);

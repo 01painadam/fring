@@ -12,7 +12,9 @@ use fring_model::Backend;
 /// FNV-1a of the f64 bits of the particle positions and velocities after a run
 /// with the full ring (arc off). Taken on the commit before D1 changed any
 /// shader (`db282d5`): the arc code must not change a full-ring run by one bit.
-const GOLDEN_FULL_RING: u64 = 0xa999_c5ad_4c72_2112;
+/// ICR-011 (WH-EFF-GPU): `GpuBackend` now drifts about mu_eff, so the value is
+/// new (recorded once on the Apple M4); the old one was `0xa999_c5ad_4c72_2112`.
+const GOLDEN_FULL_RING: u64 = 0x4d03_03f6_d3cb_4b5b;
 
 fn full_ring_hash(mode: Mode) -> u64 {
     let steps = 150;
@@ -85,7 +87,11 @@ fn spread_ensemble(
 ) -> fring_model::InitialState {
     let field = SaturnField::<f64>::from_params(&system.saturn);
     let mut p = fring_model::Particles::with_capacity(n);
-    let mut rng = Rng(0x00DD_BA11_C0FF_EE01);
+    let seed: u64 = std::env::var("FRING_ARC_SEED")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(0);
+    let mut rng = Rng(0x00DD_BA11_C0FF_EE01 ^ seed);
     for i in 0..n {
         let (_, e, inc) = ORBIT_TYPES[i % 3];
         let el = fring_model::physics::EpicycleElements {
@@ -428,10 +434,20 @@ fn arc_run_is_the_full_ring_run_rotated_by_whole_widths() {
         // a wrap (1e-14 relative, 1e-9 km). Mode D has about 100 times the noise of
         // mode D+ (f32 J2 term), which is why the floor is not a fixed number. The
         // measured ratio arc/floor is 1.0 to 2.5 (see the handoff D1).
-        assert!(
-            max_dp < 4.0 * floor_p + 1e-6 && max_dv < 4.0 * floor_v + 1e-9,
-            "same orbit up to rotation"
+        // ADR 0009: mode D is reported only (not a science mode, ADR 0006
+        // addendum): the ratio is printed. D+ keeps the bound.
+        println!(
+            "  mode {} ratio arc/floor: position {:.2}, velocity {:.2} (bound 4)",
+            mode.name(),
+            max_dp / floor_p.max(1e-12),
+            max_dv / floor_v.max(1e-15)
         );
+        if mode != Mode::D {
+            assert!(
+                max_dp < 4.0 * floor_p + 1e-6 && max_dv < 4.0 * floor_v + 1e-9,
+                "same orbit up to rotation"
+            );
+        }
         // Tolerance: the drift of E and Lz of the arc run may be 2 times that of the
         // ring run plus 3e-13 (about 3 wraps per particle times 1.3e-14 each,
         // with margin).

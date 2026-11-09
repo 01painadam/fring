@@ -10,7 +10,9 @@
 // 1: kick table, ROW (36) f32 per step (wh::pack_table): moon j at 6 j (DS
 //    x, y, z), indirect term DS at 24, indirect term f32 (scaled by h/f32(h),
 //    for option D) at 30.
-// 2: run constants, see prm_* below (11 vec4; ICR-006 radii in 9, flag in 10).
+// 2: run constants, see prm_* below (12 vec4; ICR-006 radii in 9, flag in 10;
+//    ICR-011: drift GM mu_eff in 0, 1/mu_eff in 1, GM for the kick in 10.yz,
+//    epsilon = mu_eff / GM - 1 in 11).
 // 3: per-dispatch control, 2 vec4<u32> (32 bytes): n_steps, n_particles, cap,
 //    n_moons; then first_step (the global step number of step 0 of the block;
 //    E1-GPU), 3 words unused.
@@ -25,13 +27,18 @@
 
 @group(0) @binding(0) var<storage, read_write> st: array<vec2<f32>>;
 @group(0) @binding(1) var<storage, read> tab: array<f32>;
-@group(0) @binding(2) var<uniform> prm: array<vec4<f32>, 11>;
+@group(0) @binding(2) var<uniform> prm: array<vec4<f32>, 12>;
 @group(0) @binding(3) var<uniform> ctl: array<vec4<u32>, 2>;
 @group(0) @binding(4) var<storage, read_write> status: array<atomic<u32>>;
 
-fn prm_gm() -> vec2<f32> { return prm[0].xy; }
+// The drift GM, mu_eff (ICR-011); GM itself is prm_gm_kick().
+fn prm_drift_gm() -> vec2<f32> { return prm[0].xy; }
+fn prm_gm_kick() -> vec2<f32> { return prm[10].yz; }
+// epsilon = mu_eff / GM - 1: DS, and f32 scaled by h / f32(h) (option D).
+fn prm_eps() -> vec2<f32> { return prm[11].xy; }
+fn prm_eps_s() -> f32 { return prm[11].z; }
 fn prm_h() -> vec2<f32> { return prm[0].zw; }
-fn prm_inv_gm() -> vec2<f32> { return prm[1].xy; }
+fn prm_inv_drift_gm() -> vec2<f32> { return prm[1].xy; }
 fn prm_radius() -> vec2<f32> { return prm[1].zw; }
 fn prm_j2() -> vec2<f32> { return prm[2].xy; }
 fn prm_j4() -> vec2<f32> { return prm[2].zw; }
@@ -198,8 +205,8 @@ fn accel_j_c(p: V3) -> V3 {
     let j6q = ds_mul(prm_j6(), q6);
     let aa = ds_add(ds_add(ds_mul(ds_mul(ds(3.0), j2q), p2), ds_mul(ds_mul(ds(5.0), j4q), p4)), ds_mul(ds_mul(ds(7.0), j6q), p6));
     let b = ds_add(ds_add(ds_mul(j2q, d2), ds_mul(j4q, d4)), ds_mul(j6q, d6));
-    let radial = ds_sub(ds_sub(ds(0.0), aa), ds_mul(u, b));
-    let k = ds_div(-prm_gm(), ds_mul(r2, r));
+    let radial = ds_sub(ds_sub(ds_sub(ds(0.0), prm_eps()), aa), ds_mul(u, b));
+    let k = ds_div(-prm_gm_kick(), ds_mul(r2, r));
     let kr = ds_mul(k, radial);
     return V3(ds_mul(kr, p.x), ds_mul(kr, p.y), ds_mul(k, ds_add(ds_mul(radial, p.z), ds_mul(b, r))));
 }
@@ -230,16 +237,16 @@ fn ds_scalars(p: V3, v: V3, dt: vec2<f32>) -> Scal {
     let one = ds(1.0);
     let r0 = ds_sqrt(v3_dot(p, p));
     let ir0 = ds_div(one, r0);
-    let alpha = ds_sub(ds_mul_f(ir0, 2.0), ds_mul(v3_dot(v, v), prm_inv_gm()));
+    let alpha = ds_sub(ds_mul_f(ir0, 2.0), ds_mul(v3_dot(v, v), prm_inv_drift_gm()));
     let z = ds(0.0);
     if (!(alpha.x > 0.0)) {
         return Scal(z, z, z, z, z, z, z, z, false);
     }
     let a = ds_div(one, alpha);
-    let sqrt_gma = ds_sqrt(ds_mul(prm_gm(), a));
+    let sqrt_gma = ds_sqrt(ds_mul(prm_drift_gm(), a));
     let n = ds_mul(ds_mul(sqrt_gma, alpha), alpha);
     let ecos0 = ds_sub(one, ds_mul(r0, alpha));
-    let esin0 = ds_mul(ds_mul(ds_mul(v3_dot(p, v), n), a), prm_inv_gm());
+    let esin0 = ds_mul(ds_mul(ds_mul(v3_dot(p, v), n), a), prm_inv_drift_gm());
     return Scal(r0, ir0, a, sqrt_gma, n, ecos0, esin0, ds_mul(n, dt), true);
 }
 
@@ -295,8 +302,8 @@ fn kick_dir(k: u32, p: V3, v: V3) -> V3 {
     let j6q = prm_j6s() * q6;
     let aa = 3.0 * j2q * p2 + 5.0 * j4q * p4 + 7.0 * j6q * p6;
     let b = j2q * d2 + j4q * d4 + j6q * d6;
-    let radial = -aa - u * b;
-    let kk = -prm_gm().x / (r2 * r);
+    let radial = -prm_eps_s() - aa - u * b;
+    let kk = -prm_gm_kick().x / (r2 * r);
     let h = prm_h().x;
     let sxy = kk * radial * h;
     let sz = kk * b * r * h;
@@ -327,8 +334,8 @@ fn kick_dir_plus(k: u32, p: V3, v: V3) -> V3 {
     let d2d = ds_mul(ds(3.0), ud);
     let aa2 = ds_mul(ds_mul(ds(3.0), j2q), p2d);
     let b2 = ds_mul(j2q, d2d);
-    let radial2 = ds_sub(ds_sub(ds(0.0), aa2), ds_mul(ud, b2));
-    let kkd = ds_div(-prm_gm(), ds_mul(r2d, rd));
+    let radial2 = ds_sub(ds_sub(ds_sub(ds(0.0), prm_eps()), aa2), ds_mul(ud, b2));
+    let kkd = ds_div(-prm_gm_kick(), ds_mul(r2d, rd));
     let hd = prm_h();
     let sxy2 = ds_mul(ds_mul(kkd, radial2), hd);
     let sz2 = ds_mul(ds_mul(ds_mul(kkd, b2), rd), hd);
@@ -351,7 +358,7 @@ fn kick_dir_plus(k: u32, p: V3, v: V3) -> V3 {
     let aa = 5.0 * j4q * p4 + 7.0 * j6q * p6;
     let b = j4q * d4 + j6q * d6;
     let radial = -aa - u * b;
-    let kk = -prm_gm().x / (r2 * r);
+    let kk = -prm_gm_kick().x / (r2 * r);
     let h = prm_h().x;
     let sxy = ds_add_f(sxy2, kk * radial * h);
     let sz = ds_add_f(sz2, kk * b * r * h);
@@ -593,14 +600,14 @@ fn step_c(@builtin(global_invocation_id) id: vec3<u32>, @builtin(num_workgroups)
     let n = prm_n_steps();
     let h = prm_h();
     let half = prm_half();
-    var o = kepler_c(prm_gm(), load_p(i), load_v(i), half);
+    var o = kepler_c(prm_drift_gm(), load_p(i), load_v(i), half);
     var ok = o.ok;
     for (var k = 0u; k < n; k++) {
         let a = kick_acc_c(k, o.p);
         let v = V3(ds_add(o.v.x, ds_mul(a.x, h)), ds_add(o.v.y, ds_mul(a.y, h)), ds_add(o.v.z, ds_mul(a.z, h)));
         var dt = h;
         if (k + 1u == n) { dt = half; }
-        o = kepler_c(prm_gm(), o.p, v, dt);
+        o = kepler_c(prm_drift_gm(), o.p, v, dt);
         ok = ok && o.ok;
     }
     if (ok) { store(i, o.p, o.v); } else { atomicMin(&status[0], i); }
@@ -645,7 +652,7 @@ fn t_kepler_c(@builtin(global_invocation_id) id: vec3<u32>, @builtin(num_workgro
     ds_one = prm_one();
     let i = id.y * nw.x * u32(WG_SIZE) + id.x;
     if (i >= prm_n_particles()) { return; }
-    let o = kepler_c(prm_gm(), load_p(i), load_v(i), prm_half());
+    let o = kepler_c(prm_drift_gm(), load_p(i), load_v(i), prm_half());
     store(i, o.p, o.v);
 }
 
