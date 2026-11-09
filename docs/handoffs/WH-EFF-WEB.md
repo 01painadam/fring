@@ -20,6 +20,11 @@ Updated: 2026-11-09
 ## Deviation from the plan
 `fring-gpu` is a wasm32-only dependency of the library (`Cargo.toml`), so `StepperOptions` is not visible on the host. I did not change `Cargo.toml`. `Setup::stepper_settings()` returns a plain struct with the numeric fields; `web.rs` adds Mode::Dp and `chaos: None`. The host test cannot check those two.
 
+## Finding 2026-11-09: the live ring was not drawn because Chrome rejects arc.wgsl (not this change)
+- Console (headless Chrome, CDP), same on the public demo (main) and on this branch: `Error while parsing WGSL: :1081:31 error: value nan cannot be represented as 'f32'` at `store(i, V3(vec2<f32>(bitcast<f32>(0x7fc00000u), 0.0), p.y, p.z), v);` (`crates/fring-gpu/shaders/arc.wgsl:216`, `t_arc_wrap`, included into module "wh"). Pipelines `step_dp` and `step_dp_r` are invalid, so every submit with a step pass is dropped. Paused frames have no step pass, so they draw. A3 fixes it on `ws/a3-wgsl-nan`.
+- Why no native test can reproduce it: naga (native wgpu) accepts a constant NaN; only Tint (Chrome) rejects it. So the regression guard is at run time: `App::new` installs `device.on_uncaptured_error`; `frame` turns the first message into `Phase::Failed(gpu_error_text(msg))`; the page shows "The GPU rejected its program" with the WGSL text; a bench cell then reads "not run: <error>". Host test `first_gpu_error_becomes_the_failure_text` covers the mapping (first error kept, text, cut length). Browser check (CDP screenshot of localhost:8080 with the old arc.wgsl) shows the message.
+- #86 needs main with the A3 fix merged in before AJ benches again.
+
 ## Next step (one concrete action)
 A0: review; run `?bench` in Chrome (`http://localhost:8080/?bench&counts=1e5&modes=off,side,overlay`, earlier value mean 60.0 fps; stall check `counts=1e4,3e5&modes=off,side`).
 
