@@ -60,7 +60,7 @@ pub fn kick_acceleration<T: Real>(
     indirect_km_s2: Vec3<T>,
     p_km: Vec3<T>,
 ) -> Vec3<T> {
-    field.acceleration_without_point_mass(p_km)
+    field.kick_acceleration_saturn(p_km)
         + moon_direct_acceleration(gm_km3_s2, moon_pos_km, p_km)
         + indirect_km_s2
 }
@@ -383,7 +383,7 @@ pub fn wh_steps_moons<T: Real>(
         return Some(());
     }
     let half = T::from_f64(0.5) * h_s;
-    let (mut p, mut v) = kepler_drift(field.gm_km3_s2, *pos_km, *vel_km_s, half)?;
+    let (mut p, mut v) = kepler_drift(field.drift_gm_km3_s2, *pos_km, *vel_km_s, half)?;
     for k in 0..n_steps {
         let a = kick_acceleration(
             field,
@@ -394,7 +394,7 @@ pub fn wh_steps_moons<T: Real>(
         );
         v = Vec3::new(v.x + a.x * h_s, v.y + a.y * h_s, v.z + a.z * h_s);
         let dt = if k + 1 == n_steps { half } else { h_s };
-        (p, v) = kepler_drift(field.gm_km3_s2, p, v, dt)?;
+        (p, v) = kepler_drift(field.drift_gm_km3_s2, p, v, dt)?;
     }
     *pos_km = p;
     *vel_km_s = v;

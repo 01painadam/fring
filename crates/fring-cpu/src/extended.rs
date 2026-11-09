@@ -155,7 +155,7 @@ pub fn advance_ext_hooked(
     }
     let m = table.n_moons();
     debug_assert!(m <= MAX_MOONS && table.has_ext());
-    let (h, gm_s) = (prm.h_s, prm.field.gm_km3_s2);
+    let (h, gm_s) = (prm.h_s, prm.field.drift_gm_km3_s2);
     let gm = table.gm_km3_s2();
     let mut bodies = [body(s), shadow.as_deref().map_or(body(s), body)];
     let nb = 1 + usize::from(shadow.is_some());
