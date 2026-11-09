@@ -27,7 +27,6 @@ Follow-up (outside fring-model, not in this task): same-argument pairs that rele
 - `crates/fring-analysis/src/apse.rs:39`, `crates/fring-analysis/src/lyapunov.rs:405-406`
 - `crates/fring-gpu/src/bin.rs:328-329, 1123, 1416, 1434, 1463`
 - `crates/fring-collide/examples/k2_sort_bench.rs:66`
-- `crates/fring-gpu/src/ds.rs:264-275` (f64 fallback `sin`/`cos` on separate trait methods)
 
 ## Decisions made (link ADRs)
 - Free function, not a `Real` method: the trait stays small and no other implementor changes.
