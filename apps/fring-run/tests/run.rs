@@ -207,42 +207,23 @@ fn small_run_without_moons_is_deterministic() {
 }
 
 #[test]
-fn refuses_features_that_are_not_built_yet() {
+fn refuses_hard_sphere_on_the_gpu() {
     let base = small_config();
-    let cases = [
-        (
-            replace(
-                &base,
-                "kind = \"full_ring\"",
-                "kind = \"arc\"\nwidth_deg = 10.0\ncentre_longitude_deg = 0.0",
-            ),
-            "D1",
-        ),
-        (
-            replace(
-                &base,
-                "model = \"none\"",
-                "model = \"stochastic\"\nparticle_radius_km = 1.0e-5\nweight = 8.0e8\n\
-                 cell_radial_km = 0.05\ncell_azimuthal_km = 10.0\ncell_vertical_km = 0.04\n\
-                 [collisions.restitution]\nlaw = \"constant\"\nepsilon = 0.5",
-            ),
-            "K2",
-        ),
-        (
-            replace(
-                &base,
-                "model = \"none\"",
-                "model = \"hard_sphere\"\nparticle_radius_km = 1.0e-5\n\
-                 [collisions.restitution]\nlaw = \"constant\"\nepsilon = 0.5",
-            ),
-            "K3",
-        ),
-    ];
-    for (text, task) in cases {
+    let hs = |t: &str| {
+        replace(
+            t,
+            "model = \"none\"",
+            "model = \"hard_sphere\"\nparticle_radius_km = 1.0e-5\n\
+             [collisions.restitution]\nlaw = \"constant\"\nepsilon = 0.5",
+        )
+    };
+    let gpu = |t: String| replace(&t, "backend = \"cpu\"", "backend = \"gpu\"");
+    let cases = [(gpu(hs(&base)), "K3 is CPU only")];
+    for (text, needle) in cases {
         let tmp = Tmp::new();
         let e = run_config(&tmp, &text, "x", true).unwrap_err();
         assert!(
-            matches!(&e, RunError::Setup(m) if m.contains("not implemented") && m.contains(task)),
+            matches!(&e, RunError::Setup(m) if m.contains(needle)),
             "{e}"
         );
         assert_eq!(e.exit_code(), 2);
@@ -461,4 +442,99 @@ fn chaos_table_writes_chaos_csv_and_the_meta_field() {
     assert!(!dir.chaos_path().exists());
     assert!(dir.read_meta_file().unwrap().chaos.is_none());
     assert!(summary.chaos.is_none());
+}
+
+const STOCH: &str = "model = \"stochastic\"\nparticle_radius_km = 1.0e-5\nweight = 8.0e8\n\
+     cell_radial_km = 0.05\ncell_azimuthal_km = 10.0\ncell_vertical_km = 0.04\n\
+     [collisions.restitution]\nlaw = \"constant\"\nepsilon = 0.5";
+
+/// GPU stochastic collisions are accepted (K5-WIRE): with a GPU the run works,
+/// without one it fails with a backend error, never "not implemented".
+#[test]
+fn gpu_stochastic_is_selected_not_refused() {
+    let text = replace(&small_config(), "backend = \"cpu\"", "backend = \"gpu\"");
+    let text = replace(&text, "model = \"none\"", STOCH);
+    let tmp = Tmp::new();
+    match run_config(&tmp, &text, "g", true) {
+        Ok(_) => {}
+        Err(RunError::Setup(m)) => {
+            assert!(!m.contains("not implemented"), "{m}");
+            assert!(m.contains("backend error"), "{m}");
+        }
+        Err(e) => panic!("{e}"),
+    }
+}
+
+/// GPU stochastic with chaos is a clean setup error from the backend, not a
+/// panic (with no GPU the adapter error comes first; both are setup errors).
+#[test]
+fn gpu_stochastic_with_chaos_is_a_clean_setup_error() {
+    let base = replace(&small_config(), "backend = \"cpu\"", "backend = \"gpu\"");
+    let text = replace(&base, "model = \"none\"", STOCH);
+    let text = format!(
+        "{text}\n[diagnostics.chaos]\nmethod = \"shadow\"\noffset_km = 1.0\nrenorm_steps = 100\n"
+    );
+    let tmp = Tmp::new();
+    let e = run_config(&tmp, &text, "gc", true).unwrap_err();
+    assert!(matches!(e, RunError::Setup(_)), "{e}");
+    assert_eq!(e.exit_code(), 2);
+}
+
+/// The CPU backend wraps particles into the arc (D1-CPU): the run completes,
+/// every particle of every frame stays inside the arc, and particles do wrap.
+///
+/// Power: the start is a uniform band of a0 +- 300 km (circular orbits), so the
+/// drift against the arc is (n - n0) = -(3/2) n0 da / a0, up to about 1.9
+/// deg/day at the band edges. Over 0.02 years (7.3 d, frames every 2.5 d) the
+/// edge particles drift about 13 deg, more than the 10 deg arc, so some must
+/// wrap between two frames. Without the wrap the bound check and the wrap
+/// count would both fail.
+#[test]
+fn cpu_arc_run_keeps_particles_in_the_arc() {
+    let width_deg: f64 = 10.0;
+    let text = replace(
+        &small_config(),
+        "kind = \"full_ring\"",
+        &format!("kind = \"arc\"\nwidth_deg = {width_deg}\ncentre_longitude_deg = 0.0"),
+    );
+    let text = replace(
+        &text,
+        "kind = \"core\"",
+        "kind = \"band\"\nmin_semi_major_axis_km = 139920.0\nmax_semi_major_axis_km = 140520.0",
+    );
+    let text = replace(
+        &text,
+        "semi_major_axis_km = 140220.0\nsigma_semi_major_axis_km = 5.0\neccentricity = 0.0024\napse_longitude_deg = 0.0\n",
+        "",
+    );
+    let tmp = Tmp::new();
+    let (dir, _) = run_config(&tmp, &text, "arc", true).unwrap();
+    let frames = dir.list_frames().unwrap();
+    assert!(frames.len() >= 3);
+    let mut wraps = 0usize;
+    let mut previous: Option<Vec<f32>> = None;
+    for i in frames {
+        let f = dir.read_frame_file(i).unwrap();
+        // The rotating frame turns at n0 and the arc centre moves with it, so
+        // y (km, azimuthal offset from the arc centre) must satisfy
+        // |y| <= a0 sin(width/2), plus 0.1% slack for f32 frames and for the
+        // difference between the chord and the arc length at the edge.
+        let half_km = f.a0_km * (0.5 * width_deg).to_radians().sin();
+        for (k, y) in f.y_km.iter().enumerate() {
+            assert!(
+                (*y as f64).abs() <= half_km * 1.001,
+                "frame {i} particle {k}: y = {y} km, half arc {half_km} km"
+            );
+        }
+        if let Some(prev) = &previous {
+            wraps += prev
+                .iter()
+                .zip(&f.y_km)
+                .filter(|(a, b)| ((**b - **a) as f64).abs() > half_km)
+                .count();
+        }
+        previous = Some(f.y_km.clone());
+    }
+    println!("arc wraps between frames: {wraps}");
+    assert!(wraps >= 1, "no particle wrapped: the test has no power");
 }
