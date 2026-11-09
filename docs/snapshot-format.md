@@ -27,6 +27,7 @@ A run writes one directory. Native tools (`fring-run`, `fring-analysis`) and the
   moons.bin            inertial moon states at each output time
   stats.csv            one row per statistics output
   chaos.csv            only with [diagnostics.chaos]: chaos indicator per particle (section 8a)
+  drops.csv            only with [loss] on_unbound = "freeze": the lost particles (section 8b)
   frames/000000.bin    one file per frame output
   frames/000001.bin
   ...
@@ -132,9 +133,24 @@ Written by `fring-run` at the end of a run that has a `[diagnostics.chaos]` tabl
 - `ftle_per_day`: finite-time Lyapunov exponent L / t, day^-1, with t the time of the last renormalisation.
 - `log_growth`: L, the sum of ln(d / d0) over the renormalisations (dimensionless).
 - `megno_mean`: the mean MEGNO. About 2 for a regular orbit, about lambda t / 2 for a chaotic one. Classes used in G3: regular <= 2.5, chaotic >= 5 (ADR 0008).
-- `flags`: bit 0 means that an interval had a zero or non-finite separation and was skipped.
+- `flags`: bit 0 means that an interval had a zero or non-finite separation and was skipped. Bit 1 (value 2) means that the particle was lost (ICR-004, `on_unbound = "freeze"`; the reason is in `drops.csv`, section 8b). A backend sets this bit at its next renormalisation, so `fring-run` also sets it from the drop report. The file then marks every lost particle, also one that was lost after the last renormalisation, and the CPU and GPU files agree. Older readers ignore the bit.
 
 The definition of the indicator (shadow offset, renormalisation, MEGNO formula) is in `docs/adr/0008-chaos-indicator.md`. `meta.json` gets an optional `chaos` object (section 9).
+
+## 8b. `drops.csv` (added by ICR-004; additive to version 1)
+
+Written by `fring-run` only when the config has `[loss]` with `on_unbound = "freeze"`; without it the file does not exist. With `freeze`, the file always exists: if no particle was lost it has the header row only. Plain CSV with the same rules as `stats.csv` (header row, shortest round-trip floats). Columns, all required, in this order:
+
+`id, reason, drop_step, time_s, x_km, y_km, z_km, vx_km_s, vy_km_s, vz_km_s`
+
+- One row per lost particle, ordered by `id`.
+- `reason`: 1 = unbound or invalid orbit (the Kepler drift fails); `2 + k` = inside moon `k` (`moon_radius = "params"`), with `k` the position in `[moons] include` (0 to 5).
+- `drop_step`: the 0-based global step, counted from the start of the run, in which the loss was found. It is exact and has the same meaning on the CPU and the GPU.
+- `time_s`: `start + drop_step x step_s`, in seconds since the epoch (`start` is the start time of the run).
+- `x_km` to `vz_km_s`: the frozen state in the inertial frame (Saturn-centred, km and km/s). **Within one block the frozen state is unspecified**: the backends keep the state at the start of the block of the loss (ICR-004 section 2). Use `reason` and `drop_step` for physics, not the state.
+- Frames still contain frozen particles at their frozen position. A reader that needs the live set at frame step `s` takes the particles with `drop_step >= s` or not in `drops.csv`.
+- The runner writes the file at the end of the run, through a `.tmp` file and a rename, so a reader never sees a half file. It also writes the file when a step fails (the state is then the one after the last completed step call, and `meta.json` does not exist). If that write fails, the first error is the one reported. A reader still applies the crash rule R1 as for `stats.csv`: a last line without a newline is dropped (`read_drops_csv_report` says so).
+- `fring-io`: `write_drops_csv`, `read_drops_csv`, `read_drops_csv_report`, `RunDir::write_drops_file`, `RunDir::read_drops_file`. `meta.json` has no field for `drops.csv`.
 
 ## 9. `meta.json`
 
