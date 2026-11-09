@@ -11,9 +11,9 @@
 //! compiles the kernels, builds the moon ephemeris and makes the stepper.
 
 use crate::live::{
-    Band, COLOUR_FAINT_OFFSET, CompareMode, END_MARGIN_S, FLOATS_PER_INSTANCE,
-    Governor, MAX_IN_FLIGHT, MOONLET_RADIUS_KM, PANDORA, PARTICLE_COUNT, ProjectionUniform, SPAN_S,
-    STEP_S, Setup, StepPlanner, ViewFrame, builtin_moon_radii_for, count_fits, drop_text,
+    Band, COLOUR_FAINT_OFFSET, CompareMode, END_MARGIN_S, FLOATS_PER_INSTANCE, Governor,
+    MAX_IN_FLIGHT, MOONLET_RADIUS_KM, PANDORA, PARTICLE_COUNT, ProjectionUniform, SPAN_S, STEP_S,
+    Setup, StepPlanner, ViewFrame, builtin_moon_radii_for, count_fits, drop_text,
     head_instances_styled, instance_bytes, limit_to_end, max_hours_for, moonlet_velocity,
     ref_base_slot, ref_bytes, status_bytes, view_transform,
 };

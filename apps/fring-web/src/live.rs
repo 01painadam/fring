@@ -222,8 +222,8 @@ impl Setup {
         let ring = ring_from_toml_str(ring_toml)?;
         let moons = moons_from_toml_str(moons_toml)?;
         // ICR-011: the field drifts about mu_eff at a0, like the CPU and GPU runs.
-        let field = SaturnField::<f64>::from_params(&saturn)
-            .with_drift_radius(ring.semi_major_axis_km);
+        let field =
+            SaturnField::<f64>::from_params(&saturn).with_drift_radius(ring.semi_major_axis_km);
         let n0_rad_s = reference_mean_motion(&field, ring.semi_major_axis_km);
         Ok(Self {
             saturn,
