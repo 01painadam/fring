@@ -132,6 +132,7 @@ fn throughput() {
         sigma_semi_major_axis_km: 5.0,
         eccentricity: 0.0024,
         apse_longitude_deg: 0.0,
+        inclination_deg: 0.0,
     };
     let n_p = 10_000;
     let ini = InitialState {

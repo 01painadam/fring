@@ -91,6 +91,7 @@ fn core_particles(field: &SaturnField<f64>, n: usize) -> Result<InitialState, St
         sigma_semi_major_axis_km: 5.0,
         eccentricity: 0.0024,
         apse_longitude_deg: 0.0,
+        inclination_deg: 0.0,
     };
     let count = u32::try_from(n).map_err(|_| format!("{n} particles do not fit in u32"))?;
     let particles = generate_particles(field, &dist, count, SEED).map_err(|e| e.to_string())?;
