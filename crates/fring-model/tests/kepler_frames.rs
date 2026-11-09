@@ -57,11 +57,10 @@ fn kepler_drift_returns_after_one_period() {
 fn kepler_drift_agrees_with_a_fine_leapfrog() {
     let sp = params();
     let point = SaturnField::<f64> {
-        gm_km3_s2: sp.gm_km3_s2,
-        reference_radius_km: sp.reference_radius_km,
         j2: 0.0,
         j4: 0.0,
         j6: 0.0,
+        ..SaturnField::from_params(&sp)
     };
     let (p, v, period) = eccentric_state();
     let dt = period / 20.0;

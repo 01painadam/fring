@@ -64,7 +64,9 @@ fn steps_advance_time_and_match_the_plain_loop() {
     assert_eq!(b.time_s(), 100.0 + 500.0 * cfg.time.step_s);
     assert!(b.moons().moons.is_empty());
 
-    let field = SaturnField::<f64>::from_params(&sys.saturn);
+    let field = SaturnField::<f64>::from_params(&sys.saturn)
+        // ICR-011: the backend drifts about mu_eff at a0 (config a0 = 140,220 km).
+        .with_drift_radius(140_220.0);
     let mut expected = ini.particles.clone();
     step_particles(&field, &mut expected, cfg.time.step_s, 500).unwrap();
     let view = b.particles().unwrap();

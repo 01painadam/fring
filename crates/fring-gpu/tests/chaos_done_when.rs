@@ -82,9 +82,11 @@ fn displaced(init: &InitialState, size_km: f64) -> InitialState {
     out
 }
 
-fn run<B: Backend>(config: &RunConfig, system: &System, init: &InitialState) -> (ChaosReport, f64) {
+/// ICR-011: the CPU arm drifts about GM (`with_point_mass_drift`), like the
+/// GPU, until WH-EFF-GPU.
+fn run(config: &RunConfig, system: &System, init: &InitialState) -> (ChaosReport, f64) {
     let t0 = Instant::now();
-    let mut b = B::new(config, system, init).unwrap();
+    let mut b = CpuBackend::with_point_mass_drift(config, system, init).unwrap();
     b.step(STEPS).unwrap();
     let r = b.chaos().unwrap().expect("chaos table is set");
     (r, t0.elapsed().as_secs_f64())
@@ -290,8 +292,8 @@ fn gpu_chaos_indicator_matches_cpu_for_1000_particles() {
     };
     println!("N = {n}, d0 = {d0} km, K = {k}, steps = {STEPS}, h = {H_S} s");
 
-    let (cpu, t_cpu) = run::<CpuBackend>(&config, &system, &init);
-    let (base, _) = run::<CpuBackend>(
+    let (cpu, t_cpu) = run(&config, &system, &init);
+    let (base, _) = run(
         &config,
         &system,
         &displaced(&init, env_f64("FRING_G3_BASE_KM", 1e-4)),

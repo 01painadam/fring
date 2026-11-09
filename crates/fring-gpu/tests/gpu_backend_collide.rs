@@ -286,7 +286,7 @@ fn statistics_agree_with_the_cpu_backend() {
         let mut g = gpu(&cfg, &init);
         g.step(steps).unwrap();
         let sg = g.stats().unwrap();
-        let mut c = CpuBackend::new(&cfg, &system(), &init).unwrap();
+        let mut c = CpuBackend::with_point_mass_drift(&cfg, &system(), &init).unwrap();
         c.step(steps).unwrap();
         let sc = c.stats().unwrap();
         for (s, vals, extra) in [

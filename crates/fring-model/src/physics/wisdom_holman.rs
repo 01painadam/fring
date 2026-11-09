@@ -1,8 +1,9 @@
 //! Wisdom-Holman split, drift-kick-drift, fixed step (ADR 0003).
 //!
-//! The drift is the exact Kepler motion about Saturn's point mass. The kick
-//! uses the acceleration without the point-mass term (J2, J4, J6; later the
-//! moons). Compared with the plain leapfrog this keeps the precession rates
+//! The drift is the exact Kepler motion about `field.drift_gm_km3_s2`: Saturn's
+//! GM for `SaturnField::from_params`, the effective GM at a0 after
+//! `with_drift_radius` (ICR-011). The kick is the rest of the force (J2, J4, J6
+//! and the difference of the two GMs; later the moons). Compared with the plain leapfrog this keeps the precession rates
 //! n - kappa and nu - n accurate at 150 steps per orbit.
 
 use super::gravity::SaturnField;
@@ -22,10 +23,10 @@ pub fn wh_step<T: Real>(
     h_s: T,
 ) -> Option<()> {
     let half = T::from_f64(0.5) * h_s;
-    let (p, v) = kepler_drift(field.gm_km3_s2, *pos_km, *vel_km_s, half)?;
-    let a = field.acceleration_without_point_mass(p);
+    let (p, v) = kepler_drift(field.drift_gm_km3_s2, *pos_km, *vel_km_s, half)?;
+    let a = field.kick_acceleration_saturn(p);
     let v = Vec3::new(v.x + a.x * h_s, v.y + a.y * h_s, v.z + a.z * h_s);
-    let (p, v) = kepler_drift(field.gm_km3_s2, p, v, half)?;
+    let (p, v) = kepler_drift(field.drift_gm_km3_s2, p, v, half)?;
     *pos_km = p;
     *vel_km_s = v;
     Some(())
@@ -47,12 +48,12 @@ pub fn wh_steps<T: Real>(
         return Some(());
     }
     let half = T::from_f64(0.5) * h_s;
-    let (mut p, mut v) = kepler_drift(field.gm_km3_s2, *pos_km, *vel_km_s, half)?;
+    let (mut p, mut v) = kepler_drift(field.drift_gm_km3_s2, *pos_km, *vel_km_s, half)?;
     for k in 0..n_steps {
-        let a = field.acceleration_without_point_mass(p);
+        let a = field.kick_acceleration_saturn(p);
         v = Vec3::new(v.x + a.x * h_s, v.y + a.y * h_s, v.z + a.z * h_s);
         let dt = if k + 1 == n_steps { half } else { h_s };
-        (p, v) = kepler_drift(field.gm_km3_s2, p, v, dt)?;
+        (p, v) = kepler_drift(field.drift_gm_km3_s2, p, v, dt)?;
     }
     *pos_km = p;
     *vel_km_s = v;

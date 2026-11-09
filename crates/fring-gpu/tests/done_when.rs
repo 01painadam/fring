@@ -61,8 +61,8 @@ fn gpu_matches_cpu_for_1e4_particles_over_1e3_orbits() {
     }
 
     let t0 = Instant::now();
-    let mut cpu = CpuBackend::new(&config, &system, &init).unwrap();
-    let mut shadow = CpuBackend::new(&config, &system, &shadow_init).unwrap();
+    let mut cpu = CpuBackend::with_point_mass_drift(&config, &system, &init).unwrap();
+    let mut shadow = CpuBackend::with_point_mass_drift(&config, &system, &shadow_init).unwrap();
     let a_init: Vec<f64> = (0..N)
         .map(|i| {
             let (p, v) = state(&init.particles, i);

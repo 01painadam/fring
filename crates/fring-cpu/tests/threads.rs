@@ -69,7 +69,9 @@ fn run_backend(sys: &System, ini: &InitialState, threads: Option<usize>) -> Part
 
 /// The same work in one thread, without rayon, with the same blocks.
 fn run_serial(sys: &System, ini: &InitialState) -> Particles {
-    let field = SaturnField::<f64>::from_params(&sys.saturn);
+    let field = SaturnField::<f64>::from_params(&sys.saturn)
+        // ICR-011: the backend drifts about mu_eff at a0 (config a0 = 140,220 km).
+        .with_drift_radius(140_220.0);
     let p = &ini.particles;
     let mut state: Vec<State> = (0..p.len())
         .map(|i| {
