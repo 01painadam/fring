@@ -253,7 +253,8 @@ fn refusals() {
         width_deg: 10.0,
         centre_longitude_deg: 0.0,
     };
-    assert!(err(arc).contains("D1-CPU"));
+    // The arc is accepted since D1-CPU (tests/arc.rs).
+    assert!(CpuBackend::new(&arc, &sys, &init).is_ok());
 }
 
 /// Time of one collision step by stage (for B2). Run with

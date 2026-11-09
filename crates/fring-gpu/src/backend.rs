@@ -9,6 +9,19 @@
 //! every thread then advances one particle through the whole block. The
 //! host fills block k+1 while the GPU runs block k. Nothing is read back
 //! except 4 bytes at the end of each `step` call (the failure flag).
+//!
+//! # Collisions (task K5-WIRE)
+//!
+//! With `[collisions] model = "stochastic"`, blocks end at multiples of
+//! `every_steps`. After such a block the state is binned into the cells
+//! (`GpuBinner`) and `GpuCollider` changes the velocities, in the same
+//! submission; then the 16 tally words are read (one wait per collision step)
+//! and added on the host. [`Backend::stats`] returns the sum since its last
+//! call. Frozen or dropped particles are not binned, so they do not collide.
+//! The shader takes the smallest *index* of a cell for the random numbers;
+//! it equals the id when the ids are 0..n in order, as
+//! `generate_particles` makes them. Arc, GPU mode C, chaos and hard_sphere
+//! are refused (see `check_collisions`).
 //! [`Backend::particles`] and [`Backend::stats`] read the whole state back,
 //! so do not call them at every step.
 //!
@@ -26,12 +39,17 @@
 //! the environment variable `FRING_GPU_MODE` (`dp`, `c` or `d`); use
 //! [`GpuBackend::with_options`] in code.
 
+use crate::bin::{BinGeometry, GpuBinner};
+use crate::collide::{CollideParams, GpuCollider};
 use crate::gpu::Gpu;
 use crate::spike::{Consts, State, kick_scale, state_from_f64, state_to_f64};
 use crate::stepper::{GpuStepper, plan_capacity};
 use crate::wf32::model;
 use crate::wh::{self, HostTable, Mode};
 use crate::wh_gpu::{DEFAULT_WORKGROUP, NO_FAILURE, WhKernels, unbound};
+use fring_collide::tally::Tally;
+use fring_model::config::{Collisions, Domain};
+use fring_model::physics::frames::reference_mean_motion;
 use fring_model::physics::{
     ArcGeometry, EpicycleElements, KickTable, SaturnField, epicycle_state, interpolate_moons,
 };
@@ -114,6 +132,62 @@ pub struct GpuBackend {
     radii_set: bool,
     /// Staging buffer of [`Backend::dropped`], made on first use.
     drop_stage: Option<wgpu::Buffer>,
+    /// `[collisions] model = "stochastic"` (task K5-WIRE).
+    collide: Option<GpuCollision>,
+}
+
+/// The bin pass and the collision pass (task K5-WIRE), and the sum of the
+/// tallies of the passes since the last [`Backend::stats`] call.
+struct GpuCollision {
+    binner: GpuBinner,
+    collider: GpuCollider,
+    /// One collision step every this many integrator steps.
+    every: u64,
+    /// Sum of the pass tallies, added on the host in pass order (so the
+    /// result is the same in every run).
+    tally: Tally,
+}
+
+/// The refusals of `[collisions]` on the GPU (as on the CPU, task K2-CPU, and
+/// the reasons in `docs/handoffs/K5-WIRE.md`). No GPU needed.
+fn check_collisions(config: &RunConfig, mode: Mode) -> Result<()> {
+    match config.collisions {
+        Collisions::None => return Ok(()),
+        Collisions::HardSphere { .. } => {
+            return Err(Error::Config(
+                "collisions.model = \"hard_sphere\" is not implemented on the GPU backend \
+                 (task K3 is CPU only)"
+                    .to_string(),
+            ));
+        }
+        Collisions::Stochastic { .. } => {}
+    }
+    if matches!(config.domain, Domain::Arc { .. }) {
+        return Err(Error::Config(
+            "collisions with domain.kind = \"arc\" are not available on the GPU backend: \
+             a test of the collider on the arc must come first (tasks ARC-CELLS-GPU, D1)"
+                .to_string(),
+        ));
+    }
+    if config
+        .diagnostics
+        .as_ref()
+        .is_some_and(|d| d.chaos.is_some())
+    {
+        return Err(Error::Config(
+            "[diagnostics.chaos] cannot be used with collisions.model = \"stochastic\": \
+             a shadow particle has no meaning under random velocity kicks, because the \
+             main particle and its shadow would get different kicks and the separation \
+             (and so MEGNO) would measure the noise (A0 decision, 2026-11-08)"
+                .to_string(),
+        ));
+    }
+    if mode == Mode::C {
+        return Err(Error::Config(
+            "collisions are not available in GPU mode C (not tested); use mode dp or d".to_string(),
+        ));
+    }
+    Ok(())
 }
 
 impl GpuBackend {
@@ -135,6 +209,7 @@ impl GpuBackend {
                     .to_string(),
             ));
         }
+        check_collisions(config, opts.mode)?;
         let freeze = config.freeze_unbound();
         let rule = config.moon_radius_rule();
         if (freeze || rule) && opts.mode == Mode::C {
@@ -214,6 +289,45 @@ impl GpuBackend {
         if let Some(geom) = arc {
             stepper.set_arc(geom)?;
         }
+        // After `set_arc`, which replaces the status buffer.
+        let collide = match config.collisions {
+            Collisions::Stochastic {
+                particle_radius_km,
+                weight,
+                restitution,
+                every_steps,
+                ..
+            } => {
+                let n0 = reference_mean_motion(&field, config.frame.reference_semi_major_axis_km);
+                let geom = BinGeometry::from_config(config, n0)?;
+                let binner = GpuBinner::for_stepper(&gpu, &stepper, geom)?;
+                let volume = geom.lx_km * geom.ly_km * geom.lz_km;
+                let collider = GpuCollider::new(
+                    &gpu,
+                    stepper.state_buffer(),
+                    binner.sorted_buffer(),
+                    binner.sorted_keys_buffer(),
+                    n,
+                    stepper.capacity(),
+                    &field,
+                    CollideParams {
+                        particle_radius_km,
+                        weight,
+                        restitution,
+                        seed: config.run.seed,
+                    },
+                    volume,
+                    false,
+                )?;
+                Some(GpuCollision {
+                    binner,
+                    collider,
+                    every: every_steps,
+                    tally: Tally::default(),
+                })
+            }
+            _ => None,
+        };
 
         let d = gpu.device();
         let mk = |size: u64, usage: wgpu::BufferUsages| {
@@ -252,6 +366,7 @@ impl GpuBackend {
             rule,
             radii_set: false,
             drop_stage: None,
+            collide,
             kernels,
         })
     }
@@ -429,17 +544,21 @@ impl Backend for GpuBackend {
         let mut done = 0u64;
         while done < n_steps {
             let mut enc = d.create_command_encoder(&Default::default());
-            let r = self
-                .stepper
-                .encode_block(&mut enc, n_steps - done, 0, |last| {
-                    if let Some(idx) = last {
-                        d.poll(wgpu::PollType::Wait {
-                            submission_index: Some(idx),
-                            timeout: None,
-                        })
-                        .expect("GPU poll failed");
-                    }
-                });
+            // Blocks end at multiples of `every_steps` (as on the CPU), so the
+            // collision steps do not depend on how the caller splits the run.
+            let mut max_steps = n_steps - done;
+            if let Some(c) = &self.collide {
+                max_steps = max_steps.min(c.every - self.stepper.steps_total % c.every);
+            }
+            let r = self.stepper.encode_block(&mut enc, max_steps, 0, |last| {
+                if let Some(idx) = last {
+                    d.poll(wgpu::PollType::Wait {
+                        submission_index: Some(idx),
+                        timeout: None,
+                    })
+                    .expect("GPU poll failed");
+                }
+            });
             let (block, slot) = match r {
                 Ok(v) => v,
                 Err(e) => {
@@ -447,9 +566,32 @@ impl Backend for GpuBackend {
                     return Err(e);
                 }
             };
+            // The collision step on the synchronised state at the end of a
+            // block that ends on a multiple of `every_steps`: bin, then
+            // collide, in the same submission.
+            let steps_now = self.stepper.steps_total;
+            let collide_now = self
+                .collide
+                .as_ref()
+                .is_some_and(|c| steps_now.is_multiple_of(c.every));
+            if collide_now && let Some(c) = &self.collide {
+                c.binner.encode(&mut enc, self.stepper.time_s());
+                c.collider
+                    .encode(&mut enc, steps_now, c.every as f64 * self.stepper.step_s());
+            }
             let idx = q.submit([enc.finish()]);
             self.stepper.set_last(slot, idx);
             done += block;
+            if collide_now && let Some(c) = &mut self.collide {
+                // The pass clears its counters, so each pass is read here.
+                match c.collider.read_tally() {
+                    Ok(t) => c.tally += t,
+                    Err(e) => {
+                        self.stepper.steps_total = base;
+                        return Err(e);
+                    }
+                }
+            }
         }
         self.snapshot_stale = true;
         let flag = self.failure_flag();
@@ -574,7 +716,7 @@ impl Backend for GpuBackend {
     }
 
     fn stats(&mut self) -> Result<StepStats> {
-        let max_rel_energy_error = if self.has_moons() {
+        let max_rel_energy_error = if self.has_moons() || self.collide.is_some() {
             None
         } else {
             self.sync_snapshot()?;
@@ -587,11 +729,18 @@ impl Backend for GpuBackend {
             }
             Some(self.max_rel_energy_error)
         };
+        // Collision sums since the previous call (ICR-009).
+        let tally = self
+            .collide
+            .as_mut()
+            .map(|c| std::mem::take(&mut c.tally))
+            .unwrap_or_default();
         Ok(StepStats {
             time_s: self.time_s(),
             steps_total: self.stepper.steps_total,
             max_rel_energy_error,
-            ..Default::default()
+            collisions_since_last: tally.collisions,
+            collision: tally.stats,
         })
     }
 }
