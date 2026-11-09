@@ -220,7 +220,8 @@ fn wrap_kernel_matches_its_twin_and_the_f64_wrap() {
         );
         let (p_in, v_in) = state_to_f64(s_in);
         let reference = geom.wrap(p_in, v_in, t_kick);
-        let failed = s_out[0].hi.is_nan();
+        // The kernel marks a failure with x = -1.0e30 km (not NaN, see arc.wgsl).
+        let failed = s_out[0].hi == -1.0e30;
         assert_eq!(
             failed, !tw.ok,
             "twin and GPU disagree on failure, particle {i}"
