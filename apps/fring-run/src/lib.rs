@@ -9,6 +9,8 @@
 //!    in steps 1 to 3 leaves nothing behind;
 //! 4. write `config.toml`, `moons.bin`, then frames and `stats.csv` while
 //!    stepping, and `meta.json` last (its presence means "finished").
+//!    With `[loss] on_unbound = "freeze"` it also writes `drops.csv` at the end
+//!    of the run, and when a step fails (ICR-004, `docs/snapshot-format.md` 8b).
 
 pub mod cli;
 pub mod e1;
@@ -17,16 +19,16 @@ use cli::Args;
 use fring_cpu::CpuBackend;
 use fring_gpu::backend::GpuBackend;
 use fring_io::{
-    CHAOS_VERSION, ChaosMeta, ChaosRow, Frame, MoonRecord, MoonsFile, RotatingVelocities, RunDir,
-    RunMeta,
+    CHAOS_VERSION, ChaosMeta, ChaosRow, DropRow, Frame, MoonRecord, MoonsFile, RotatingVelocities,
+    RunDir, RunMeta,
 };
 use fring_model::config::{BackendKind, Collisions};
-use fring_model::params::{moons_from_toml_str, saturn_from_toml_str};
+use fring_model::params::{moon_radii_from_toml_str, moons_from_toml_str, saturn_from_toml_str};
 use fring_model::physics::{
     DEFAULT_INTERVAL_S, MoonInit, SaturnField, build_ephemeris, generate_particles,
     inertial_to_rotating, interpolate_moons, reference_mean_motion,
 };
-use fring_model::{Backend, InitialState, ParticleView, RunConfig, System};
+use fring_model::{Backend, DropReport, InitialState, ParticleView, Particles, RunConfig, System};
 use std::fmt;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -156,6 +158,82 @@ fn select_moons(include: &[String], all: Vec<MoonInit>) -> Result<Vec<MoonInit>,
     Ok(chosen)
 }
 
+/// The radii of the moons in the track order of the ephemeris (which is the
+/// `[moons] include` order), from the text of `moons.toml`. Reason `2 + k` of a
+/// lost particle uses the same order.
+pub(crate) fn moon_radii_for(moons_text: &str, system: &System) -> Result<Vec<f64>, RunError> {
+    let radii = setup(moon_radii_from_toml_str(moons_text))?;
+    system
+        .moons
+        .tracks
+        .iter()
+        .map(|t| {
+            radii
+                .iter()
+                .find(|(name, _)| *name == t.name)
+                .map(|(_, r)| *r)
+                .ok_or_else(|| RunError::Setup(format!("no radius_km for moon {:?}", t.name)))
+        })
+        .collect()
+}
+
+/// The `drops.csv` rows: one per lost particle, ordered by id, with the frozen
+/// inertial state from `particles` (the same order as `report`). `time_s` is
+/// `start_s + drop_step x step_s`.
+pub fn drop_rows(
+    report: &DropReport,
+    particles: &Particles,
+    start_s: f64,
+    step_s: f64,
+) -> Result<Vec<DropRow>, RunError> {
+    let n = particles.len();
+    if report.reason.len() != n || report.drop_step.len() != n {
+        return Err(RunError::Run(format!(
+            "the drop report has {} reasons and {} steps for {n} particles",
+            report.reason.len(),
+            report.drop_step.len()
+        )));
+    }
+    let mut rows = Vec::new();
+    for (i, &reason) in report.reason.iter().enumerate() {
+        if reason == 0 {
+            continue;
+        }
+        let drop_step = report.drop_step[i];
+        if drop_step == u64::MAX {
+            return Err(RunError::Run(format!(
+                "particle {} is lost (reason {reason}) but has no drop step",
+                particles.id[i]
+            )));
+        }
+        let (r, v) = (particles.position_km(i), particles.velocity_km_s(i));
+        rows.push(DropRow {
+            id: particles.id[i],
+            reason,
+            drop_step,
+            time_s: start_s + drop_step as f64 * step_s,
+            position_km: [r.x, r.y, r.z],
+            velocity_km_s: [v.x, v.y, v.z],
+        });
+    }
+    rows.sort_by_key(|r| r.id);
+    Ok(rows)
+}
+
+/// Reads the lost particles from the backend (`None` without freeze). The GPU
+/// backend reads buffers back here: call it once, not every step.
+fn collect_drops<B: Backend>(
+    backend: &mut B,
+    start_s: f64,
+    step_s: f64,
+) -> Result<Option<Vec<DropRow>>, RunError> {
+    let Some(report) = during(backend.dropped())? else {
+        return Ok(None);
+    };
+    let view = during(backend.particles())?;
+    drop_rows(&report, view.particles, start_s, step_s).map(Some)
+}
+
 /// True at multiples of `every` and at the last step `n`.
 fn is_event(step: u64, every: u64, n: u64) -> bool {
     step.is_multiple_of(every) || step == n
@@ -267,13 +345,12 @@ pub fn run(args: &Args) -> Result<Summary, RunError> {
     let saturn = setup(saturn_from_toml_str(&read_text(
         &params_dir.join("saturn.toml"),
     )?))?;
-    let moons = if config.moons.include.is_empty() {
-        Vec::new()
+    let (moons, moons_text) = if config.moons.include.is_empty() {
+        (Vec::new(), None)
     } else {
-        let all = setup(moons_from_toml_str(&read_text(
-            &params_dir.join("moons.toml"),
-        )?))?;
-        select_moons(&config.moons.include, all)?
+        let text = read_text(&params_dir.join("moons.toml"))?;
+        let all = setup(moons_from_toml_str(&text))?;
+        (select_moons(&config.moons.include, all)?, Some(text))
     };
     let n_steps = config.time.n_steps();
     let step_s = config.time.step_s;
@@ -312,6 +389,15 @@ pub fn run(args: &Args) -> Result<Summary, RunError> {
         particles,
     };
     let system = System { saturn, moons: eph };
+    // Moon radii for the radius rule (`moon_radius = "params"`) and for
+    // `[substep]` (ICR-004 section 5). Read only when one of them is on, so a
+    // config without them behaves exactly as before.
+    let radii_km = match &moons_text {
+        Some(text) if config.moon_radius_rule() || config.substep.is_some() => {
+            Some(moon_radii_for(text, &system)?)
+        }
+        _ => None,
+    };
 
     // 3. Backend, chosen by `[run] backend`.
     let ctx = Context {
@@ -321,16 +407,23 @@ pub fn run(args: &Args) -> Result<Summary, RunError> {
         a0_km,
         n0_rad_s,
         n_steps,
+        start_s: init.time_s,
         out: RunDir::new(&out_dir),
     };
     let (mut summary, machine) = match config.run.backend {
         BackendKind::Cpu => {
-            let backend = setup(CpuBackend::new(&config, &system, &init))?;
+            let mut backend = setup(CpuBackend::new(&config, &system, &init))?;
+            if let Some(r) = &radii_km {
+                setup(backend.set_moon_radii_km(r))?;
+            }
             let machine = fring_io::sysinfo::machine("cpu");
             (execute(backend, &ctx, &mut progress)?, machine)
         }
         BackendKind::Gpu => {
-            let backend = setup(GpuBackend::new(&config, &system, &init))?;
+            let mut backend = setup(GpuBackend::new(&config, &system, &init))?;
+            if let Some(r) = &radii_km {
+                setup(backend.set_moon_radii_km(r))?;
+            }
             let machine = fring_io::sysinfo::machine(&format!(
                 "gpu {}, mode {}",
                 backend.adapter_name(),
@@ -371,6 +464,8 @@ struct Context<'a> {
     a0_km: f64,
     n0_rad_s: f64,
     n_steps: u64,
+    /// Simulation time of step 0, s.
+    start_s: f64,
     out: RunDir,
 }
 
@@ -410,7 +505,7 @@ fn append_stats(file: &mut std::fs::File, stats: &fring_model::StepStats) -> Res
 
 /// Per particle: id, Keplerian a (point mass) and longitude relative to
 /// Prometheus (degrees, [-180, 180), NaN without Prometheus) at the start.
-fn chaos_initial<B: Backend>(
+fn chaos_initial_fn<B: Backend>(
     ctx: &Context<'_>,
     backend: &mut B,
 ) -> Result<Vec<(u32, f64, f64)>, RunError> {
@@ -474,29 +569,47 @@ fn execute<B: Backend>(
         Ok(())
     };
 
-    let chaos_initial = if cfg.diagnostics.as_ref().is_some_and(|d| d.chaos.is_some()) {
-        Some(chaos_initial(ctx, &mut backend)?)
-    } else {
-        None
-    };
-    let mut step = 0u64;
-    write_frame(&mut backend, 0, &mut frames)?;
-    append_stats(&mut stats_file, &during(backend.stats())?)?;
-    stats_rows += 1;
-    while step < n {
-        let next = next_multiple(step, fe, n).min(next_multiple(step, se, n));
-        let t0 = Instant::now();
-        during(backend.step(next - step))?;
-        stepping_s += t0.elapsed().as_secs_f64();
-        step = next;
-        if is_event(step, fe, n) {
-            write_frame(&mut backend, step, &mut frames)?;
+    // The stepping loop. If it fails and `drops.csv` is on, the lost
+    // particles are still written (best effort) before the error is returned.
+    let mut chaos_initial = None;
+    let loop_result = (|| -> Result<(), RunError> {
+        if cfg.diagnostics.as_ref().is_some_and(|d| d.chaos.is_some()) {
+            chaos_initial = Some(chaos_initial_fn(ctx, &mut backend)?);
         }
-        if is_event(step, se, n) {
-            append_stats(&mut stats_file, &during(backend.stats())?)?;
-            stats_rows += 1;
+        let mut step = 0u64;
+        write_frame(&mut backend, 0, &mut frames)?;
+        append_stats(&mut stats_file, &during(backend.stats())?)?;
+        stats_rows += 1;
+        while step < n {
+            let next = next_multiple(step, fe, n).min(next_multiple(step, se, n));
+            let t0 = Instant::now();
+            during(backend.step(next - step))?;
+            stepping_s += t0.elapsed().as_secs_f64();
+            step = next;
+            if is_event(step, fe, n) {
+                write_frame(&mut backend, step, &mut frames)?;
+            }
+            if is_event(step, se, n) {
+                append_stats(&mut stats_file, &during(backend.stats())?)?;
+                stats_rows += 1;
+            }
+            progress.update(step, n, backend.time_s(), frames, step == n);
         }
-        progress.update(step, n, backend.time_s(), frames, step == n);
+        Ok(())
+    })();
+    if let Err(e) = loop_result {
+        // The state is the one after the last completed `step` call. A failure
+        // to write here must not hide the first error.
+        if let Ok(Some(rows)) = collect_drops(&mut backend, ctx.start_s, cfg.time.step_s) {
+            let _ = out.write_drops_file(&rows);
+        }
+        return Err(e);
+    }
+    // Once, at the end: the GPU reads its status buffer back here.
+    let drops = collect_drops(&mut backend, ctx.start_s, cfg.time.step_s)?;
+    if let Some(rows) = &drops {
+        // Header only if nobody was lost: the file exists if and only if freeze is on.
+        during(out.write_drops_file(rows))?;
     }
     let chaos = match (
         chaos_initial,
@@ -506,6 +619,12 @@ fn execute<B: Backend>(
             let report = during(backend.chaos())?
                 .ok_or_else(|| RunError::Run("the backend returned no chaos indicator".into()))?;
             let day_s = 86_400.0;
+            // Bit 1 (value 2) = lost. The backends set it at their next
+            // renormalisation, so a particle lost after the last one has no
+            // bit yet (found on the GPU). Setting it here from the drop report
+            // makes the CPU and GPU files agree.
+            let lost: std::collections::HashSet<u32> =
+                drops.iter().flatten().map(|r| r.id).collect();
             let rows: Vec<ChaosRow> = initial
                 .iter()
                 .enumerate()
@@ -516,7 +635,7 @@ fn execute<B: Backend>(
                     ftle_per_day: report.ftle_per_s[i] * day_s,
                     log_growth: report.log_growth[i],
                     megno_mean: report.megno_mean[i],
-                    flags: report.flags[i],
+                    flags: report.flags[i] | if lost.contains(&id) { 2 } else { 0 },
                 })
                 .collect();
             during(out.write_chaos_file(&rows))?;
