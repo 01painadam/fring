@@ -3,6 +3,9 @@
 //!
 //! ```text
 //! fring-analyse map <run> <out_dir> <tag> [r_lo r_hi r_bin lon_bin]
+//! fring-analyse windows <run> <out.csv> <years>
+//!   per radius window: survivors, lost by reason (flag bit 1), chaotic fraction
+//!   of the survivors and with the lost counted as chaotic, lambda (A3-ANALYSIS)
 //! fring-analyse compare <run_a> <run_b>
 //! fring-analyse closest <config.toml> <out.csv> [moons r_lo r_hi n_max chaos_run]
 //! fring-analyse apse <out_dir> <run>...
@@ -35,6 +38,7 @@ fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let r = match args.first().map(String::as_str) {
         Some("map") => cmd_map(&args[1..]),
+        Some("windows") => cmd_windows(&args[1..]),
         Some("compare") => cmd_compare(&args[1..]),
         Some("closest") => cmd_closest(&args[1..]),
         Some("apse") => cmd_apse(&args[1..]),
@@ -114,6 +118,26 @@ fn cmd_map(a: &[String]) -> Res<()> {
         0.25,
     )?;
     print_fractions(tag, &pts);
+    Ok(())
+}
+
+fn cmd_windows(a: &[String]) -> Res<()> {
+    let years: f64 = a
+        .get(2)
+        .and_then(|s| s.parse().ok())
+        .ok_or("usage: windows <run> <out.csv> <years>")?;
+    let pts = map::read_points(Path::new(&a[0]))?;
+    let rows = RunDir::new(Path::new(&a[0])).read_chaos_file()?;
+    let lost = fring_analysis::loss::lost_from_flags(&rows);
+    let t = fring_analysis::loss::window_table(
+        &pts,
+        &lost,
+        &fring_analysis::loss::default_windows(),
+        years,
+    );
+    let mut f = BufWriter::new(File::create(&a[1])?);
+    fring_analysis::loss::write_window_csv(&mut f, &t)?;
+    println!("windows: {} particles, {} lost", pts.len(), lost.len());
     Ok(())
 }
 
