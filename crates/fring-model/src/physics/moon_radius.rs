@@ -15,6 +15,7 @@
 
 use super::arc::ArcGeometry;
 use super::hermite::hermite3;
+use crate::real::sin_cos;
 use crate::{Real, Vec3};
 
 /// Smallest squared distance (km²) from the origin to the segment from `a` to
@@ -157,7 +158,8 @@ pub fn particle_level<T: Real>(
     let mut level = one(pos_km, vel_km_s);
     if let Some(g) = arc {
         let w = g.width_rad();
-        let (c, s) = (T::from_f64(w.cos()), T::from_f64(w.sin()));
+        let (sw, cw) = sin_cos(w);
+        let (c, s) = (T::from_f64(cw), T::from_f64(sw));
         for sign in [-T::ONE, T::ONE] {
             let s = s * sign;
             level = level.max(one(turn(pos_km, c, s), turn(vel_km_s, c, s)));
