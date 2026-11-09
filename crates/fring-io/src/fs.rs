@@ -5,6 +5,7 @@
 //! it compiles for wasm32 but file access fails there.
 
 use crate::chaos::{ChaosRow, read_chaos_csv, write_chaos_csv};
+use crate::drops::{DropRow, read_drops_csv, write_drops_csv};
 use crate::frame::{Frame, read_frame, write_frame};
 use crate::layout::{RunDir, parse_frame_file_name};
 use crate::meta::{RunMeta, read_meta, write_meta};
@@ -109,6 +110,14 @@ impl RunDir {
 
     pub fn read_chaos_file(&self) -> Result<Vec<ChaosRow>> {
         read_chaos_csv(&mut open(&self.chaos_path())?)
+    }
+
+    pub fn write_drops_file(&self, rows: &[DropRow]) -> Result<()> {
+        write_atomic(&self.drops_path(), |w| write_drops_csv(w, rows))
+    }
+
+    pub fn read_drops_file(&self) -> Result<Vec<DropRow>> {
+        read_drops_csv(&mut open(&self.drops_path())?)
     }
 
     pub fn write_meta_file(&self, meta: &RunMeta) -> Result<()> {
