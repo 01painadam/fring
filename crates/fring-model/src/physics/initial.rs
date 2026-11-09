@@ -14,8 +14,11 @@
 //! coincides with it at time 0.
 //!
 //! All particles have `z = 0` and `vz = 0`, except the clump and the
-//! moonlet, which have a z offset (and `vz = 0`): the distributions have no
-//! inclination field yet.
+//! moonlet, which have a z offset (and `vz = 0`), and the core with
+//! `inclination_deg > 0` (ICR-012): `z = a i sin(phi)`, `vz = a i nu cos(phi)`
+//! with `phi = 2 pi u_z` (the second word of `counter(id, 1)`). At
+//! `inclination_deg = 0` the vertical state is exactly 0, as before. The band
+//! distributions have no inclination field yet.
 //!
 //! | Distribution | a | e, apse | mean longitude |
 //! |---|---|---|---|
@@ -118,20 +121,27 @@ pub fn initial_particle(
             sigma_semi_major_axis_km,
             eccentricity,
             apse_longitude_deg,
+            inclination_deg,
         } => {
             let [u1, u2] = rng.uniform_f64(counter(id, 0));
             let (g, _) = box_muller(u1, u2);
             let a_km = semi_major_axis_km + sigma_semi_major_axis_km * g;
-            let [u_lambda, _] = rng.uniform_f64(counter(id, 1));
+            let [u_lambda, u_z] = rng.uniform_f64(counter(id, 1));
             let lambda = two_pi * u_lambda;
+            // Exactly 0 at i = 0: a random phase would give -0.0 (ICR-012).
+            let (i_rad, z_phase_rad) = if inclination_deg == 0.0 {
+                (0.0, 0.0)
+            } else {
+                (inclination_deg.to_radians(), two_pi * u_z)
+            };
             epicycle_state(
                 field,
                 &EpicycleElements {
                     a_km,
                     e: eccentricity,
-                    i_rad: 0.0,
+                    i_rad,
                     mean_anomaly_rad: lambda - apse_longitude_deg.to_radians(),
-                    z_phase_rad: 0.0,
+                    z_phase_rad,
                     mean_longitude_rad: lambda,
                 },
             )
@@ -270,6 +280,7 @@ mod tests {
             sigma_semi_major_axis_km: 5.0,
             eccentricity: 0.0024,
             apse_longitude_deg: 40.0,
+            inclination_deg: 0.0,
         }
     }
 
@@ -618,5 +629,79 @@ mod tests {
             assert_eq!(short.velocity_km_s(i), a.velocity_km_s(i));
         }
         assert_eq!(initial_particle(&f, &core(), SEED, 7).0, a.position_km(7));
+    }
+
+    fn core_with_inclination(inclination_deg: f64) -> Distribution {
+        Distribution::Core {
+            semi_major_axis_km: 140_220.0,
+            sigma_semi_major_axis_km: 0.0,
+            eccentricity: 0.0024,
+            apse_longitude_deg: 40.0,
+            inclination_deg,
+        }
+    }
+
+    /// ICR-012 point 2: the field absent in the config is the same as 0.0,
+    /// bit for bit in all six components.
+    #[test]
+    fn core_inclination_absent_equals_zero_bitwise() {
+        use crate::config::RunConfig;
+        let text = include_str!("../../tests/data/example-run.toml");
+        let absent = RunConfig::from_toml_str(text).unwrap();
+        let explicit_text = text.replace(
+            "apse_longitude_deg = 0.0",
+            "apse_longitude_deg = 0.0\ninclination_deg = 0.0",
+        );
+        assert_ne!(explicit_text, text);
+        let explicit = RunConfig::from_toml_str(&explicit_text).unwrap();
+        let f = field();
+        let a = generate_particles(&f, &absent.particles.distribution, 1000, SEED).unwrap();
+        let b = generate_particles(&f, &explicit.particles.distribution, 1000, SEED).unwrap();
+        for i in 0..1000 {
+            for (u, v) in [
+                (a.position_km(i), b.position_km(i)),
+                (a.velocity_km_s(i), b.velocity_km_s(i)),
+            ] {
+                for (x, y) in [(u.x, v.x), (u.y, v.y), (u.z, v.z)] {
+                    assert_eq!(x.to_bits(), y.to_bits(), "particle {i}");
+                }
+            }
+            assert_eq!(a.position_km(i).z.to_bits(), 0.0_f64.to_bits());
+            assert_eq!(a.velocity_km_s(i).z.to_bits(), 0.0_f64.to_bits());
+        }
+    }
+
+    /// ICR-012 point 3: vertical epicycle with a uniform phase, and the
+    /// in-plane state unchanged.
+    #[test]
+    fn core_inclination_gives_a_uniform_vertical_epicycle() {
+        let f = field();
+        let n = 10_000_u32;
+        let i_deg = 1.0e-3_f64;
+        let a_km = 140_220.0;
+        let amp = a_km * i_deg.to_radians();
+        let nu = frequencies(&f, a_km).nu_rad_s;
+        let flat = generate_particles(&f, &core_with_inclination(0.0), n, SEED).unwrap();
+        let tilted = generate_particles(&f, &core_with_inclination(i_deg), n, SEED).unwrap();
+        let (mut sum, mut sum2) = (0.0, 0.0);
+        for k in 0..n as usize {
+            let (p, v) = (tilted.position_km(k), tilted.velocity_km_s(k));
+            let (p0, v0) = (flat.position_km(k), flat.velocity_km_s(k));
+            for (x, y) in [(p.x, p0.x), (p.y, p0.y), (v.x, v0.x), (v.y, v0.y)] {
+                assert_eq!(x.to_bits(), y.to_bits(), "in-plane, particle {k}");
+            }
+            let w = p.z / amp;
+            assert!(p.z.abs() <= amp * (1.0 + 1e-12), "particle {k}");
+            let wv = v.z / (amp * nu);
+            assert!((w * w + wv * wv - 1.0).abs() < 1e-12, "particle {k}");
+            sum += w;
+            sum2 += w * w;
+        }
+        let nf = f64::from(n);
+        let mean = sum / nf;
+        let rms = (sum2 / nf).sqrt();
+        // sd of w is 1/sqrt(2): SE of the mean 0.00707; SE of the rms 0.0025.
+        assert!(mean.abs() < 0.0212, "mean {mean}");
+        assert!((rms - 0.5_f64.sqrt()).abs() < 0.0075, "rms {rms}");
     }
 }

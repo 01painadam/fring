@@ -98,6 +98,7 @@ fn distributions() -> Vec<Distribution> {
             sigma_semi_major_axis_km: 5.0,
             eccentricity: 0.0024,
             apse_longitude_deg: 40.0,
+            inclination_deg: 0.0,
         },
         Distribution::Band {
             min_semi_major_axis_km: 139_000.0,
