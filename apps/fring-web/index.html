@@ -462,6 +462,18 @@
       }
       if (age > WARMUP_MS + MEASURE_MS) benchFinish();
     };
+    // The GPU or the self-test failed: every cell that has not run gets a "not run" row.
+    const benchFail = (msg) => {
+      if (!bench) return;
+      bench_.error = msg;
+      if (bench_.cell) { bench_.dts = []; benchFinish(); }
+      while (bench_.idx < benchCells.length) {
+        bench_.cell = benchCells[bench_.idx];
+        bench_.error = msg;
+        bench_.dts = [];
+        benchFinish();
+      }
+    };
     const dts = [];
     let prev = null, shown = "", n = 0;
     const loop = (now) => {
@@ -478,7 +490,9 @@
         shown = phase;
         $("status").textContent = { checking: "Checking GPU arithmetic...", preparing: "Preparing the moons (a few seconds)...", running: "", failed: "" }[phase];
         if (phase === "failed") {
-          fail("The GPU arithmetic check failed", app.message() + " The integrator was not started.");
+          const gpuMsg = app.message();
+          benchFail(gpuMsg);
+          fail(gpuMsg.startsWith("The GPU reported an error") ? "The GPU rejected its program" : "The GPU arithmetic check failed", gpuMsg + " The integrator was not started.");
           return;
         }
       }

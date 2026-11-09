@@ -677,6 +677,34 @@ pub fn limit_to_end(steps: u64, left_s: f64, step_s: f64) -> (u64, bool) {
     }
 }
 
+/// Longest GPU error text that the page shows, in characters.
+const GPU_ERROR_MAX_CHARS: usize = 600;
+
+/// Keeps the first GPU error only (a bad shader gives one error and then a
+/// stream of "invalid ... due to a previous error" lines for the same fault).
+/// Returns true if `msg` was stored.
+pub fn record_first_error(slot: &mut Option<String>, msg: &str) -> bool {
+    if slot.is_some() {
+        return false;
+    }
+    *slot = Some(msg.to_string());
+    true
+}
+
+/// The text of `Phase::Failed` for a GPU error: a prefix, then the message
+/// cut to `GPU_ERROR_MAX_CHARS` characters. A dropped GPU submit is silent
+/// (the browser only logs it), so the page must say it out loud.
+pub fn gpu_error_text(msg: &str) -> String {
+    let msg = msg.trim();
+    let cut: String = msg.chars().take(GPU_ERROR_MAX_CHARS).collect();
+    let dots = if msg.chars().count() > GPU_ERROR_MAX_CHARS {
+        "..."
+    } else {
+        ""
+    };
+    format!("The GPU reported an error: {cut}{dots}")
+}
+
 /// The line under the time readout: the drop counts (ICR-006: unbound, inside
 /// Prometheus, inside Pandora). The Pandora part is left out if Pandora is off.
 pub fn drop_text(counts: [u32; 3], pandora_on: bool) -> String {
@@ -832,6 +860,25 @@ mod tests {
                 assert!(u.iter().zip(v).all(|(p, q)| p.to_bits() == q.to_bits()));
             }
         }
+    }
+
+    /// A WGSL rejection in the browser drops every submit silently. The page
+    /// must turn the first error into a failure text, and keep only the first.
+    #[test]
+    fn first_gpu_error_becomes_the_failure_text() {
+        let mut slot = None;
+        let wgsl =
+            "Error while parsing WGSL: :1081:31 error: value nan cannot be represented as 'f32'";
+        assert!(record_first_error(&mut slot, wgsl));
+        assert!(!record_first_error(&mut slot, "Invalid CommandBuffer"));
+        assert_eq!(slot.as_deref(), Some(wgsl));
+        let text = gpu_error_text(slot.as_deref().unwrap());
+        assert!(text.starts_with("The GPU reported an error: Error while parsing WGSL"));
+        assert!(text.contains("value nan cannot be represented"));
+        let long = "x".repeat(5000);
+        let t = gpu_error_text(&long);
+        assert!(t.ends_with("..."));
+        assert!(t.chars().count() < 700);
     }
 
     #[test]
