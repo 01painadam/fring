@@ -218,7 +218,13 @@ fn summary(name: &str, r: &ChaosReport) {
 
 /// The rules of the A0 decision. Returns the failed ones, so that one run
 /// reports every mode.
-fn check(name: &str, cpu: &ChaosReport, base: &Stats, gpu: &ChaosReport) -> Vec<String> {
+fn check(
+    name: &str,
+    cpu: &ChaosReport,
+    base_report: &ChaosReport,
+    base: &Stats,
+    gpu: &ChaosReport,
+) -> (Vec<String>, [f64; 3]) {
     let s = compare(cpu, gpu);
     print_table(name, &s);
     dl_by_megno(name, cpu, gpu);
@@ -240,8 +246,20 @@ fn check(name: &str, cpu: &ChaosReport, base: &Stats, gpu: &ChaosReport) -> Vec<
     if p95 > 0.1 {
         failed.push(format!("{name}: 95 % of |dL| is {p95:.3e}, limit 0.1"));
     }
-    if *dl.last().unwrap() > 0.3 {
-        failed.push(format!("{name}: max |dL| {:.3e} > 0.3", dl.last().unwrap()));
+    // Each particle regular on both: GPU |dL| <= max(0.3, 2 x the |dL| of the
+    // same particle in the CPU baseline run) (ADR 0009: a single particle on
+    // a weak orbit moves by 2.4 under a 1e-4 km offset).
+    for i in 0..cpu.megno_mean.len() {
+        if class(cpu.megno_mean[i]) == Class::Regular && class(gpu.megno_mean[i]) == Class::Regular
+        {
+            let g = (cpu.log_growth[i] - gpu.log_growth[i]).abs();
+            let b = (cpu.log_growth[i] - base_report.log_growth[i]).abs();
+            if g > f64::max(0.3, 2.0 * b) {
+                failed.push(format!(
+                    "{name}: particle {i}: |dL| {g:.3e} > max(0.3, 2 x baseline {b:.3e})"
+                ));
+            }
+        }
     }
     // 3. Chaotic on both: FTLE quantiles.
     if s.n_chaotic_both < 20 {
@@ -254,14 +272,8 @@ fn check(name: &str, cpu: &ChaosReport, base: &Stats, gpu: &ChaosReport) -> Vec<
                 s.q_rel[k]
             ));
         }
-        if s.q_rel[k] > 2.0 * base.q_rel[k] {
-            failed.push(format!(
-                "{name}: FTLE quantile {k} differs by {:.4}, more than 2 times the baseline {:.4}",
-                s.q_rel[k], base.q_rel[k]
-            ));
-        }
     }
-    failed
+    (failed, s.q_rel)
 }
 
 /// The five regular-on-both particles with the largest |dL| (CPU against GPU),
@@ -288,7 +300,7 @@ fn top_dl(name: &str, init: &InitialState, cpu: &ChaosReport, base: &ChaosReport
 }
 
 #[test]
-#[ignore = "needs a GPU, about 1 minute"]
+#[ignore = "needs a GPU, about 2 minutes"]
 fn gpu_chaos_indicator_matches_cpu_for_1000_particles() {
     let n = env_f64("FRING_G3_N", 1000.0) as u32;
     let d0 = env_f64("FRING_G3_D0", 1.0);
@@ -308,60 +320,98 @@ fn gpu_chaos_indicator_matches_cpu_for_1000_particles() {
         min_semi_major_axis_km: 139_600.0,
         max_semi_major_axis_km: 140_600.0,
     };
-    let init = InitialState {
-        time_s: 0.0,
-        particles: generate_particles(
-            &field,
-            &dist,
-            n,
-            env_f64("FRING_G3_SEED", 20_261_102.0) as u64,
-        )
-        .unwrap(),
+    // ADR 0009: four independent samples. FRING_G3_SEED runs one (then the
+    // median rules are the single-sample rules).
+    let seeds: Vec<u64> = match std::env::var("FRING_G3_SEED") {
+        Ok(v) => vec![v.parse().expect("FRING_G3_SEED")],
+        Err(_) => vec![20_261_102, 101, 202, 303],
     };
-    println!("N = {n}, d0 = {d0} km, K = {k}, steps = {STEPS}, h = {H_S} s");
-
-    let (cpu, t_cpu) = run(&config, &system, &init);
-    let (base, _) = run(
-        &config,
-        &system,
-        &displaced(&init, env_f64("FRING_G3_BASE_KM", 1e-4)),
-    );
-    println!("CPU run {t_cpu:.1} s, n_renorm {}", cpu.n_renorm);
-    summary("cpu", &cpu);
-    summary("cpu baseline", &base);
-    let bs = compare(&cpu, &base);
-    print_table("baseline", &bs);
-    dl_by_megno("baseline", &cpu, &base);
-
-    // Classes of the reference must not be empty (M17).
-    let count = |c: Class| cpu.megno_mean.iter().filter(|&&v| class(v) == c).count();
-    assert!(count(Class::Regular) >= 100, "too few regular particles");
-    assert!(count(Class::Chaotic) >= 100, "too few chaotic particles");
-    assert!(bs.agree >= 0.97, "baseline agreement {:.4}", bs.agree);
+    println!("N = {n}, d0 = {d0} km, K = {k}, steps = {STEPS}, h = {H_S} s, seeds {seeds:?}");
 
     let mut failed = Vec::new();
-    for (name, mode, asserted) in [
-        ("gpu D+", Mode::Dp, true),
-        ("gpu C", Mode::C, true),
-        ("gpu D", Mode::D, false),
-    ] {
-        let opts = Options {
-            mode,
-            ..Options::default()
+    // FTLE quantile differences by seed: the baseline and the GPU modes.
+    let mut q_base: Vec<[f64; 3]> = Vec::new();
+    let mut q_gpu: [Vec<[f64; 3]>; 2] = [Vec::new(), Vec::new()];
+    for &seed in &seeds {
+        println!("== seed {seed}");
+        let init = InitialState {
+            time_s: 0.0,
+            particles: generate_particles(&field, &dist, n, seed).unwrap(),
         };
-        let t0 = Instant::now();
-        let mut b = GpuBackend::with_options(&config, &system, &init, opts).unwrap();
-        b.step(STEPS).unwrap();
-        let g = b.chaos().unwrap().unwrap();
-        println!("{name}: {:.1} s", t0.elapsed().as_secs_f64());
-        assert_eq!(g.n_renorm, cpu.n_renorm);
-        if asserted {
-            top_dl(name, &init, &cpu, &base, &g);
-            failed.extend(check(name, &cpu, &bs, &g));
+        let (cpu, t_cpu) = run(&config, &system, &init);
+        let (base, _) = run(
+            &config,
+            &system,
+            &displaced(&init, env_f64("FRING_G3_BASE_KM", 1e-4)),
+        );
+        println!("CPU run {t_cpu:.1} s, n_renorm {}", cpu.n_renorm);
+        summary("cpu", &cpu);
+        summary("cpu baseline", &base);
+        let bs = compare(&cpu, &base);
+        print_table("baseline", &bs);
+        dl_by_megno("baseline", &cpu, &base);
+
+        // Classes of the reference must not be empty (M17).
+        let count = |c: Class| cpu.megno_mean.iter().filter(|&&v| class(v) == c).count();
+        assert!(count(Class::Regular) >= 100, "too few regular particles");
+        assert!(count(Class::Chaotic) >= 100, "too few chaotic particles");
+        assert!(bs.agree >= 0.97, "baseline agreement {:.4}", bs.agree);
+        q_base.push(bs.q_rel);
+
+        for (name, mode, asserted) in [
+            ("gpu D+", Mode::Dp, Some(0)),
+            ("gpu C", Mode::C, Some(1)),
+            ("gpu D", Mode::D, None),
+        ] {
+            let opts = Options {
+                mode,
+                ..Options::default()
+            };
+            let t0 = Instant::now();
+            let mut b = GpuBackend::with_options(&config, &system, &init, opts).unwrap();
+            b.step(STEPS).unwrap();
+            let g = b.chaos().unwrap().unwrap();
+            println!("{name}: {:.1} s", t0.elapsed().as_secs_f64());
+            assert_eq!(g.n_renorm, cpu.n_renorm);
+            if let Some(slot) = asserted {
+                top_dl(name, &init, &cpu, &base, &g);
+                let (f, q) = check(name, &cpu, &base, &bs, &g);
+                failed.extend(f.into_iter().map(|m| format!("seed {seed}: {m}")));
+                q_gpu[slot].push(q);
+            } else {
+                // Mode D is reported only (ADR 0009, ADR 0006 addendum).
+                let s = compare(&cpu, &g);
+                print_table(name, &s);
+                summary(name, &g);
+            }
+        }
+    }
+
+    // FTLE quantiles, chaotic on both: the MEDIAN over the seeds of the GPU
+    // difference must be at most 2 x the MEDIAN over the seeds of the baseline
+    // difference, for each of the 10, 50 and 90 % quantiles (ADR 0009).
+    let median = |v: &[[f64; 3]], k: usize| {
+        let mut x: Vec<f64> = v.iter().map(|q| q[k]).collect();
+        x.sort_by(f64::total_cmp);
+        let m = x.len();
+        if m % 2 == 1 {
+            x[m / 2]
         } else {
-            let s = compare(&cpu, &g);
-            print_table(name, &s);
-            summary(name, &g);
+            0.5 * (x[m / 2 - 1] + x[m / 2])
+        }
+    };
+    for (name, q) in [("gpu D+", &q_gpu[0]), ("gpu C", &q_gpu[1])] {
+        for k in 0..3 {
+            let (g, b) = (median(q, k), median(&q_base, k));
+            println!(
+                "{name}: FTLE quantile {k}: median GPU difference {g:.4}, median baseline {b:.4}, limit {:.4}",
+                2.0 * b
+            );
+            if g > 2.0 * b {
+                failed.push(format!(
+                    "{name}: FTLE quantile {k}: median GPU difference {g:.4} > 2 x median baseline {b:.4}"
+                ));
+            }
         }
     }
     assert!(failed.is_empty(), "failed rules:\n{}", failed.join("\n"));
