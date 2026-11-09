@@ -1,6 +1,6 @@
 # 0009: G3 chaos rule over four seeds; mode D reported only in the arc test
 
-Status: proposed
+Status: accepted (A0, 2026-11-09)
 Date: 2026-11-09
 Author: A3
 Decided by AJ 2026-11-09; A0 approves.
@@ -44,6 +44,18 @@ In absolute terms mode D is better with mu_eff (arc against ring 4.2e-3 km, was 
    
    Across the seeds, for each FTLE quantile (10, 50, 90 %): the median over the seeds of the GPU difference is at most 2 x the median over the seeds of the baseline difference. The test stays `#[ignore]` (about 2 minutes).
 2. `gpu_arc`: mode D is reported only (the ratio is printed, no assertion). D+ and C keep the bound of 4.
+
+## Result on the merged head
+
+A0 re-ran both tests on b09399b (WH-EFF-GPU merged with main 9f134b1, which includes GOLDEN-REL; `runs/logs/a0-review-wh-eff-gpu.log`). GOLDEN-REL changed release bits, so the per-seed values differ a little from the context table (seed 20261102 baseline q90: 0.025, not 0.018). Median over the four seeds:
+
+| FTLE quantile | baseline | limit | D+ | C |
+|---|---|---|---|---|
+| 10 % | 0.0083 | 0.0165 | 0.0011 | 0.0009 |
+| 50 % | 0.0070 | 0.0139 | 0.0016 | 0.0033 |
+| 90 % | 0.0266 | 0.0532 | 0.0163 | 0.0137 |
+
+Every seed: same class 100 %. `chaos_done_when` passes in 62 s. `gpu_arc` mode D (5 degree arc): position ratio 4.63, velocity 4.35 (printed only); mode dp 1.71 / 1.97 (5 degrees) and 2.69 / 2.93 (30 degrees), bound 4.
 
 ## Reasons
 
