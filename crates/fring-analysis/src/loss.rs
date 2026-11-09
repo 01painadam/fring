@@ -9,8 +9,9 @@
 
 use crate::map::{Class, Point};
 use crate::stats::quantile;
-use fring_io::ChaosRow;
+use fring_io::{ChaosRow, DropRow, RunDir};
 use std::collections::HashMap;
+use std::path::Path;
 
 /// Flag bit 1 of `chaos.csv`: the particle (or its shadow) was lost.
 pub const FLAG_LOST: u32 = 2;
@@ -39,6 +40,52 @@ pub fn lost_from_flags(rows: &[ChaosRow]) -> Vec<Lost> {
             drop_step: u64::MAX,
         })
         .collect()
+}
+
+/// The lost list from `drops.csv` rows (reason and step are exact).
+pub fn lost_from_drops(rows: &[DropRow]) -> Vec<Lost> {
+    rows.iter()
+        .map(|r| Lost {
+            id: r.id,
+            reason: r.reason,
+            drop_step: r.drop_step,
+        })
+        .collect()
+}
+
+/// Ids in `a` and `b` as sorted lists differ? Returns a message if so.
+pub fn check_same_ids(from_drops: &[Lost], from_flags: &[Lost]) -> Result<(), String> {
+    let ids = |v: &[Lost]| {
+        let mut x: Vec<u32> = v.iter().map(|l| l.id).collect();
+        x.sort_unstable();
+        x
+    };
+    let (a, b) = (ids(from_drops), ids(from_flags));
+    if a == b {
+        Ok(())
+    } else {
+        Err(format!(
+            "drops.csv lists {} particles, flag bit 1 of chaos.csv marks {}; the sets differ",
+            a.len(),
+            b.len()
+        ))
+    }
+}
+
+/// The lost list of a run directory. With `drops.csv` the list and the
+/// reasons come from it, and flag bit 1 of `chaos.csv` is a cross-check (the
+/// two sets must be equal, else an error). Without `drops.csv` (a run with no
+/// `[loss]`), the flags give the list with reason 1.
+pub fn read_lost(run: &Path) -> Result<Vec<Lost>, Box<dyn std::error::Error>> {
+    let dir = RunDir::new(run);
+    let flags = lost_from_flags(&dir.read_chaos_file()?);
+    if run.join("drops.csv").exists() {
+        let drops = lost_from_drops(&dir.read_drops_file()?);
+        check_same_ids(&drops, &flags)?;
+        Ok(drops)
+    } else {
+        Ok(flags)
+    }
 }
 
 /// One radius window of the table.
@@ -203,6 +250,27 @@ mod tests {
         let l = lost_from_flags(&[row(0, 0), row(1, 2), row(2, 1), row(3, 3)]);
         assert_eq!(l.iter().map(|x| x.id).collect::<Vec<_>>(), vec![1, 3]);
         assert!(l.iter().all(|x| x.reason == 1 && x.drop_step == u64::MAX));
+    }
+
+    fn drop_row(id: u32, reason: u8) -> DropRow {
+        DropRow {
+            id,
+            reason,
+            drop_step: 7,
+            time_s: 0.0,
+            position_km: [0.0; 3],
+            velocity_km_s: [0.0; 3],
+        }
+    }
+
+    #[test]
+    fn drops_give_reasons_and_the_cross_check_compares_ids() {
+        let d = lost_from_drops(&[drop_row(5, 2), drop_row(1, 3)]);
+        assert_eq!((d[0].reason, d[1].reason, d[0].drop_step), (2, 3, 7));
+        let f = lost_from_flags(&[row(1, 2), row(5, 3)]);
+        assert!(check_same_ids(&d, &f).is_ok());
+        let f2 = lost_from_flags(&[row(1, 2)]);
+        assert!(check_same_ids(&d, &f2).is_err());
     }
 
     #[test]

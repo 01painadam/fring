@@ -127,8 +127,7 @@ fn cmd_windows(a: &[String]) -> Res<()> {
         .and_then(|s| s.parse().ok())
         .ok_or("usage: windows <run> <out.csv> <years>")?;
     let pts = map::read_points(Path::new(&a[0]))?;
-    let rows = RunDir::new(Path::new(&a[0])).read_chaos_file()?;
-    let lost = fring_analysis::loss::lost_from_flags(&rows);
+    let lost = fring_analysis::loss::read_lost(Path::new(&a[0]))?;
     let t = fring_analysis::loss::window_table(
         &pts,
         &lost,
