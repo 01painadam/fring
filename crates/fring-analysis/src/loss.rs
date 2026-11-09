@@ -114,6 +114,12 @@ pub struct WindowRow {
     /// One sigma of lambda (half of the 16 to 84 % bootstrap interval of the
     /// median MEGNO, 200 resamples, seed 1), 1/yr.
     pub lambda_sigma_per_yr: f64,
+    /// Selection bound on lambda, 1/yr: the lambda the survivors would give if
+    /// every lost particle had a MEGNO above the median of the full window.
+    /// The median of the full window is then the quantile
+    /// `0.5 (live + lost) / live` of the survivors. Equal to `lambda_per_yr`
+    /// with no loss. It is an upper bound of the selection, not an estimate.
+    pub lambda_bound_per_yr: f64,
 }
 
 impl WindowRow {
@@ -153,6 +159,7 @@ pub fn window_table(
                 live: 0,
                 lambda_per_yr: f64::NAN,
                 lambda_sigma_per_yr: f64::NAN,
+                lambda_bound_per_yr: f64::NAN,
             };
             let mut y = Vec::new();
             for p in pts.iter().filter(|p| p.a_km >= lo && p.a_km < hi) {
@@ -174,6 +181,9 @@ pub fn window_table(
                 w.lambda_per_yr = 2.0 * quantile(&y, 0.5) / years;
                 let (_, lo, hi) = bootstrap_median_ci(&y, 200, 1);
                 w.lambda_sigma_per_yr = (hi - lo) / years;
+                let lost_n = (w.unbound + w.prometheus + w.pandora) as f64;
+                let q = (0.5 * (w.live as f64 + lost_n) / w.live as f64).min(1.0);
+                w.lambda_bound_per_yr = 2.0 * quantile(&y, q) / years;
             }
             w
         })
@@ -196,7 +206,7 @@ pub fn default_windows() -> Vec<(f64, f64)> {
 
 /// CSV header of [`write_window_csv`].
 pub const WINDOW_HEADER: &str = "lo_km,hi_km,n,live,unbound,prometheus,pandora,invalid,chaotic,\
-frac_chaotic_survivors,frac_chaotic_bound,lambda_per_yr,lambda_sigma_per_yr";
+frac_chaotic_survivors,frac_chaotic_bound,lambda_per_yr,lambda_sigma_per_yr,lambda_selection_bound_per_yr";
 
 /// Writes the window table.
 pub fn write_window_csv(out: &mut impl std::io::Write, rows: &[WindowRow]) -> std::io::Result<()> {
@@ -204,7 +214,7 @@ pub fn write_window_csv(out: &mut impl std::io::Write, rows: &[WindowRow]) -> st
     for w in rows {
         writeln!(
             out,
-            "{},{},{},{},{},{},{},{},{},{:.5},{:.5},{:.4},{:.4}",
+            "{},{},{},{},{},{},{},{},{},{:.5},{:.5},{:.4},{:.4},{:.4}",
             w.lo_km,
             w.hi_km,
             w.n,
@@ -217,7 +227,8 @@ pub fn write_window_csv(out: &mut impl std::io::Write, rows: &[WindowRow]) -> st
             w.frac_survivors(),
             w.frac_bound(),
             w.lambda_per_yr,
-            w.lambda_sigma_per_yr
+            w.lambda_sigma_per_yr,
+            w.lambda_bound_per_yr
         )?;
     }
     Ok(())
@@ -315,6 +326,10 @@ mod tests {
         );
         // median of 10, 12, 2 is 10: lambda = 2 * 10 / 10.
         assert!((w.lambda_per_yr - 2.0).abs() < 1e-12);
+        // 3 live, 2 lost: the full median is the survivors' quantile 0.5 * 5 / 3
+        // = 0.8333; the interpolated quantile of (2, 10, 12) is 10 + 2 * 2/3
+        // = 11.333, so lambda = 2 * 11.333 / 10.
+        assert!((w.lambda_bound_per_yr - 2.2666666667).abs() < 1e-6);
         assert!((w.frac_survivors() - 2.0 / 3.0).abs() < 1e-12);
         assert!((w.frac_bound() - 4.0 / 5.0).abs() < 1e-12);
     }
