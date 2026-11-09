@@ -8,7 +8,7 @@
 //! gives the list from the flags alone (reason 1, step unknown).
 
 use crate::map::{Class, Point};
-use crate::stats::quantile;
+use crate::stats::{bootstrap_median_ci, quantile};
 use fring_io::{ChaosRow, DropRow, RunDir};
 use std::collections::HashMap;
 use std::path::Path;
@@ -111,6 +111,9 @@ pub struct WindowRow {
     pub live: usize,
     /// Median lambda of the survivors, 1/yr: 2 median(MEGNO) / years.
     pub lambda_per_yr: f64,
+    /// One sigma of lambda (half of the 16 to 84 % bootstrap interval of the
+    /// median MEGNO, 200 resamples, seed 1), 1/yr.
+    pub lambda_sigma_per_yr: f64,
 }
 
 impl WindowRow {
@@ -149,6 +152,7 @@ pub fn window_table(
                 chaotic: 0,
                 live: 0,
                 lambda_per_yr: f64::NAN,
+                lambda_sigma_per_yr: f64::NAN,
             };
             let mut y = Vec::new();
             for p in pts.iter().filter(|p| p.a_km >= lo && p.a_km < hi) {
@@ -168,6 +172,8 @@ pub fn window_table(
             }
             if !y.is_empty() {
                 w.lambda_per_yr = 2.0 * quantile(&y, 0.5) / years;
+                let (_, lo, hi) = bootstrap_median_ci(&y, 200, 1);
+                w.lambda_sigma_per_yr = (hi - lo) / years;
             }
             w
         })
@@ -190,7 +196,7 @@ pub fn default_windows() -> Vec<(f64, f64)> {
 
 /// CSV header of [`write_window_csv`].
 pub const WINDOW_HEADER: &str = "lo_km,hi_km,n,live,unbound,prometheus,pandora,invalid,chaotic,\
-frac_chaotic_survivors,frac_chaotic_bound,lambda_per_yr";
+frac_chaotic_survivors,frac_chaotic_bound,lambda_per_yr,lambda_sigma_per_yr";
 
 /// Writes the window table.
 pub fn write_window_csv(out: &mut impl std::io::Write, rows: &[WindowRow]) -> std::io::Result<()> {
@@ -198,7 +204,7 @@ pub fn write_window_csv(out: &mut impl std::io::Write, rows: &[WindowRow]) -> st
     for w in rows {
         writeln!(
             out,
-            "{},{},{},{},{},{},{},{},{},{:.5},{:.5},{:.4}",
+            "{},{},{},{},{},{},{},{},{},{:.5},{:.5},{:.4},{:.4}",
             w.lo_km,
             w.hi_km,
             w.n,
@@ -210,7 +216,8 @@ pub fn write_window_csv(out: &mut impl std::io::Write, rows: &[WindowRow]) -> st
             w.chaotic,
             w.frac_survivors(),
             w.frac_bound(),
-            w.lambda_per_yr
+            w.lambda_per_yr,
+            w.lambda_sigma_per_yr
         )?;
     }
     Ok(())
