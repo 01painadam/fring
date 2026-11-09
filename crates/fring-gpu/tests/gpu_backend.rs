@@ -40,7 +40,7 @@ fn matches_the_cpu_backend_over_one_orbit_with_and_without_moons() {
             let system = system(H_S, steps, moons);
             let config = config(H_S, steps, moons);
             let (init, _) = ensemble(&system, 600);
-            let mut cpu = CpuBackend::with_point_mass_drift(&config, &system, &init).unwrap();
+            let mut cpu = CpuBackend::new(&config, &system, &init).unwrap();
             let mut gpu = GpuBackend::with_options(
                 &config,
                 &system,

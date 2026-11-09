@@ -12,7 +12,9 @@ use fring_model::Backend;
 /// FNV-1a of the f64 bits of the particle positions and velocities after a run
 /// with the full ring (arc off). Taken on the commit before D1 changed any
 /// shader (`db282d5`): the arc code must not change a full-ring run by one bit.
-const GOLDEN_FULL_RING: u64 = 0xa999_c5ad_4c72_2112;
+/// ICR-011 (WH-EFF-GPU): `GpuBackend` now drifts about mu_eff, so the value is
+/// new (recorded once on the Apple M4); the old one was `0xa999_c5ad_4c72_2112`.
+const GOLDEN_FULL_RING: u64 = 0x4d03_03f6_d3cb_4b5b;
 
 fn full_ring_hash(mode: Mode) -> u64 {
     let steps = 150;

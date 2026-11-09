@@ -35,7 +35,8 @@ fn setup(n_steps: usize, n_particles: usize) -> Setup {
     let moons = moons_from_toml_str(include_str!("../../../params/moons.toml")).unwrap();
     let eph = build_ephemeris(&sp, &moons, 2.0 * n_steps as f64 * H + 7200.0, 1800.0).unwrap();
     let gms: Vec<f64> = eph.tracks.iter().map(|t| t.gm_km3_s2).collect();
-    let c = Consts::<M4>::for_step(&sp, &gms, H);
+    // ICR-011: the drift about mu_eff at a0, so every twin test has epsilon != 0.
+    let c = Consts::<M4>::for_step_drift(&sp, &gms, H, Some(140_220.0));
     let prm = wh::params(&c, &gms);
     let mut table = KickTable::<f64>::for_ephemeris(&eph);
     table.fill(&eph, 0.0, H, 0, n_steps).unwrap();
@@ -142,7 +143,7 @@ fn wgsl_functions_match_their_rust_twins() {
     });
     check_vectors("t_accel_j_c", &s, &k, |s, st| {
         let (p, _) = vecs(st);
-        let a = s.c.field_d.acceleration_without_point_mass(p);
+        let a = s.c.field_d.kick_acceleration_saturn(p);
         join(p, a)
     });
     check_vectors("t_kick_acc_c", &s, &k, |s, st| {

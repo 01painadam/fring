@@ -82,11 +82,10 @@ fn displaced(init: &InitialState, size_km: f64) -> InitialState {
     out
 }
 
-/// ICR-011: the CPU arm drifts about GM (`with_point_mass_drift`), like the
-/// GPU, until WH-EFF-GPU.
+/// ICR-011: both arms drift about mu_eff (CPU `new`, GPU `GpuBackend`).
 fn run(config: &RunConfig, system: &System, init: &InitialState) -> (ChaosReport, f64) {
     let t0 = Instant::now();
-    let mut b = CpuBackend::with_point_mass_drift(config, system, init).unwrap();
+    let mut b = CpuBackend::new(config, system, init).unwrap();
     b.step(STEPS).unwrap();
     let r = b.chaos().unwrap().expect("chaos table is set");
     (r, t0.elapsed().as_secs_f64())
