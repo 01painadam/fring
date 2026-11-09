@@ -14,7 +14,7 @@ a = ap.parse_args()
 def frame(m, s):
     return open(os.path.join(a.runs_dir, f"{a.set}-{m}-s{s}", "frames", "000000.bin"), "rb").read()
 
-for s in (1, 2, 3, 4):
+for s in sorted(int(d.rsplit('-s', 1)[1]) for d in os.listdir(a.runs_dir) if d.startswith(f'{a.set}-hs-s')):
     st, hs = frame("st", s), frame("hs", s)
     n = int.from_bytes(st[24 + 8:24 + 16], "little")
     hl = int.from_bytes(st[12:16], "little")

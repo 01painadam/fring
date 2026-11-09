@@ -30,7 +30,7 @@ GROUPS = [("whole run", 0, None)] + [(f"orbit {k}", k - 1, k) for k in range(1, 
 # group bounds (lo, hi] on the orbit index k = ceil(t / P); 'orbits 80-200' means k in [80, 200] = (79, 200]
 out = []
 print(f"{'run':12s} {'group':14s} {'deep':>8s} {'collisions':>12s} {'deep %':>8s}")
-for s in (1, 2, 3, 4):
+for s in sorted(int(d.rsplit('-s', 1)[1]) for d in os.listdir(a.runs_dir) if d.startswith(f'{a.set}-hs-s')):
     name = f"{a.set}-hs-s{s}"
     rd = os.path.join(a.runs_dir, name)
     with open(os.path.join(rd, "frames", "000000.bin"), "rb") as f:
