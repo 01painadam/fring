@@ -85,5 +85,9 @@ fn no_wgsl_constant_is_non_finite() {
             }
         }
     }
-    assert!(bad.is_empty(), "non-finite WGSL constants:\n{}", bad.join("\n"));
+    assert!(
+        bad.is_empty(),
+        "non-finite WGSL constants:\n{}",
+        bad.join("\n")
+    );
 }
