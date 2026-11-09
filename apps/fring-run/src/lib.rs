@@ -20,7 +20,7 @@ use fring_io::{
     CHAOS_VERSION, ChaosMeta, ChaosRow, Frame, MoonRecord, MoonsFile, RotatingVelocities, RunDir,
     RunMeta,
 };
-use fring_model::config::{BackendKind, Collisions, Domain};
+use fring_model::config::{BackendKind, Collisions};
 use fring_model::params::{moons_from_toml_str, saturn_from_toml_str};
 use fring_model::physics::{
     DEFAULT_INTERVAL_S, MoonInit, SaturnField, build_ephemeris, generate_particles,
@@ -89,20 +89,21 @@ pub struct Summary {
     pub chaos: Option<ChaosMeta>,
 }
 
-/// Refuses what is not implemented yet, with a clear message.
+/// Refuses what the chosen backend would ignore or cannot do, with a clear
+/// message. A backend must never ignore a setting without an error.
 pub fn check_supported(config: &RunConfig) -> Result<(), RunError> {
-    let no = |what: &str, task: &str| {
-        Err(RunError::Setup(format!(
-            "{what} is not implemented yet (task {task})"
-        )))
-    };
-    if matches!(config.domain, Domain::Arc { .. }) {
-        return no("domain.kind = \"arc\"", "D1");
-    }
+    let gpu = config.run.backend == BackendKind::Gpu;
+    // Arc domains, and stochastic collisions on either backend, are accepted.
+    // The GPU backend itself refuses arc or mode C with collisions, and chaos
+    // with collisions. Those errors come back through `setup` as a clean
+    // setup error (exit code 2), so no second list is kept here.
     match config.collisions {
-        Collisions::None => Ok(()),
-        Collisions::Stochastic { .. } => no("collisions.model = \"stochastic\"", "K2"),
-        Collisions::HardSphere { .. } => no("collisions.model = \"hard_sphere\"", "K3"),
+        Collisions::HardSphere { .. } if gpu => Err(RunError::Setup(
+            "collisions.model = \"hard_sphere\" is not available on the GPU backend \
+             (K3 is CPU only); use backend = \"cpu\""
+                .to_string(),
+        )),
+        _ => Ok(()),
     }
 }
 
