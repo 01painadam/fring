@@ -37,6 +37,10 @@ impl RunDir {
         self.root.join("chaos.csv")
     }
 
+    pub fn drops_path(&self) -> PathBuf {
+        self.root.join("drops.csv")
+    }
+
     pub fn frames_dir(&self) -> PathBuf {
         self.root.join("frames")
     }
