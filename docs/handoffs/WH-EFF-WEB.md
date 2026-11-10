@@ -1,6 +1,6 @@
 # WH-EFF-WEB: the web drifts about mu_eff (ICR-011, A7 item)
 Role: A7  Branch: ws/a7-wh-eff-web  Status: review
-Updated: 2026-11-10 10:30
+Updated: 2026-11-10 10:50
 
 ## Goal and acceptance criteria
 `fring-web` builds the Saturn field with `with_drift_radius(a0)` (ICR-011), so the web shows the same dynamics as the CPU and GPU runs; host tests pass; the web dynamics run in `GpuStepper`, so it uses `GpuStepper::new_with_drift`.
@@ -26,7 +26,18 @@ Updated: 2026-11-10 10:30
 - #86 needs main with the A3 fix merged in before AJ benches again.
 
 ## Next step (one concrete action)
-AJ: run `?bench` again in Chrome on the build of a60905a or later (`http://localhost:8080/?bench&counts=1e5&modes=off,side,overlay`; pass: mean 30 fps or more in each mode). The earlier value (mean 60.0 fps) is not valid: the step pass was dropped (arc.wgsl NaN, fixed in #89). A0 2026-11-10: main (aae1d16, #89) merged into this branch, wasm rebuilt (955,648 bytes), headless Chrome check: simulated time advances (1.1 d to 3.6 d in 10 s), no WGSL error, ring drawn; headless `?bench` 100,000 particles: 60 fps, 83 steps per frame in off, side and overlay.
+None: A0 merges PR #86 after green CI. Then A3 takes STEPPER-DRIFT (the μ_eff drift through `GpuStepper`).
+
+## `?bench` in Chrome (AJ, 2026-11-10, build of a60905a, M4)
+Pass: mean 30 fps or more in each mode. The first table (60 fps in all modes, 2026-11-09) is not valid: the step pass was dropped (arc.wgsl NaN, fixed in #89).
+
+| particles | compare | mean fps | 5th pct fps | worst ms | steps/frame | effective h/s | rebuild ms |
+|---|---|---|---|---|---|---|---|
+| 100000 | off | 60.0 | 57.8 | 17.7 | 83.3 | 500 | 0 |
+| 100000 | side | 60.0 | 57.5 | 17.7 | 83.3 | 500 | 0 |
+| 100000 | overlay | 60.0 | 57.8 | 17.7 | 83.3 | 500 | 0 |
+
+The cells show numbers, not "not run: <error>", so the GPU error display (5f46cb5) caught no error. A0 headless Chrome check before it: simulated time advances (1.1 d to 3.6 d in 10 s), no WGSL error, ring drawn (`scripts/cdp-check.mjs`).
 
 ## How to verify the current state
 ```sh
