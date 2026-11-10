@@ -2,6 +2,18 @@
 
 Read this file at the start of a session. When a mistake costs time, add an entry so that no agent makes it twice. Newest first. Each entry: what happened, why, and the rule now.
 
+## 2026-11-10 (phase 4, WGSL-NAN and K4)
+
+### M29. The disk filled up and stopped the K4 runs overnight
+
+- **What:** on 2026-11-09 at 19:55 the data volume was full: 12 worktrees, each with its own `target/` of 3 to 5 GB (about 48 GB). The 8 K4 runs stopped, and a night of compute was lost. They were started again on 2026-11-10 at 09:02.
+- **Rule:** run `df -h /System/Volumes/Data` before a long run, and start it only with at least 20 GiB free. Remove stale worktrees soon after each merge (`CLAUDE.md`, "Worktrees").
+
+### M28. A WGSL shader that naga accepts but Chrome rejects broke the public demo
+
+- **What:** a D1 test kernel (`arc.wgsl:216`) wrote a constant NaN (`bitcast<f32>(0x7fc00000u)`). wgpu on the Mac (naga) accepted it, so all native tests passed. Chrome (Tint) rejects a constant NaN, so the whole "wh" module was invalid in the browser and every frame with a step was dropped. The public demo was broken from 2026-11-08 08:28 UTC to the merge of #89. AJ's `?bench` on #86 showed 60 fps in all modes, but the step pass did not run, so the numbers were not valid.
+- **Rule:** after each change to a WGSL file that the web app loads, run the headless Chrome check (CDP script, see `docs/handoffs/WH-EFF-WEB.md`) before the merge: the simulated time must advance and the console must have no WGSL error. A frame rate alone does not show that the step ran.
+
 ## 2026-11-08 (phase 4, E1-GPU)
 
 ### M27. A0 set a cost limit in an ICR without checking an earlier measurement
