@@ -50,6 +50,7 @@ use crate::wf32::model;
 use crate::wh_gpu::grid;
 use fring_model::config::{Collisions, Domain};
 use fring_model::physics::arc::EDGE_TOL;
+use fring_model::real::sin_cos;
 use fring_model::{Error, Real, Result, RunConfig};
 use std::f64::consts::{PI, TAU};
 
@@ -325,8 +326,9 @@ pub fn params(g: &BinGeometry) -> Vec<f32> {
     put(3, 2, g.domain_km);
     for u in 0..SECTORS {
         let ang = (u as f64 - 32.0) * PI / 32.0;
-        put(5 + 2 * u, 0, ang.cos());
-        put(5 + 2 * u, 2, ang.sin());
+        let (sin_ang, cos_ang) = sin_cos(ang);
+        put(5 + 2 * u, 0, cos_ang);
+        put(5 + 2 * u, 2, sin_ang);
         put(6 + 2 * u, 0, ang);
     }
     if g.arc {

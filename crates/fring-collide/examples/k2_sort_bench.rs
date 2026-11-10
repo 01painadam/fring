@@ -19,6 +19,7 @@ use fring_collide::hard_sphere::HardSphereModel;
 use fring_collide::stochastic::CellList;
 use fring_model::Vec3;
 use fring_model::config::Restitution;
+use fring_model::real::sin_cos;
 
 const A0_KM: f64 = 140_222.43;
 const WIDTH_KM: f64 = 100.0;
@@ -63,7 +64,8 @@ fn main() {
                 let rho = A0_KM + WIDTH_KM * (splitmix(&mut rng) - 0.5);
                 let phi = TAU * splitmix(&mut rng);
                 let z = HEIGHT_KM * (splitmix(&mut rng) - 0.5);
-                Vec3::new(rho * phi.cos(), rho * phi.sin(), z)
+                let (sin_phi, cos_phi) = sin_cos(phi);
+                Vec3::new(rho * cos_phi, rho * sin_phi, z)
             })
             .collect();
         let ids: Vec<u32> = (0..n as u32).collect();
