@@ -21,6 +21,11 @@ const RADII_KM: [f64; 3] = [139_500.0, 140_220.0, 141_500.0];
 
 /// Along-track errors in km at `RADII_KM` after one year on the GPU.
 fn errors_km(mode: Mode, drift_radius_km: Option<f64>) -> Vec<f64> {
+    errors_at_km(mode, drift_radius_km, &RADII_KM)
+}
+
+/// As [`errors_km`] for any start radii (km), in one `apply`.
+fn errors_at_km(mode: Mode, drift_radius_km: Option<f64>, radii_km: &[f64]) -> Vec<f64> {
     let gpu = Gpu::new().expect("GPU");
     let kernels = WhKernels::new(&gpu, DEFAULT_WORKGROUP).expect("self-test");
     let sp = fring_model::params::saturn_from_toml_str(include_str!("../../../params/saturn.toml"))
@@ -30,7 +35,7 @@ fn errors_km(mode: Mode, drift_radius_km: Option<f64>) -> Vec<f64> {
     let c = Consts::<M4>::for_step_drift(&sp, &[], h, drift_radius_km);
     let prm = wh::params(&c, &[]);
     let table = vec![0f32; STEPS * wh::ROW];
-    let mut states: Vec<State<M4>> = RADII_KM
+    let mut states: Vec<State<M4>> = radii_km
         .iter()
         .map(|&r| {
             state_from_f64(
@@ -41,7 +46,7 @@ fn errors_km(mode: Mode, drift_radius_km: Option<f64>) -> Vec<f64> {
         .collect();
     let (status, _) = kernels.apply(mode.entry(), &prm, &table, STEPS, 0, &mut states);
     assert_eq!(status, fring_gpu::wh_gpu::NO_FAILURE);
-    RADII_KM
+    radii_km
         .iter()
         .zip(&states)
         .map(|(&r, s)| {
@@ -164,4 +169,90 @@ fn kick_error_before_and_after_epsilon() {
         let (a, b) = (kick_error(entry, None), kick_error(entry, Some(A0_KM)));
         eprintln!("{entry:16} kick error / (h GM/r^2): GM drift {a:.2e}, mu_eff drift {b:.2e}");
     }
+}
+
+/// CPU f64 along-track error in km (the T1 of `fring-cpu`) at `r_km`, drift
+/// about mu_eff at `drift_radius_km`.
+fn cpu_error_km(drift_radius_km: f64, r_km: f64) -> f64 {
+    let sp = fring_model::params::saturn_from_toml_str(include_str!("../../../params/saturn.toml"))
+        .unwrap();
+    let field = SaturnField::<f64>::from_params(&sp).with_drift_radius(drift_radius_km);
+    let h = YEAR_S / STEPS as f64;
+    let (mut p, mut v) = (
+        Vec3::new(r_km, 0.0, 0.0),
+        Vec3::new(0.0, circular_speed(&field, r_km), 0.0),
+    );
+    fring_model::physics::wh_steps(&field, &mut p, &mut v, h, STEPS as u64).unwrap();
+    let want =
+        (frequencies(&field, r_km).n_rad_s * h * STEPS as f64).rem_euclid(std::f64::consts::TAU);
+    let mut d = p.y.atan2(p.x) - want;
+    d -= std::f64::consts::TAU * (d / std::f64::consts::TAU).round();
+    r_km * d
+}
+
+/// Bounds on |GPU - CPU| in km for start radii off 140,220 km (STEPPER-DRIFT,
+/// A0 2026-11-10; M27). Measured 2026-11-10 on the Apple M4 over the 32-radius
+/// scan of `e2_scan_start_radius`: D+ 0.0207 km, C 0.0022 km. D+ has an f32
+/// bias that depends on the start radius (see the handoff); the bound is 2.4
+/// times the maximum because 32 samples of a curve with +-0.02 km swing may
+/// miss its peak. T1 above passes at 140,220 km only because that radius is
+/// near a zero of the curve.
+const SCAN_DP_BOUND_KM: f64 = 0.05;
+const SCAN_C_BOUND_KM: f64 = 0.01;
+
+/// STEPPER-DRIFT E1: does the start radius or the drift radius carry the
+/// +0.009 km seen through `GpuStepper` at a0 = 140,222.43 km? The start radius
+/// does. Measured D+ 0.0002, 0.0007, 0.0095, 0.0118 km; C 0.0013, -0.0013,
+/// -0.0006, 0.0008 km.
+#[test]
+#[ignore = "needs a GPU"]
+fn e1_start_and_drift_radius() {
+    if Gpu::new().is_none() {
+        eprintln!("no GPU: skipped");
+        return;
+    }
+    for (drift, r) in [
+        (140_220.0, 140_220.0),
+        (140_222.43, 140_220.0),
+        (140_222.43, 140_222.43),
+        (140_220.0, 140_222.43),
+    ] {
+        let dp = errors_at_km(Mode::Dp, Some(drift), &[r])[0];
+        let c = errors_at_km(Mode::C, Some(drift), &[r])[0];
+        let cpu = cpu_error_km(drift, r);
+        eprintln!("E1 drift {drift} r {r}: Dp {dp:+.4} C {c:+.4} CPU {cpu:+.4}");
+        assert!((dp - cpu).abs() < SCAN_DP_BOUND_KM, "Dp {dp} CPU {cpu}");
+        assert!((c - cpu).abs() < SCAN_C_BOUND_KM, "C {c} CPU {cpu}");
+    }
+}
+
+/// STEPPER-DRIFT E2: along-track error against the start radius. Grid: 32
+/// radii from 140,220 km in steps of 0.00390625 km (a quarter of the f32 ulp,
+/// 0.015625 km), drift about mu_eff(140,220 km), one `apply` per mode.
+#[test]
+#[ignore = "needs a GPU"]
+fn e2_scan_start_radius() {
+    if Gpu::new().is_none() {
+        eprintln!("no GPU: skipped");
+        return;
+    }
+    let ulp = 0.015625;
+    let radii: Vec<f64> = (0..32).map(|k| A0_KM + k as f64 * ulp / 4.0).collect();
+    let dp = errors_at_km(Mode::Dp, Some(A0_KM), &radii);
+    let c = errors_at_km(Mode::C, Some(A0_KM), &radii);
+    let (mut mdp, mut mc) = (0.0f64, 0.0f64);
+    for (k, r) in radii.iter().enumerate() {
+        let cpu = cpu_error_km(A0_KM, *r);
+        eprintln!(
+            "E2 r {r:.5} (mod ulp {:.5}): Dp {:+.4} C {:+.4} CPU {cpu:+.4}",
+            (r - A0_KM).rem_euclid(ulp),
+            dp[k],
+            c[k]
+        );
+        mdp = mdp.max((dp[k] - cpu).abs());
+        mc = mc.max((c[k] - cpu).abs());
+    }
+    eprintln!("E2 max |GPU - CPU|: Dp {mdp:.4} km, C {mc:.4} km");
+    assert!(mdp < SCAN_DP_BOUND_KM, "Dp {mdp}");
+    assert!(mc < SCAN_C_BOUND_KM, "C {mc}");
 }
