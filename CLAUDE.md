@@ -42,6 +42,17 @@ Use Haiku (or do it without a model call) for formatting, changelogs and small e
 
 Rust comes from Homebrew `rustup`, which is keg-only. If `cargo` is not found, start the command with `export PATH="/opt/homebrew/opt/rustup/bin:$HOME/.cargo/bin:$PATH" &&`. `~/.cargo/bin` holds `wasm-bindgen`, which `apps/fring-web/scripts/build.sh` needs.
 
+## Worktrees: remove the stale ones as you go (AJ, 2026-11-10)
+
+AJ gave standing permission: "from now on lets make a point of deleting stale work trees - you have permission to do the tidyup on that as we go". Do not ask again for each one.
+
+- Stale means: its PR is merged or closed, or AJ dropped the task. Remove it soon after the merge, in the same session.
+- Check first:
+  - `git -C <wt> status --porcelain` is empty, and `git -C <wt> log @{u}..` shows no unpushed commits.
+  - Nothing under its git-ignored folders (`runs/`, logs) is still needed: a report cites it, or an open task or gate uses it. `git worktree remove` deletes those files too. Move the needed data to the main checkout's `runs/` first, or keep the worktree and say why.
+- Then: `git worktree remove .claude/worktrees/<name>` and `git branch -d ws/<branch>`. Never use `--force` or `-D` without asking AJ. Remote branches: `git push origin --delete ws/<branch>` after the merge.
+- Why: each worktree has its own `target/` of 3 to 5 GB. On 2026-11-09 the disk filled up (12 worktrees, about 48 GB of `target/`) and stopped the K4 runs overnight. Check `df -h /System/Volumes/Data` before long runs.
+
 ## Before the session ends
 
 If you are near a usage limit, or the task is at a natural stop:
