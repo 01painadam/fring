@@ -225,7 +225,7 @@ W = 8e8 x (10^6 / N) is 80 times (10^4) and 8 times (10^5) the value at 10^6. At
 | GPU D+ (production) | coll+loss | band | 10000 | 10 | 0.05 | 30000 | 1.93e8 | 1.91e8 to 1.96e8 | 2.5 % | 0.224 | 2.532e-3 | 5.940e-5 | 1.00 |
 | GPU D+ (production) | coll | band | 100000 | 1 | 0.05 | 1960 | 1.29e8 | 1.28e8 to 1.31e8 | 2.3 % | 0.137 | 9.184e-7 | 3.469e-7 | 1.00 |
 | GPU D+ (production) | coll | band | 100000 | 10 | 0.05 | 8620 | 5.73e8 | 5.72e8 to 5.74e8 | 0.3 % | 0.612 | 2.211e-4 | 2.542e-5 | 1.00 |
-| GPU D+ (production) | coll+loss | band | 100000 | 1 | 0.05 | 1880 | 1.24e8 | 1.23e8 to 1.26e8 | 2.4 % | 0.133 | 9.096e-7 | 3.138e-7 | 1.00 |
+| GPU D+ (production) | coll+loss | band | 100000 | 1 | 0.05 | 1880 | 1.24e8 | 1.23e8 to 1.26e8 | 2.5 % | 0.133 | 9.096e-7 | 3.138e-7 | 1.00 |
 | GPU D+ (production) | coll+loss | band | 100000 | 10 | 0.05 | 7850 | 5.24e8 | 5.22e8 to 5.31e8 | 1.8 % | 0.559 | 1.942e-4 | 2.064e-5 | 1.00 |
 | GPU D+ (production) | coll | dense | 10000 | 1 | 0.05 | 3590 | 2.37e7 | 2.37e7 to 2.38e7 | 0.6 % | 0.027 | 4.547e-3 | 1.342e-3 | 1.00 |
 | GPU D+ (production) | coll | dense | 10000 | 10 | 0.05 | not run: a cell needs more than 32,767 candidates in one step (the run stops) | | | | | | | |
@@ -238,14 +238,16 @@ W = 8e8 x (10^6 / N) is 80 times (10^4) and 8 times (10^5) the value at 10^6. At
 
 ### Cost of one collision pass
 
-Cost of one collision pass = (1 / rate(coll) - 1 / rate(base)) x N x every_steps; for `coll+loss` the base is the `loss` row. The cost does not depend on `every_steps` (the GPU rows with 1 and 10 agree within 3 %; the CPU rows within 7 %). Range over the collision rows (states, `coll` and `coll+loss`, `every_steps`), L_x = 0.05 km:
+Cost of one collision pass = (1 / rate(coll) - 1 / rate(base)) x N x every_steps; for `coll+loss` the base is the `loss` row. The cost does not depend on `every_steps`: at 10^5 to 10^7 the GPU rows with 1 and 10 agree within 3.6 % (8.6 % at 10^4, where the pass is only 0.35 ms), and the CPU rows within 7.2 %. One exception: GPU, core, 10^5, where `every_steps` 10 costs 1.25 ms against 0.68 ms; that point has 340,450 overfull cells (the weight breaks the step rule, see the previous section), so it is left out of the table. Range over the collision rows (states, `coll` and `coll+loss`, `every_steps`), L_x = 0.05 km:
 
 | N | M = next power of two of N | M / N | Pass, GPU (ms) | ns per particle | Pass, CPU (ms) |
 |---:|---:|---:|---:|---:|---:|
-| 10^4 | 2^14 | 1.64 | 0.37 | 37 | 0.75 |
-| 10^5 | 2^17 | 1.31 | 0.68 to 0.75 | 7 | 6.0 |
-| 10^6 | 2^20 | 1.05 | 6.6 to 8.3 | 7 to 8 | 71 to 85 |
-| 10^7 | 2^24 | 1.68 | 111 (band), 132 (core), 232 to 239 (dense) | 11 to 24 | not run |
+| 10^4 | 2^14 | 1.64 | 0.35 to 0.41 | 35 to 41 | 0.70 to 0.84 |
+| 10^5 | 2^17 | 1.31 | 0.67 to 0.75 | 7 | 5.6 to 7.1 |
+| 10^6 | 2^20 | 1.05 | 6.6 to 8.3 | 7 to 8 | 69 to 85 |
+| 10^7 | 2^24 | 1.68 | 110 to 116 (band), 131 to 136 (core), 232 to 239 (dense) | 11 to 24 | not run |
+
+(A0 checked these ranges against the raw CSV on 2026-11-10; the first version of this table gave single rows instead of ranges at 10^4, 10^5 (CPU) and 10^7.)
 
 The cost scales with N, not with the hash size M: from 10^5 to 10^6, N rises 10 times and M 8 times, while the cost per particle does not change (7 ns); M / N is 1.31 and 1.05 there. Below 10^5 a floor of about 0.3 ms remains (command submission, one wait for the tally). At 10^7 the cost per particle is 1.6 to 3.4 times larger, and it rises with the occupancy of the state (band 11 ns, core 13 ns, dense 23 ns at weighted occupancy 1.0, 1.3 and 5.9), so part of it is the cell kernel and not the hash. A smaller hash at small N would save at most the floor of about 0.3 ms, which is below the time of 40 integrator steps at 10^4, so it is not worth a task (for A4). The sensitivity point (L_x = 0.2 km, 10^6, `every_steps` 10) costs 7.57 ms (core), 6.66 ms (band) and 9.63 ms (dense) against 7.12, 6.64 and 7.96 ms with L_x = 0.05 km: the cell size changes the cost by up to 21 % (dense), where the candidates per particle rise from 2.3e-2 to 3.5e-2.
 
@@ -262,7 +264,7 @@ Steps in 30 years: 30 x 365.25 x 86,400 s / 356.2537 s = 2,657,455. Time = N x s
 | 10^6 | 0.77 h | 0.87 h | 1.48 h | 7.01 h |
 | 10^7 | 8.1 h | 9.06 h | 26.3 h | 185.8 h |
 
-(`band` and `core`: 10^6 with collisions 1.4 h (`every_steps` 10) and 5.9 to 6.3 h (`every_steps` 1); 10^7: 17.3 to 18.8 h and 94.5 to 109.6 h.) The time with `every_steps` k can be predicted from the `loss` and the `every_steps` 1 rows: time = N x steps x (1 / rate_loss + (1 / rate_coll1 - 1 / rate_loss) / k). This reproduces the measured `every_steps` 10 time to 1.5 % at 10^6 and 10^7 (for dense: 1.49 h against 1.48 h, 26.7 h against 26.3 h). For k = 3 it gives 2.92 h at 10^6 and 68.0 h at 10^7 (dense). This k = 3 time is a prediction, not a measurement.
+(`band` and `core`: 10^6 with collisions 1.4 h (`every_steps` 10) and 5.9 to 6.3 h (`every_steps` 1); 10^7: 17.3 to 18.8 h and 94.5 to 109.6 h.) The time with `every_steps` k can be predicted from the `loss` and the `every_steps` 1 rows: time = N x steps x (1 / rate_loss + (1 / rate_coll1 - 1 / rate_loss) / k). This reproduces the measured `every_steps` 10 time to 1.7 % at 10^6 and 10^7 (for dense: 1.49 h against 1.48 h, 26.7 h against 26.3 h). For k = 3 it gives 2.92 h at 10^6 and 68.0 h at 10^7 (dense). This k = 3 time is a prediction, not a measurement.
 
 **Stretch target (10^7 particles, 30 years).** 8.1 h at G2 (test particles). With the rule it is 9.1 h, and with collisions it is 26 h at best (`every_steps` 10) and 186 h for `every_steps` 1. The stretch target is not met with collisions. Remember that SPEC section 10 gives about 16 tau = 4.8 collisions per orbit at tau = 0.3, which is 0.032 per step for `every_steps` 1, and 0.32 per collision step for `every_steps` 10, above the limit of 0.1 of SPEC section 5.6. So `every_steps` 10 is a lower bound of the cost, and a physical run uses `every_steps` 1 to 3.
 
@@ -282,7 +284,7 @@ Steps in 30 years: 30 x 365.25 x 86,400 s / 356.2537 s = 2,657,455. Time = N x s
 
 So S1 fits the budget of section 11 at 10^6 per run (one run per night), and the matrix fits a few nights if `every_steps` is 3 or more; with `every_steps` 1 the matrix of 32 runs takes 28 nights. The number of nights that AJ has is for the S1 decision. Runs at 10^7 do not fit in a night with collisions.
 
-**Does the CPU collision cost matter for S1?** No, if S1 runs on the GPU. The CPU pass costs 71 to 85 ms at 10^6 (about 10 times the GPU pass; `CellList::group` is 60 to 70 % of it, K2-CPU), and the CPU `base` run alone takes 30 years x 10^6 particles / 6.1e7 = 12.2 h, longer than a night. A parallel pair search or a faster `CellList::group` (deferred by K2-SORT) matters only if S1 or A8 use the CPU backend at 10^6 particles or more; it would not change the verdict for the GPU.
+**Does the CPU collision cost matter for S1?** No, if S1 runs on the GPU. The CPU pass costs 69 to 85 ms at 10^6 (about 10 times the GPU pass; `CellList::group` is 60 to 70 % of it, K2-CPU), and the CPU `base` run alone takes 30 years x 10^6 particles / 6.1e7 = 12.2 h, longer than a night. A parallel pair search or a faster `CellList::group` (deferred by K2-SORT) matters only if S1 or A8 use the CPU backend at 10^6 particles or more; it would not change the verdict for the GPU.
 
 ### Memory at N = 10^7 with collisions
 
