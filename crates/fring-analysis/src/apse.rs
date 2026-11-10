@@ -11,6 +11,7 @@
 //! longitude is `varpi_rot + n0 t`.
 
 use fring_io::RunDir;
+use fring_model::real::sin_cos;
 use fring_model::{Error, Result};
 
 use crate::stats::{jackknife_slope_se, mean, ols};
@@ -36,7 +37,7 @@ pub fn fit_ring(rho: &[f64], phi: &[f64]) -> (f64, f64, f64) {
     let (mut sc, mut ss, mut scc, mut sss, mut scs) = (0.0, 0.0, 0.0, 0.0, 0.0);
     let (mut sr, mut src, mut srs) = (0.0, 0.0, 0.0);
     for (&r, &p) in rho.iter().zip(phi) {
-        let (s, c) = p.sin_cos();
+        let (s, c) = sin_cos(p);
         sc += c;
         ss += s;
         scc += c * c;
