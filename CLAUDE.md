@@ -50,7 +50,8 @@ AJ gave standing permission: "from now on lets make a point of deleting stale wo
 - Check first:
   - `git -C <wt> status --porcelain` is empty, and `git -C <wt> log @{u}..` shows no unpushed commits.
   - Nothing under its git-ignored folders (`runs/`, logs) is still needed: a report cites it, or an open task or gate uses it. `git worktree remove` deletes those files too. Move the needed data to the main checkout's `runs/` first, or keep the worktree and say why.
-- Then: `git worktree remove .claude/worktrees/<name>` and `git branch -d ws/<branch>`. Never use `--force` or `-D` without asking AJ. Remote branches: `git push origin --delete ws/<branch>` after the merge.
+- Then: `git worktree remove .claude/worktrees/<name>` and `git branch -d ws/<branch>`. Never use `--force` or `-D` without asking AJ. The permission covers local worktrees and local branches only; leave remote branches alone (the auto-mode check refuses `git push origin --delete`, and AJ has not asked for it).
+- Move git-ignored run data that may still be needed to `runs/_worktrees/<name>/` in the main checkout before the removal (same disk, so the move is instant).
 - Why: each worktree has its own `target/` of 3 to 5 GB. On 2026-11-09 the disk filled up (12 worktrees, about 48 GB of `target/`) and stopped the K4 runs overnight. Check `df -h /System/Volumes/Data` before long runs.
 
 ## Before the session ends
