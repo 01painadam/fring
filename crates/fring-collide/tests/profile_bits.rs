@@ -45,7 +45,7 @@ fn draw(rng: &Philox, index: u32) -> [f64; 2] {
 fn collide_sin_cos_users_bits_do_not_depend_on_the_profile() {
     let rng = Philox::from_seed(20_261_110);
     let mut h = Hash(0xcbf2_9ce4_8422_2325);
-    // impact_normal: 2000 pairs of uniforms, a different g each time.
+    // impact_normal: 200,000 pairs of uniforms, a different g each time.
     for i in 0..200_000_u32 {
         let [u1, u2] = draw(&rng, i);
         let [a, b] = draw(&rng, 10_000 + i);
