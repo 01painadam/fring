@@ -165,6 +165,7 @@ cd validation && uv run python scripts/e1_l2.py check         # E1-REF layer 2, 
 cd validation && uv run python scripts/e1_l2.py run --n 300 --days 365.25   # E1-REF layer 2, about 25 min; writes reference/e1_l2_*
 cd validation && uv run python scripts/e1_compare.py layer1 --run <wh.csv> [--substep <wh_substep.csv>]   # E1-REF limits on the run without sub-stepping; the sub-stepped run is reported only (ICR-004 amendment 2; also: layer2)
 cd validation && uv run python scripts/e1_standin.py layer1|layer2 --div 1 --out <file>   # REBOUND WHFast stand-in at the run step h (2 s for layer 1), NOT the Rust backend
+cargo run -p fring-run --release --bin fring-e1 -- all [--backend cpu|gpu] [--variants plain,loss] --out runs/e1g5/<name>   # E1-REF runner (A5); gpu = mode D+, substep refused; layer 2 about 14 s (CPU), 85 s (GPU); then e1_compare.py on <name>/plain/l1_wh.csv and l2_wh.csv
 ```
 
 Analysis commands (A8; `fring-analyse` reads run directories, and the plots are a `uv` project in `crates/fring-analysis/python/` with Altair). `docs/results/a1-analysis.md` lists the full set of runs:
