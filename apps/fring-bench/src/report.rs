@@ -71,6 +71,136 @@ pub fn csv(outcomes: &[Outcome]) -> String {
     s
 }
 
+/// CSV header of a B2 run: one row per timed repeat.
+pub const CSV_HEADER_B2: &str = "backend,feature,state,n_particles,every_steps,radial_cell_km,repeat,status,steps_per_call,rate,candidates_per_particle,pairs_per_particle,weighted_occupancy,occupied_cells_per_collision_step,overfull_cells,note";
+
+fn cell_km(p: &Point) -> f64 {
+    if !p.feature.collisions() {
+        0.0
+    } else if p.wide_cells {
+        crate::WIDE_CELL_KM
+    } else {
+        crate::CELL_RADIAL_KM
+    }
+}
+
+/// CSV text of a B2 run (header, then one line per repeat of each outcome).
+pub fn csv_b2(outcomes: &[Outcome]) -> String {
+    let mut s = String::from(CSV_HEADER_B2);
+    s.push('\n');
+    for o in outcomes {
+        let p = &o.point;
+        let head = format!(
+            "{},{},{},{},{},{}",
+            p.variant.name(),
+            p.feature.name(),
+            p.state.name(),
+            p.n,
+            p.every_steps,
+            cell_km(p)
+        );
+        match &o.result {
+            Ok(t) => {
+                for (k, r) in t.raw_rates.iter().enumerate() {
+                    // The statistics of this repeat if they were kept per
+                    // repeat, else those of all repeats together.
+                    let coll = if t.repeat_coll.len() == t.raw_rates.len() {
+                        t.repeat_coll.get(k)
+                    } else {
+                        t.coll.as_ref()
+                    };
+                    let (cand, pairs, occ, cells, over) = match coll {
+                        Some(c) => (
+                            format!("{:.4e}", c.candidates_per_particle(p.n)),
+                            format!("{:.4e}", c.collisions_per_particle(p.n)),
+                            format!("{:.4}", c.weighted_occupancy()),
+                            format!(
+                                "{:.1}",
+                                c.occupied_cells as f64 / c.coll_steps.max(1) as f64
+                            ),
+                            c.overfull_cells.to_string(),
+                        ),
+                        None => Default::default(),
+                    };
+                    s.push_str(&format!(
+                        "{head},{},ok,{},{r:.4e},{cand},{pairs},{occ},{cells},{over},\n",
+                        k + 1,
+                        t.steps_per_call
+                    ));
+                }
+            }
+            Err(why) => {
+                let note = why.replace([',', '\n'], ";");
+                s.push_str(&format!("{head},,not run,,,,,,,,{note}\n"));
+            }
+        }
+    }
+    s
+}
+
+/// Markdown table of a B2 run (one line per point; the ratio is to the
+/// `base` row of the same backend, state and N).
+pub fn markdown_table_b2(outcomes: &[Outcome]) -> String {
+    let mut s = String::from(
+        "| Backend | Features | State | N | every_steps | L_x (km) | Steps per call | Median particle-steps/s | Min to max | Spread | Ratio to base | Candidates per particle per collision step | Pairs per particle per collision step | Weighted occupancy |\n",
+    );
+    s.push_str("|---|---|---|---:|---:|---:|---:|---:|---|---:|---:|---:|---:|---:|\n");
+    for o in outcomes {
+        let p = &o.point;
+        let head = format!(
+            "| {} | {} | {} | {} | {} | {} |",
+            p.variant.label(),
+            p.feature.name(),
+            p.state.name(),
+            p.n,
+            if p.feature.collisions() {
+                p.every_steps.to_string()
+            } else {
+                "-".to_string()
+            },
+            if p.feature.collisions() {
+                cell_km(p).to_string()
+            } else {
+                "-".to_string()
+            }
+        );
+        match &o.result {
+            Ok(t) => {
+                let base = outcomes.iter().find_map(|b| {
+                    let q = &b.point;
+                    (q.feature == crate::matrix::Feature::Base
+                        && q.variant == p.variant
+                        && q.state == p.state
+                        && q.n == p.n)
+                        .then(|| b.result.as_ref().ok().map(|t| t.rate_median))
+                        .flatten()
+                });
+                let ratio = base.map_or("-".to_string(), |b| format!("{:.3}", t.rate_median / b));
+                let min = t.raw_rates.iter().copied().fold(f64::MAX, f64::min);
+                let max = t.raw_rates.iter().copied().fold(f64::MIN, f64::max);
+                let (cand, pairs, occ) = match &t.coll {
+                    Some(c) => (
+                        format!("{:.3e}", c.candidates_per_particle(p.n)),
+                        format!("{:.3e}", c.collisions_per_particle(p.n)),
+                        format!("{:.2}", c.weighted_occupancy()),
+                    ),
+                    None => ("-".into(), "-".into(), "-".into()),
+                };
+                s.push_str(&format!(
+                    "{head} {} | {} | {} to {} | {:.1} % | {ratio} | {cand} | {pairs} | {occ} |\n",
+                    t.steps_per_call,
+                    sci(t.rate_median),
+                    sci(min),
+                    sci(max),
+                    100.0 * crate::measure::spread(&t.raw_rates)
+                ));
+            }
+            Err(why) => s.push_str(&format!("{head} not run: {why} | | | | | | | |\n")),
+        }
+    }
+    s
+}
+
 /// Three significant figures in scientific notation, for example `9.52e8`.
 pub fn sci(x: f64) -> String {
     format!("{x:.2e}").replace("e+", "e")
@@ -152,11 +282,7 @@ mod tests {
 
     fn ok() -> Outcome {
         Outcome {
-            point: Point {
-                variant: Variant::GpuDp,
-                n: 1_000_000,
-                chaos: false,
-            },
+            point: Point::b1(Variant::GpuDp, 1_000_000, false),
             result: Ok(Timing {
                 steps_per_call: 300,
                 rate_best: 9.52e8,
@@ -164,17 +290,17 @@ mod tests {
                 rate_max: 9.52e8,
                 readback_s: 0.05,
                 rate_with_readback: 9.0e8,
+                raw_rates: vec![9.4e8, 9.52e8, 9.5e8],
+                rate_median: 9.5e8,
+                coll: None,
+                repeat_coll: Vec::new(),
             }),
         }
     }
 
     fn failed() -> Outcome {
         Outcome {
-            point: Point {
-                variant: Variant::Cpu,
-                n: 10,
-                chaos: true,
-            },
+            point: Point::b1(Variant::Cpu, 10, true),
             result: Err("too big, sorry".to_string()),
         }
     }
@@ -189,6 +315,44 @@ mod tests {
         // Same number of fields in every line.
         let cols = |l: &str| l.split(',').count();
         assert!(lines.iter().all(|l| cols(l) == cols(lines[0])));
+    }
+
+    #[test]
+    fn b2_csv_and_table() {
+        use crate::matrix::Feature;
+        use crate::measure::CollTotals;
+        let mut with = ok();
+        with.point.feature = Feature::Coll;
+        with.point.every_steps = 10;
+        if let Ok(t) = &mut with.result {
+            t.raw_rates = vec![4.0e8, 4.2e8];
+            t.rate_median = 4.1e8;
+            t.coll = Some(CollTotals {
+                coll_steps: 2,
+                candidates: 100_000,
+                collisions: 20_000,
+                occupied_cells: 10,
+                occupancy_sum: 10,
+                occupancy_sq_sum: 30,
+                ..CollTotals::default()
+            });
+        }
+        let outs = [ok(), with, failed()];
+        let s = csv_b2(&outs);
+        let lines: Vec<&str> = s.lines().collect();
+        assert_eq!(lines[0], CSV_HEADER_B2);
+        // 3 + 2 repeats and one "not run" row, all with the same field count.
+        assert_eq!(lines.len(), 1 + 3 + 2 + 1);
+        let cols = |l: &str| l.split(',').count();
+        assert!(lines.iter().all(|l| cols(l) == cols(lines[0])), "{s}");
+        assert!(lines[4].starts_with(
+            "gpu_dp,coll,core,1000000,10,0.05,1,ok,300,4.0000e8,5.0000e-2,1.0000e-2,3.0000,"
+        ));
+        assert!(lines[6].contains("not run"));
+        let t = markdown_table_b2(&outs);
+        // Ratio to the base row: 4.1e8 / 9.5e8 = 0.432.
+        assert!(t.contains("| 0.432 |"), "{t}");
+        assert!(t.contains("5.000e-2"), "{t}");
     }
 
     #[test]
