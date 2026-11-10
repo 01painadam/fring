@@ -9,6 +9,7 @@
 use std::cmp::Ordering;
 
 use fring_model::config::Restitution;
+use fring_model::real::sin_cos;
 use fring_model::{Real, Vec3};
 
 /// The velocity change and energy loss of one collision (`SPEC.md` section 4).
@@ -100,5 +101,7 @@ pub fn impact_normal<T: Real>(g_km_s: Vec3<T>, u1: T, u2: T) -> Vec3<T> {
     let cos_theta = u1.sqrt();
     let sin_theta = (T::ONE - u1).sqrt();
     let psi = T::from_f64(2.0) * T::PI * u2;
-    (e1 * psi.cos() + e2 * psi.sin()) * sin_theta - g_hat * cos_theta
+    // One `sin_cos` call keeps release and debug bits equal (no fused libm call).
+    let (sin_psi, cos_psi) = sin_cos(psi);
+    (e1 * cos_psi + e2 * sin_psi) * sin_theta - g_hat * cos_theta
 }
