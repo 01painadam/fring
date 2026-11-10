@@ -26,6 +26,7 @@
 use fring_model::Vec3;
 use fring_model::config::{Collisions, Restitution};
 use fring_model::physics::arc::ArcGeometry;
+use fring_model::real::sin_cos;
 
 use crate::frame::{CellGrid, CellKey};
 use crate::pair;
@@ -349,7 +350,10 @@ impl HardSphereModel {
             let d = separation(i, j, shift);
             let turn = match (shift, width_rad) {
                 (0, _) => None,
-                (_, Some(w)) => Some((w.cos(), w.sin() * f64::from(shift))),
+                (_, Some(w)) => {
+                    let (sin_w, cos_w) = sin_cos(w);
+                    Some((cos_w, sin_w * f64::from(shift)))
+                }
                 (_, None) => panic!("a pair with a shift needs the arc width"),
             };
             let g = match turn {
