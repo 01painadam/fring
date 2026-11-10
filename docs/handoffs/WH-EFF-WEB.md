@@ -1,6 +1,6 @@
 # WH-EFF-WEB: the web drifts about mu_eff (ICR-011, A7 item)
 Role: A7  Branch: ws/a7-wh-eff-web  Status: review
-Updated: 2026-11-09
+Updated: 2026-11-10 10:30
 
 ## Goal and acceptance criteria
 `fring-web` builds the Saturn field with `with_drift_radius(a0)` (ICR-011), so the web shows the same dynamics as the CPU and GPU runs; host tests pass; the web dynamics run in `GpuStepper`, so it uses `GpuStepper::new_with_drift`.
@@ -26,14 +26,16 @@ Updated: 2026-11-09
 - #86 needs main with the A3 fix merged in before AJ benches again.
 
 ## Next step (one concrete action)
-A0: review; run `?bench` in Chrome (`http://localhost:8080/?bench&counts=1e5&modes=off,side,overlay`, earlier value mean 60.0 fps; stall check `counts=1e4,3e5&modes=off,side`).
+AJ: run `?bench` again in Chrome on the build of a60905a or later (`http://localhost:8080/?bench&counts=1e5&modes=off,side,overlay`; pass: mean 30 fps or more in each mode). The earlier value (mean 60.0 fps) is not valid: the step pass was dropped (arc.wgsl NaN, fixed in #89). A0 2026-11-10: main (aae1d16, #89) merged into this branch, wasm rebuilt (955,648 bytes), headless Chrome check: simulated time advances (1.1 d to 3.6 d in 10 s), no WGSL error, ring drawn; headless `?bench` 100,000 particles: 60 fps, 83 steps per frame in off, side and overlay.
 
 ## How to verify the current state
 ```sh
 cargo test -p fring-web                          # 35 lib tests pass
 cargo test -p fring-web --release -- --ignored --nocapture   # GPU tests; prints the two drift numbers
 cargo check -p fring-web --target wasm32-unknown-unknown
-apps/fring-web/scripts/build.sh                  # wasm size: 942859 bytes
+apps/fring-web/scripts/build.sh                  # wasm size: 955648 bytes (a60905a)
+python3 -m http.server 8080 -d apps/fring-web/dist &
+node apps/fring-web/scripts/cdp-check.mjs http://localhost:8080/ 15 /tmp/cdp.png   # exit 0: time advances, no WGSL error (M28)
 ```
 
 ## Open questions / blockers
