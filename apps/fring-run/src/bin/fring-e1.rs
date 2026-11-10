@@ -1,25 +1,28 @@
-//! `fring-e1`: runs the CPU backend on the E1-REF files and writes the WH
+//! `fring-e1`: runs the CPU or GPU backend on the E1-REF files and writes the WH
 //! result files for `validation/scripts/e1_compare.py` (task E1-RUN).
 //!
 //! Owner: A5 (see `AGENTS.md`). The logic is in `fring_run::e1`.
 
+use fring_model::{Backend, InitialState, RunConfig, System};
 use fring_run::RunError;
-use fring_run::e1::{self, Variant};
+use fring_run::e1::{self, BackendKind, Variant};
 use std::path::PathBuf;
 use std::process::ExitCode;
 use std::time::Instant;
 
 const USAGE: &str = "\
-fring-e1: run the CPU backend on the E1-REF files (layer 1, layer 2)
+fring-e1: run the CPU or GPU backend on the E1-REF files (layer 1, layer 2)
 
 USAGE:
     fring-e1 <layer1|layer2|all> [--refdir <dir>] [--params <dir>] [--out <dir>]
-             [--variants plain,substep,loss] [--ids <n>] [--l2-step <s>] [--l2-stride <k>]
+             [--backend cpu|gpu] [--variants plain,substep,loss] [--ids <n>] [--l2-step <s>] [--l2-stride <k>]
              [--l2-perturb-km <x> --l2-seed <k>]
              [--l2-div <m>] [--l2-trace-ids i,j,k --l2-trace-every <steps>] [--quiet]
 
 Defaults: --refdir validation/reference, --params params, --out runs/e1,
---variants plain,substep. --ids n runs only the first n ids (tests).
+--backend cpu, --variants plain,substep (plain with --backend gpu).
+--backend gpu runs the GPU in mode D+ (ICR-011); substep is refused there.
+--ids n runs only the first n ids (tests).
 --l2-step s sets the nominal layer 2 step (default 356.2537; the step is then
 adjusted so that the end time is exact). Only for noise studies.
 --l2-div m runs m times as many steps of h/m. --l2-trace-ids writes trace_l2.csv
@@ -36,7 +39,8 @@ struct Opts {
     refdir: PathBuf,
     params: PathBuf,
     out: PathBuf,
-    variants: Vec<Variant>,
+    backend: BackendKind,
+    variants: Option<Vec<Variant>>,
     ids: Option<usize>,
     nominal_step_s: f64,
     l2_stride: u64,
@@ -61,7 +65,8 @@ fn parse() -> Result<Opts, String> {
         refdir: "validation/reference".into(),
         params: "params".into(),
         out: "runs/e1".into(),
-        variants: vec![Variant::Plain, Variant::Substep],
+        backend: BackendKind::Cpu,
+        variants: None,
         ids: None,
         nominal_step_s: e1::NOMINAL_STEP_S,
         l2_stride: 1,
@@ -78,11 +83,14 @@ fn parse() -> Result<Opts, String> {
             "--refdir" => o.refdir = val("--refdir")?.into(),
             "--params" => o.params = val("--params")?.into(),
             "--out" => o.out = val("--out")?.into(),
+            "--backend" => o.backend = BackendKind::parse(&val("--backend")?)?,
             "--variants" => {
-                o.variants = val("--variants")?
-                    .split(',')
-                    .map(Variant::parse)
-                    .collect::<Result<_, _>>()?
+                o.variants = Some(
+                    val("--variants")?
+                        .split(',')
+                        .map(Variant::parse)
+                        .collect::<Result<_, _>>()?,
+                )
             }
             "--ids" => o.ids = Some(val("--ids")?.parse().map_err(|e| format!("--ids: {e}"))?),
             "--l2-step" => {
@@ -125,6 +133,11 @@ fn parse() -> Result<Opts, String> {
             _ => return Err(format!("unknown argument {f:?}")),
         }
     }
+    let v = o.variants.get_or_insert_with(|| match o.backend {
+        BackendKind::Cpu => vec![Variant::Plain, Variant::Substep],
+        BackendKind::Gpu => vec![Variant::Plain],
+    });
+    e1::check_variants(o.backend, v)?;
     Ok(o)
 }
 
@@ -140,7 +153,11 @@ fn read(path: &std::path::Path) -> Result<String, RunError> {
         .map_err(|e| RunError::Setup(format!("cannot read {}: {e}", path.display())))
 }
 
-fn go(o: &Opts) -> Result<(), RunError> {
+fn go<B, M>(o: &Opts, mk: impl Fn(Vec<f64>) -> M) -> Result<(), RunError>
+where
+    B: Backend,
+    M: FnMut(&RunConfig, &System, &InitialState) -> Result<B, RunError> + Clone,
+{
     let say = |m: &str| {
         if !o.quiet {
             eprintln!("{m}");
@@ -191,19 +208,15 @@ fn go(o: &Opts) -> Result<(), RunError> {
     say(&format!(
         "moon difference to e1_moons_t0.csv: max |dr| {max_r:.3e} km, max |dv| {max_v:.3e} km/s"
     ));
-    for &v in &o.variants {
+    for &v in o.variants.as_deref().unwrap_or_default() {
         let dir = o.out.join(v.name());
         if do1 {
             let t = Instant::now();
-            let r = e1::layer1(
-                &l1,
-                &setup.system,
-                v,
-                e1::cpu_backend(setup.radii_km.clone()),
-            )?;
+            let r = e1::layer1(&l1, &setup.system, v, mk(setup.radii_km.clone()))?;
             let head = format!(
-                "E1-RUN layer 1, variant {}, CPU, {} steps of {:.6} s per encounter",
+                "E1-RUN layer 1, variant {}, {}, {} steps of {:.6} s per encounter",
                 v.name(),
+                e1::backend_label(o.backend),
                 e1::L1_STEPS,
                 r.step_s
             );
@@ -234,11 +247,12 @@ fn go(o: &Opts) -> Result<(), RunError> {
                 trace.as_ref(),
                 &setup.system,
                 v,
-                e1::cpu_backend(setup.radii_km.clone()),
+                mk(setup.radii_km.clone()),
             )?;
             let head = format!(
-                "E1-RUN layer 2, variant {}, CPU, {} steps of {:.6} s",
+                "E1-RUN layer 2, variant {}, {}, {} steps of {:.6} s",
                 v.name(),
+                e1::backend_label(o.backend),
                 r.n_steps,
                 r.step_s
             );
@@ -302,7 +316,10 @@ fn main() -> ExitCode {
             eprintln!("fring-e1: {m}\n\n{USAGE}");
             ExitCode::from(2)
         }
-        Ok(o) => match go(&o) {
+        Ok(o) => match match o.backend {
+            BackendKind::Cpu => go(&o, e1::cpu_backend),
+            BackendKind::Gpu => go(&o, e1::gpu_backend),
+        } {
             Ok(()) => ExitCode::SUCCESS,
             Err(e) => {
                 eprintln!("fring-e1: {e}");

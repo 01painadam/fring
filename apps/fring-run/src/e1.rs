@@ -16,6 +16,8 @@
 
 use crate::{RunError, read_text, select_moons, setup};
 use fring_cpu::CpuBackend;
+use fring_gpu::backend::{GpuBackend, Options};
+use fring_gpu::wh::Mode;
 use fring_model::params::{moon_radii_from_toml_str, moons_from_toml_str, saturn_from_toml_str};
 use fring_model::physics::{DEFAULT_INTERVAL_S, build_ephemeris, interpolate_moons};
 use fring_model::rng::{Counter, Philox, Stream, box_muller};
@@ -378,10 +380,76 @@ pub fn build_setup(params_dir: &Path, cover_s: f64) -> Result<Setup, RunError> {
 /// and by the radius rule; harmless otherwise).
 pub fn cpu_backend(
     radii_km: Vec<f64>,
-) -> impl FnMut(&RunConfig, &System, &InitialState) -> Result<CpuBackend, RunError> {
+) -> impl FnMut(&RunConfig, &System, &InitialState) -> Result<CpuBackend, RunError> + Clone {
     move |config, system, init| {
         let mut b = setup(CpuBackend::new(config, system, init))?;
         setup(b.set_moon_radii_km(&radii_km))?;
+        Ok(b)
+    }
+}
+
+/// Which backend `fring-e1` runs.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BackendKind {
+    /// The f64 CPU backend (the reference).
+    Cpu,
+    /// The wgpu backend in mode D+ (production, ICR-011).
+    Gpu,
+}
+
+impl BackendKind {
+    /// Parses `cpu` or `gpu`.
+    pub fn parse(s: &str) -> Result<Self, String> {
+        match s {
+            "cpu" => Ok(BackendKind::Cpu),
+            "gpu" => Ok(BackendKind::Gpu),
+            _ => Err(format!("unknown backend {s:?} (cpu or gpu)")),
+        }
+    }
+}
+
+/// Refuses variants that the backend cannot run. Sub-stepping is CPU only
+/// (ICR-004 amendment 2). Pure function: it builds no backend, so it needs
+/// no GPU adapter.
+pub fn check_variants(kind: BackendKind, variants: &[Variant]) -> Result<(), String> {
+    if kind == BackendKind::Gpu && variants.contains(&Variant::Substep) {
+        return Err(
+            "variant \"substep\" is not available on the GPU backend (ICR-004 amendment 2); \
+             use --variants plain,loss or --backend cpu"
+                .to_string(),
+        );
+    }
+    Ok(())
+}
+
+static GPU_ADAPTER: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+
+/// Text for the file headers: the backend, and for the GPU the mode and the
+/// adapter name (known after the first backend was built).
+pub fn backend_label(kind: BackendKind) -> String {
+    match kind {
+        BackendKind::Cpu => "CPU".to_string(),
+        BackendKind::Gpu => format!(
+            "GPU mode D+, adapter {}",
+            GPU_ADAPTER.get().map_or("unknown", String::as_str)
+        ),
+    }
+}
+
+/// Makes a GPU backend in mode D+ (set explicitly; `FRING_GPU_MODE` is
+/// ignored) and gives it the moon radii. ICR-011 mu_eff comes from
+/// `[frame] reference_semi_major_axis_km` in the config, as on the CPU.
+pub fn gpu_backend(
+    radii_km: Vec<f64>,
+) -> impl FnMut(&RunConfig, &System, &InitialState) -> Result<GpuBackend, RunError> + Clone {
+    move |config, system, init| {
+        let opts = Options {
+            mode: Mode::Dp,
+            ..Options::default()
+        };
+        let mut b = setup(GpuBackend::with_options(config, system, init, opts))?;
+        setup(b.set_moon_radii_km(&radii_km))?;
+        let _ = GPU_ADAPTER.set(b.adapter_name());
         Ok(b)
     }
 }
