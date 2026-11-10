@@ -17,8 +17,11 @@ Use `fring_model::real::sin_cos` at the fused same-argument sin/cos pairs in non
 - Test-only pairs: `lyapunov.rs:405-406` (`#[cfg(test)]`), `bin.rs` 1123, 1416, 1434, 1463 (after `#[cfg(test)]` at line 1096), `fring-gpu/src/arc.rs:219-220`, all of `tests/`. They do not reach the simulation.
 - `apps/fring-web/src/view.rs:37`: wasm32 has no `___sincos_stret`; display only.
 
+- A0 check on head 5b8e3a2: DoD green (431 passed, 0 failed, 110 ignored); otool count 3 (base sources) and 0 (head) reproduced; the base release and debug hashes above reproduced (`runs/logs/a0-verify-det-sincos-2-5b8e3a2.log` in the main checkout). The timing was not repeated.
+- The 3 extra tests in release are the K3 tests in `fring-collide/tests/k3_hard_sphere.rs` (ignored in debug, slow); they pass with the new `resolve_pairs`.
+
 ## Next step (one concrete action)
-A0 reviews the pull request and adds the CI line (see below).
+A0 merges the pull request after green CI. The CI line is in `.github/workflows/ci.yml` (A0 commit 5b8e3a2).
 
 ## How to verify the current state
 cargo test -p fring-collide -p fring-analysis -p fring-gpu --release --test profile_bits   # 3 x "1 passed"
@@ -26,7 +29,7 @@ cargo test -p fring-collide -p fring-analysis -p fring-gpu --test profile_bits  
 cargo build --release -p fring-run && otool -tv target/release/fring-run | grep -c ___sincos_stret   # 0
 cargo test -p fring-cpu --test golden; cargo test -p fring-model --lib profile_bits                   # pass
 
-Proposed CI line, after the `fring-model` release step:
+CI line (added by A0 after the `fring-model` release step):
 `cargo test -p fring-collide -p fring-analysis -p fring-gpu --release --test profile_bits`
 
 ## Open questions / blockers
