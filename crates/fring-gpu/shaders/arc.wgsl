@@ -212,7 +212,9 @@ fn t_arc_wrap(@builtin(global_invocation_id) id: vec3<u32>, @builtin(num_workgro
     if (arc_site(i, 0u, 1u, prm_n_steps(), &p, &v, &cnt)) {
         store(i, p, v);
     } else {
-        // Marks a failure: NaN in x (the test reads it).
-        store(i, V3(vec2<f32>(bitcast<f32>(0x7fc00000u), 0.0), p.y, p.z), v);
+        // Marks a failure: x = -1.0e30 km (the test reads it). Not a NaN:
+        // WGSL rejects a constant NaN at shader creation (Chrome), and no
+        // real state has |x| near 1.0e30 km.
+        store(i, V3(vec2<f32>(-1.0e30, 0.0), p.y, p.z), v);
     }
 }
