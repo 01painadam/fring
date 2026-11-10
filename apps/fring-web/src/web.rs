@@ -11,21 +11,21 @@
 //! compiles the kernels, builds the moon ephemeris and makes the stepper.
 
 use crate::live::{
-    BLOCK_STEPS, Band, COLOUR_FAINT_OFFSET, CompareMode, END_MARGIN_S, FLOATS_PER_INSTANCE,
-    Governor, MAX_IN_FLIGHT, MOONLET_RADIUS_KM, PANDORA, PARTICLE_COUNT, ProjectionUniform, SPAN_S,
-    STEP_S, Setup, StepPlanner, ViewFrame, builtin_moon_radii_for, count_fits, drop_text,
+    Band, COLOUR_FAINT_OFFSET, CompareMode, END_MARGIN_S, FLOATS_PER_INSTANCE, Governor,
+    MAX_IN_FLIGHT, MOONLET_RADIUS_KM, PANDORA, PARTICLE_COUNT, ProjectionUniform, SPAN_S, STEP_S,
+    Setup, StepPlanner, ViewFrame, builtin_moon_radii_for, count_fits, drop_text, gpu_error_text,
     head_instances_styled, instance_bytes, limit_to_end, max_hours_for, moonlet_velocity,
-    ref_base_slot, ref_bytes, status_bytes, view_transform,
+    record_first_error, ref_base_slot, ref_bytes, status_bytes, view_transform,
 };
 use crate::view::{Camera, half_local_x, split_halves};
 use fring_gpu::gpu::Gpu;
 use fring_gpu::probe::SelfTest;
-use fring_gpu::stepper::GpuStepper;
+use fring_gpu::stepper::{GpuStepper, StepperOptions};
 use fring_gpu::wh::Mode;
 use fring_gpu::wh_gpu::{DEFAULT_WORKGROUP, WhKernels};
 use fring_model::MoonEphemeris;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicU8, AtomicU32, Ordering};
+use std::sync::{Arc, Mutex};
 use wasm_bindgen::prelude::*;
 
 const SHADER: &str = include_str!("../shaders/points.wgsl");
@@ -121,6 +121,8 @@ pub struct App {
     planner: StepPlanner,
     governor: Governor,
     in_flight: Arc<AtomicU32>,
+    /// The first GPU error that the browser reported (uncaptured-error handler).
+    gpu_error: Arc<Mutex<Option<String>>>,
     status: StatusReader,
     /// Particles dropped in this run: unbound, inside moon 0 and moon 1 (words 1 to 3).
     drops: [u32; 3],
@@ -184,6 +186,16 @@ impl App {
             })
             .await
             .map_err(err)?;
+        // A shader that the browser rejects drops every submit that uses it,
+        // and the browser only logs that. Keep the first message so that the
+        // page can fail with the text (see `frame`).
+        let gpu_error: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
+        let sink = Arc::clone(&gpu_error);
+        device.on_uncaptured_error(Arc::new(move |e: wgpu::Error| {
+            if let Ok(mut slot) = sink.lock() {
+                record_first_error(&mut slot, &e.to_string());
+            }
+        }));
         let config = surface
             .get_default_config(&adapter, width, height)
             .ok_or_else(|| err("the canvas cannot use this adapter"))?;
@@ -349,6 +361,7 @@ impl App {
             planner: StepPlanner::new(),
             governor: Governor::default(),
             in_flight: Arc::new(AtomicU32::new(0)),
+            gpu_error,
             status: StatusReader {
                 buffer: status_buffer,
                 epoch: 0,
@@ -653,6 +666,13 @@ impl App {
             .last_ms
             .map_or(0.0, |last| ((now_ms - last) / 1000.0).clamp(0.0, 0.25));
         self.last_ms = Some(now_ms);
+        // A GPU error (for example a WGSL module that the browser rejects)
+        // fails the page with its text, in any phase.
+        if !matches!(self.phase, Phase::Failed(_))
+            && let Some(m) = self.gpu_error.lock().ok().and_then(|g| g.clone())
+        {
+            self.phase = Phase::Failed(gpu_error_text(&m));
+        }
         match &mut self.phase {
             Phase::SelfTesting(test) => {
                 match test.poll() {
@@ -724,15 +744,20 @@ impl App {
             });
             self.instances_n = self.count;
         }
-        let mut stepper = GpuStepper::new(
+        // ICR-011: the drift is about mu_eff at a0, as in the CPU and GPU runs.
+        let cfg = self.setup.stepper_settings();
+        let mut stepper = GpuStepper::new_with_drift(
             &self.gpu,
             kernels,
             &system,
             &init,
-            STEP_S,
-            BLOCK_STEPS,
-            Mode::Dp,
-            None,
+            StepperOptions {
+                step_s: cfg.step_s,
+                block_steps: cfg.block_steps,
+                mode: Mode::Dp,
+                chaos: None,
+                drift_radius_km: cfg.drift_radius_km,
+            },
         )?;
         // ICR-006: a particle that comes inside a moon is dropped. One radius
         // for each track of the system, matched by name (params/moons.toml).

@@ -10,15 +10,50 @@
   html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); font: 14px/1.4 system-ui, sans-serif; }
   canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; }
   canvas.drag { cursor: grabbing; }
-  .panel { position: fixed; top: 12px; left: 12px; max-width: min(320px, calc(100vw - 24px)); padding: 12px 14px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; backdrop-filter: blur(6px); }
-  h1 { margin: 0 0 6px; font-size: 16px; font-weight: 600; }
-  .row { display: flex; align-items: center; gap: 8px; margin: 8px 0; flex-wrap: wrap; }
+  .panel { position: fixed; top: 12px; left: 12px; width: min(320px, calc(100vw - 24px)); max-height: calc(100vh - 24px); max-height: calc(100dvh - 24px); overflow-y: auto; overscroll-behavior: contain; padding: 12px 14px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; backdrop-filter: blur(6px); }
+  .panel-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  h1 { margin: 0; font-size: 16px; font-weight: 600; }
+  .panel.collapsed { width: auto; }
+  .panel.collapsed .panel-body { display: none; }
+  .buttons { display: flex; gap: 6px; margin: 10px 0 0; }
+  .buttons button { flex: 1 1 0; min-width: 0; padding-inline: 6px; }
+  .sep { border: 0; border-top: 1px solid var(--line); margin: 10px 0; }
+  .row { display: grid; grid-template-columns: 4.6rem minmax(0, 1fr); align-items: center; gap: 10px; margin: 7px 0; }
   .row[hidden] { display: none; }
+  .row > label:first-child { color: var(--muted); }
+  .row select, .row input[type=number] { width: 100%; min-width: 0; }
+  .ctl { display: flex; align-items: center; gap: 6px; min-width: 0; }
+  .ctl input[type=number] { flex: 1 1 0; }
+  .ctl select { flex: 1 1 0; }
+  .ctl button { flex: none; white-space: nowrap; }
+  .unit { color: var(--muted); font-size: 13px; }
+  .check { display: flex; align-items: center; gap: 6px; color: var(--fg); }
   label { color: var(--muted); }
   button, select { font: inherit; color: var(--fg); background: #1a2236; border: 1px solid var(--line); border-radius: 6px; padding: 5px 10px; min-height: 32px; }
   button:hover, select:hover { border-color: var(--accent); }
-  input[type=range] { flex: 1; min-width: 120px; accent-color: var(--accent); }
-  #bench { white-space: pre-wrap; font-size: 12px; }
+  button.small { min-height: 26px; padding: 2px 8px; font-size: 12px; }
+  input[type=range] { flex: 1 1 0; min-width: 0; accent-color: var(--accent); }
+  #speed-out { flex: none; min-width: 4.5em; text-align: right; font-size: 12px; color: var(--muted); }
+  .readouts { margin: 8px 0; font-size: 13px; display: grid; gap: 2px; }
+  details.about { margin-top: 8px; }
+  details.about summary { cursor: pointer; color: var(--accent); font-size: 12px; }
+  body.bench .panel details.about { display: none; }
+  .bench-panel { position: fixed; top: 12px; right: 12px; max-width: calc(100vw - 24px); max-height: calc(100dvh - 24px); overflow: auto; padding: 10px 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; backdrop-filter: blur(6px); }
+  .bench-head { margin-bottom: 6px; }
+  #bench-status { color: var(--muted); }
+  .bench-panel table { border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; }
+  .bench-panel th, .bench-panel td { padding: 3px 8px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--line); }
+  .bench-panel th { color: var(--muted); font-weight: 500; }
+  .bench-panel th:nth-child(-n+2), .bench-panel td:nth-child(-n+2) { text-align: left; }
+  .bench-panel td.err { white-space: normal; text-align: left; }
+  .bench-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-top: 8px; }
+  .bench-actions .note { margin: 0; }
+  .pass { color: #73f28c; }
+  .fail { color: #ffb86b; }
+  @media (max-width: 760px) {
+    .bench-panel { top: auto; bottom: 12px; left: 12px; max-height: 45dvh; }
+    body.bench .panel { max-height: calc(55dvh - 36px); }
+  }
   .readout { font-variant-numeric: tabular-nums; color: var(--fg); }
   input[type=number] { width: 7.5em; font: inherit; color: var(--fg); background: #1a2236; border: 1px solid var(--line); border-radius: 6px; padding: 4px 6px; min-height: 32px; }
   .status { color: var(--accent); }
@@ -43,12 +78,17 @@
 <div class="label" id="lab-live" style="left: calc(50% + 12px)"></div>
 
 <div class="panel" id="panel">
-  <h1>Saturn's F ring</h1>
-  <div class="row">
+  <div class="panel-head">
+    <h1>Saturn's F ring</h1>
+    <button id="collapse" class="small" type="button" aria-expanded="true" aria-controls="panel-body">Hide</button>
+  </div>
+  <div class="panel-body" id="panel-body">
+  <div class="buttons">
     <button id="pause" type="button">Pause</button>
     <button id="restart" type="button">Restart</button>
     <button id="reset" type="button">Reset view</button>
   </div>
+  <hr class="sep">
   <div class="row">
     <label for="count">Particles</label>
     <select id="count" autocomplete="off">
@@ -69,18 +109,25 @@
     </select>
   </div>
   <div class="row" id="band-row">
-    <label for="amin">a from</label>
-    <input id="amin" type="number" step="1" autocomplete="off">
-    <label for="amax">to</label>
-    <input id="amax" type="number" step="1" autocomplete="off">
-    <span class="readout">km</span>
+    <label for="amin">a (km)</label>
+    <div class="ctl">
+      <input id="amin" type="number" step="1" autocomplete="off">
+      <label for="amax" class="unit">to</label>
+      <input id="amax" type="number" step="1" autocomplete="off">
+    </div>
   </div>
-  <div class="row" id="moonlet-row" hidden>
-    <label for="ma">Orbit</label>
-    <input id="ma" type="number" step="1" autocomplete="off">
-    <label for="mr">packing radius</label>
-    <input id="mr" type="number" step="any" min="0" autocomplete="off">
-    <span class="readout">km</span>
+  <div id="moonlet-row" hidden>
+    <div class="row">
+      <label for="ma">Orbit (km)</label>
+      <input id="ma" type="number" step="1" autocomplete="off">
+    </div>
+    <div class="row">
+      <label for="mr">Radius (km)</label>
+      <div class="ctl">
+        <input id="mr" type="number" step="any" min="0" autocomplete="off">
+        <span class="unit">packing</span>
+      </div>
+    </div>
   </div>
   <div class="row" id="velocity-row" hidden>
     <label for="mvel">Velocity</label>
@@ -91,8 +138,10 @@
     </select>
   </div>
   <div class="row">
-    <label><input id="pandora" type="checkbox" checked autocomplete="off"> Pandora pulls on the particles</label>
+    <label for="pandora">Pandora</label>
+    <label class="check"><input id="pandora" type="checkbox" checked autocomplete="off"> pulls on the particles</label>
   </div>
+  <hr class="sep">
   <div class="row">
     <label for="frame">View</label>
     <select id="frame" autocomplete="off">
@@ -105,30 +154,52 @@
   </div>
   <div class="row">
     <label for="compare">Compare</label>
-    <select id="compare" autocomplete="off">
-      <option value="0" selected>Off</option>
-      <option value="1">Side by side (reference left)</option>
-      <option value="2">Overlay (reference faint)</option>
-    </select>
-    <button id="setref" type="button" title="Store the live state as the new reference">Set to now</button>
+    <div class="ctl">
+      <select id="compare" autocomplete="off">
+        <option value="0" selected>Off</option>
+        <option value="1">Side by side (reference left)</option>
+        <option value="2">Overlay (reference faint)</option>
+      </select>
+      <button id="setref" class="small" type="button" title="Store the live state as the new reference">Set to now</button>
+    </div>
   </div>
   <div class="row">
     <label for="speed">Speed</label>
-    <input id="speed" type="range" min="0" max="2.7" step="0.01" value="0.78">
-    <span class="readout" id="speed-out"></span>
+    <div class="ctl">
+      <input id="speed" type="range" min="0" max="2.7" step="0.01" value="0.78">
+      <span class="readout" id="speed-out"></span>
+    </div>
   </div>
-  <div class="readout status" id="status"></div>
-  <div class="readout" id="readout" aria-live="off"></div>
-  <div class="readout" id="dropped" aria-live="off"></div>
-  <div class="readout warn" id="message" aria-live="polite"></div>
-  <div class="readout" id="bench"></div>
+  <hr class="sep">
+  <div class="readouts">
+    <div class="readout status" id="status"></div>
+    <div class="readout" id="readout" aria-live="off"></div>
+    <div class="readout" id="dropped" aria-live="off"></div>
+    <div class="readout warn" id="message" aria-live="polite"></div>
+  </div>
   <div class="legend">
     <span><span class="dot" style="background:#ff9e33"></span>Prometheus</span>
     <span><span class="dot" style="background:#73f28c"></span>Pandora</span>
   </div>
-  <p class="note">Test particles (10 000 to 1 000 000, your choice) run live on your GPU (Wisdom-Holman, double-single arithmetic), pulled by Saturn (J2 to J6) and by the moons from a 10-year integration of the real moon orbits. Time starts at 1 January 2008. Seen from the north: orbits go anticlockwise. Inertial: fixed camera; the core goes round once in 14.85 h. Rotating: the camera turns with the core (mean motion n0), so the core stays still and the outer material falls behind. Moon views: the moon stays at the centre, Saturn is straight down. Moonlet: all particles start uniform in a sphere of the packing radius on a circular orbit, 180° from Prometheus. They have no self-gravity and no collisions, so the moonlet comes apart at once and shears into a strand. Velocity: synchronous (at rest in the frame that turns with the moonlet's orbit), the centre's velocity for every particle (no spin), or each particle on its own circular orbit. The moonlet view turns with the circular orbit of the moonlet centre from t = 0; Saturn is straight down. "Pandora pulls" switches off only Pandora's pull on the particles; Prometheus keeps its real path and Pandora's dot is hidden. Changing the number of particles, the band or Pandora starts again from t = 0. At more than 100 000 particles the top speed is lower (the readout shows the limit). Below about 6 h/s the motion is stepwise (one 360 s step every few frames). Drag to move, scroll to zoom.</p>
+  <details class="about">
+    <summary>About this simulation</summary>
+    <p class="note">Test particles (10 000 to 1 000 000, your choice) run live on your GPU (Wisdom-Holman, double-single arithmetic), pulled by Saturn (J2 to J6) and by the moons from a 10-year integration of the real moon orbits. Time starts at 1 January 2008. Seen from the north: orbits go anticlockwise. Inertial: fixed camera; the core goes round once in 14.85 h. Rotating: the camera turns with the core (mean motion n0), so the core stays still and the outer material falls behind. Moon views: the moon stays at the centre, Saturn is straight down. Moonlet: all particles start uniform in a sphere of the packing radius on a circular orbit, 180° from Prometheus. They have no self-gravity and no collisions, so the moonlet comes apart at once and shears into a strand. Velocity: synchronous (at rest in the frame that turns with the moonlet's orbit), the centre's velocity for every particle (no spin), or each particle on its own circular orbit. The moonlet view turns with the circular orbit of the moonlet centre from t = 0; Saturn is straight down. "Pandora pulls" switches off only Pandora's pull on the particles; Prometheus keeps its real path and Pandora's dot is hidden. Changing the number of particles, the band or Pandora starts again from t = 0. At more than 100 000 particles the top speed is lower (the readout shows the limit). Below about 6 h/s the motion is stepwise (one 360 s step every few frames). Drag to move, scroll to zoom.</p>
+  </details>
   <p class="note" id="adapter"></p>
   <p class="note">Source code and method: <a href="https://github.com/01painadam/fring">github.com/01painadam/fring</a> (MIT licence).</p>
+  </div>
+</div>
+
+<div class="bench-panel" id="bench" hidden>
+  <div class="bench-head"><strong>Benchmark</strong> <span id="bench-status"></span></div>
+  <table id="bench-table">
+    <thead><tr><th>particles</th><th>compare</th><th>mean fps</th><th>5th pct fps</th><th>worst ms</th><th>steps/frame</th><th>effective h/s</th><th>rebuild ms</th></tr></thead>
+    <tbody></tbody>
+  </table>
+  <div class="bench-actions">
+    <button id="bench-copy" type="button" disabled>Copy as Markdown</button>
+    <span class="note">Target: mean of at least 30 fps in each mode. Raw CSV rows are in the console.</span>
+  </div>
 </div>
 
 <div id="error" role="alert">
@@ -140,6 +211,11 @@
 
 <script type="module">
   const $ = (id) => document.getElementById(id);
+  $("collapse").addEventListener("click", () => {
+    const collapsed = $("panel").classList.toggle("collapsed");
+    $("collapse").textContent = collapsed ? "Show controls" : "Hide";
+    $("collapse").setAttribute("aria-expanded", String(!collapsed));
+  });
   const canvas = $("view");
   const params = new URLSearchParams(location.search);
   const bench = params.has("bench");
@@ -294,14 +370,40 @@
     const benchCells = [];
     for (const c of benchCounts) for (const m of benchModes) if (m in MODE_INDEX && c > 0) benchCells.push([c, m]);
     const WARMUP_MS = 3000, MEASURE_MS = 10000;
-    const bench_ = { idx: 0, cell: null, t0: 0, dts: [], steps: 0, rebuild: 0, rows: [], csv: [] };
+    const bench_ = { idx: 0, cell: null, t0: 0, dts: [], steps: 0, rebuild: 0, rows: [] };
+    const BENCH_HEAD = "| particles | compare | mean fps | 5th pct fps | worst ms | steps/frame | effective h/s | rebuild ms |\n|---|---|---|---|---|---|---|---|";
+    const benchMarkdown = () => BENCH_HEAD + "\n" + bench_.rows.join("\n");
+    const benchStatus = (t) => { $("bench-status").textContent = t; };
+    const groupDigits = (n) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+    // One row of the page table. `cells` has 8 entries, or 3 when the cell did not run.
+    const benchAddRow = (cells, meanFps) => {
+      const tr = document.createElement("tr");
+      cells.forEach((v, i) => {
+        const td = document.createElement("td");
+        td.textContent = v;
+        if (i === 2 && cells.length === 3) { td.colSpan = 6; td.className = "err fail"; }
+        else if (i === 2) td.className = meanFps >= 30 ? "pass" : "fail";
+        tr.appendChild(td);
+      });
+      $("bench-table").tBodies[0].appendChild(tr);
+    };
     const log = (t) => { console.log(t); };
     if (bench) {
       log("bench user agent: " + navigator.userAgent);
       log("bench csv: count,mode,frames,mean_fps,p5_fps,worst_ms,mean_steps_per_frame,effective_h_per_s,rebuild_ms");
+      document.body.classList.add("bench");
+      $("bench").hidden = false;
+      benchStatus(benchCells.length + " cells at 500 h/s requested, starting");
+      $("bench-copy").addEventListener("click", () => {
+        const text = benchMarkdown();
+        const done = (label) => { $("bench-copy").textContent = label; };
+        (navigator.clipboard ? navigator.clipboard.writeText(text) : Promise.reject(new Error("no clipboard")))
+          .then(() => done("Copied"), () => { log("bench table:\n" + text); done("Copy failed: table is in the console"); });
+      });
     }
     const benchStart = (now) => {
       const [count, mode] = benchCells[bench_.idx];
+      benchStatus("cell " + (bench_.idx + 1) + " of " + benchCells.length + ": " + groupDigits(count) + " particles, " + mode + " (3 s warm-up, 10 s measured)");
       bench_.cell = [count, mode];
       bench_.dts = [];
       bench_.steps = 0;
@@ -324,8 +426,10 @@
       const d = bench_.dts;
       let row, csv;
       if (bench_.error || d.length === 0) {
-        row = "| " + count + " | " + mode + " | not run: " + (bench_.error || "no frames") + " | | | | |";
+        const why = "not run: " + (bench_.error || "no frames");
+        row = "| " + count + " | " + mode + " | " + why + " | | | | | |";
         csv = [count, mode, 0, "", "", "", "", "", bench_.rebuild.toFixed(0)].join(",");
+        benchAddRow([groupDigits(count), mode, why], null);
       } else {
         const sorted = d.slice().sort((a, b) => a - b);
         const sum = d.reduce((a, b) => a + b, 0);
@@ -335,13 +439,17 @@
         const effective = (bench_.steps * 0.1) / (sum / 1000); // 360 s = 0.1 h per step
         row = "| " + count + " | " + mode + " | " + (1000 / mean).toFixed(1) + " | " + (1000 / p95).toFixed(1) + " | " + sorted[sorted.length - 1].toFixed(1) + " | " + stepsPerFrame.toFixed(1) + " | " + effective.toFixed(0) + " | " + bench_.rebuild.toFixed(0) + " |";
         csv = [count, mode, d.length, (1000 / mean).toFixed(2), (1000 / p95).toFixed(2), sorted[sorted.length - 1].toFixed(2), stepsPerFrame.toFixed(2), effective.toFixed(1), bench_.rebuild.toFixed(0)].join(",");
+        benchAddRow([groupDigits(count), mode, (1000 / mean).toFixed(1), (1000 / p95).toFixed(1), sorted[sorted.length - 1].toFixed(1), stepsPerFrame.toFixed(1), effective.toFixed(0), bench_.rebuild.toFixed(0)], 1000 / mean);
       }
       bench_.rows.push(row);
       log("bench csv: " + csv);
       bench_.cell = null;
       bench_.idx += 1;
-      $("bench").textContent = "bench (500 h/s requested), " + bench_.idx + " of " + benchCells.length + " cells\n| particles | compare | mean fps | 5th pct fps | worst ms | steps/frame | effective h/s | rebuild ms |\n|---|---|---|---|---|---|---|---|\n" + bench_.rows.join("\n");
-      if (bench_.idx >= benchCells.length) log("bench table:\n" + $("bench").textContent);
+      if (bench_.idx >= benchCells.length) {
+        benchStatus(benchCells.length + " cells at 500 h/s requested, done");
+        $("bench-copy").disabled = false;
+        log("bench table (500 h/s requested):\n" + benchMarkdown());
+      }
     };
     const benchFrame = (now, dt) => {
       if (bench_.idx >= benchCells.length) return;
@@ -353,6 +461,18 @@
         bench_.steps += app.steps_per_frame();
       }
       if (age > WARMUP_MS + MEASURE_MS) benchFinish();
+    };
+    // The GPU or the self-test failed: every cell that has not run gets a "not run" row.
+    const benchFail = (msg) => {
+      if (!bench) return;
+      bench_.error = msg;
+      if (bench_.cell) { bench_.dts = []; benchFinish(); }
+      while (bench_.idx < benchCells.length) {
+        bench_.cell = benchCells[bench_.idx];
+        bench_.error = msg;
+        bench_.dts = [];
+        benchFinish();
+      }
     };
     const dts = [];
     let prev = null, shown = "", n = 0;
@@ -370,7 +490,9 @@
         shown = phase;
         $("status").textContent = { checking: "Checking GPU arithmetic...", preparing: "Preparing the moons (a few seconds)...", running: "", failed: "" }[phase];
         if (phase === "failed") {
-          fail("The GPU arithmetic check failed", app.message() + " The integrator was not started.");
+          const gpuMsg = app.message();
+          benchFail(gpuMsg);
+          fail(gpuMsg.startsWith("The GPU reported an error") ? "The GPU rejected its program" : "The GPU arithmetic check failed", gpuMsg + " The integrator was not started.");
           return;
         }
       }

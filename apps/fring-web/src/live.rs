@@ -197,6 +197,19 @@ pub fn builtin_moon_radii_for(system: &System) -> Result<Vec<f64>> {
     moon_radii_for(system, MOONS_TOML)
 }
 
+/// Plain-Rust twin of the numeric fields of `fring_gpu::stepper::StepperOptions`
+/// (`fring-gpu` is a wasm32-only dependency of the library, so the host tests
+/// cannot name that type).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct StepperSettings {
+    /// Step, s.
+    pub step_s: f64,
+    /// Steps per dispatch block.
+    pub block_steps: usize,
+    /// a0 in km for the drift about mu_eff (ICR-011).
+    pub drift_radius_km: Option<f64>,
+}
+
 impl Setup {
     /// Reads the `params/` files that are compiled into the crate.
     pub fn builtin() -> Result<Self> {
@@ -208,7 +221,9 @@ impl Setup {
         let saturn = saturn_from_toml_str(saturn_toml)?;
         let ring = ring_from_toml_str(ring_toml)?;
         let moons = moons_from_toml_str(moons_toml)?;
-        let field = SaturnField::<f64>::from_params(&saturn);
+        // ICR-011: the field drifts about mu_eff at a0, like the CPU and GPU runs.
+        let field =
+            SaturnField::<f64>::from_params(&saturn).with_drift_radius(ring.semi_major_axis_km);
         let n0_rad_s = reference_mean_motion(&field, ring.semi_major_axis_km);
         Ok(Self {
             saturn,
@@ -222,6 +237,17 @@ impl Setup {
     /// The reference semi-major axis a0, km.
     pub fn a0_km(&self) -> f64 {
         self.ring.semi_major_axis_km
+    }
+
+    /// What `web.rs` gives to `GpuStepper::new_with_drift` (ICR-011): the step,
+    /// the block size and a0 for the drift about mu_eff. The mode (Dp) and the
+    /// chaos shadow (none) are set in `web.rs`, which is wasm32 only.
+    pub fn stepper_settings(&self) -> StepperSettings {
+        StepperSettings {
+            step_s: STEP_S,
+            block_steps: BLOCK_STEPS,
+            drift_radius_km: Some(self.a0_km()),
+        }
     }
 
     /// The mean motion n0 of the ring core, rad/s.
@@ -651,6 +677,34 @@ pub fn limit_to_end(steps: u64, left_s: f64, step_s: f64) -> (u64, bool) {
     }
 }
 
+/// Longest GPU error text that the page shows, in characters.
+const GPU_ERROR_MAX_CHARS: usize = 600;
+
+/// Keeps the first GPU error only (a bad shader gives one error and then a
+/// stream of "invalid ... due to a previous error" lines for the same fault).
+/// Returns true if `msg` was stored.
+pub fn record_first_error(slot: &mut Option<String>, msg: &str) -> bool {
+    if slot.is_some() {
+        return false;
+    }
+    *slot = Some(msg.to_string());
+    true
+}
+
+/// The text of `Phase::Failed` for a GPU error: a prefix, then the message
+/// cut to `GPU_ERROR_MAX_CHARS` characters. A dropped GPU submit is silent
+/// (the browser only logs it), so the page must say it out loud.
+pub fn gpu_error_text(msg: &str) -> String {
+    let msg = msg.trim();
+    let cut: String = msg.chars().take(GPU_ERROR_MAX_CHARS).collect();
+    let dots = if msg.chars().count() > GPU_ERROR_MAX_CHARS {
+        "..."
+    } else {
+        ""
+    };
+    format!("The GPU reported an error: {cut}{dots}")
+}
+
 /// The line under the time readout: the drop counts (ICR-006: unbound, inside
 /// Prometheus, inside Pandora). The Pandora part is left out if Pandora is off.
 pub fn drop_text(counts: [u32; 3], pandora_on: bool) -> String {
@@ -769,6 +823,62 @@ mod tests {
         let s = Setup::builtin().unwrap();
         let e = s.build_ephemeris(2.0 * 86_400.0).unwrap();
         (s, e)
+    }
+
+    /// ICR-011: the web field drifts about mu_eff at the run a0, the stepper
+    /// gets that a0, and nothing else changes (n0 and the initial states are
+    /// bit for bit those of the field without the drift radius).
+    #[test]
+    fn web_field_and_stepper_use_mu_eff_at_a0() {
+        let (s, _) = setup_and_eph();
+        let cfg = s.stepper_settings();
+        assert_eq!(cfg.drift_radius_km, Some(s.a0_km()));
+        assert_eq!(cfg.step_s, STEP_S);
+        assert_eq!(cfg.block_steps, BLOCK_STEPS);
+        let plain = SaturnField::<f64>::from_params(&s.saturn);
+        let eff = plain.with_drift_radius(s.a0_km());
+        assert!(s.field.drift_gm_excess > 4.5e-3 && s.field.drift_gm_excess < 4.7e-3);
+        assert_eq!(s.field.drift_gm_excess, eff.drift_gm_excess);
+        assert_eq!(s.field.drift_gm_km3_s2, eff.drift_gm_km3_s2);
+        assert_ne!(s.field.drift_gm_km3_s2, plain.gm_km3_s2);
+        assert_eq!(s.field.gm_km3_s2, plain.gm_km3_s2);
+        assert_eq!(
+            s.n0_rad_s().to_bits(),
+            reference_mean_motion(&plain, s.a0_km()).to_bits()
+        );
+        for band in [Band::Core, s.preset_band(1), s.preset_band(2)] {
+            let a = s.initial(band, 500).unwrap().particles;
+            let b = generate_particles(&plain, &s.distribution(band), 500, SEED).unwrap();
+            for (u, v) in [
+                (&a.x_km, &b.x_km),
+                (&a.y_km, &b.y_km),
+                (&a.z_km, &b.z_km),
+                (&a.vx_km_s, &b.vx_km_s),
+                (&a.vy_km_s, &b.vy_km_s),
+                (&a.vz_km_s, &b.vz_km_s),
+            ] {
+                assert!(u.iter().zip(v).all(|(p, q)| p.to_bits() == q.to_bits()));
+            }
+        }
+    }
+
+    /// A WGSL rejection in the browser drops every submit silently. The page
+    /// must turn the first error into a failure text, and keep only the first.
+    #[test]
+    fn first_gpu_error_becomes_the_failure_text() {
+        let mut slot = None;
+        let wgsl =
+            "Error while parsing WGSL: :1081:31 error: value nan cannot be represented as 'f32'";
+        assert!(record_first_error(&mut slot, wgsl));
+        assert!(!record_first_error(&mut slot, "Invalid CommandBuffer"));
+        assert_eq!(slot.as_deref(), Some(wgsl));
+        let text = gpu_error_text(slot.as_deref().unwrap());
+        assert!(text.starts_with("The GPU reported an error: Error while parsing WGSL"));
+        assert!(text.contains("value nan cannot be represented"));
+        let long = "x".repeat(5000);
+        let t = gpu_error_text(&long);
+        assert!(t.ends_with("..."));
+        assert!(t.chars().count() < 700);
     }
 
     #[test]
