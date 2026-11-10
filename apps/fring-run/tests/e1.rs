@@ -129,3 +129,32 @@ fn layer2_smoke() {
     .unwrap();
     assert_eq!(r.rows, r2.rows, "two runs differ");
 }
+
+#[test]
+fn gpu_backend_refuses_the_substep_variant_without_an_adapter() {
+    use e1::BackendKind::{Cpu, Gpu};
+    let err = e1::check_variants(Gpu, &[Variant::Plain, Variant::Substep]).unwrap_err();
+    assert!(err.contains("substep") && err.contains("ICR-004"), "{err}");
+    assert!(e1::check_variants(Gpu, &[Variant::Plain, Variant::Loss]).is_ok());
+    assert!(e1::check_variants(Cpu, &[Variant::Plain, Variant::Substep]).is_ok());
+    assert!(e1::BackendKind::parse("tpu").is_err());
+}
+
+/// Smoke test on the GPU: layer 1, five encounters, runs, same count, finite.
+/// Needs a GPU adapter, so it is ignored by default.
+#[test]
+#[ignore = "needs a GPU adapter"]
+fn gpu_layer1_smoke() {
+    let rows = five();
+    let s = e1::build_setup(&root().join("params"), cover(&rows)).unwrap();
+    let r = e1::layer1(
+        &rows,
+        &s.system,
+        Variant::Plain,
+        e1::gpu_backend(s.radii_km.clone()),
+    )
+    .unwrap();
+    assert_eq!(r.finals.len(), rows.len());
+    assert!(r.finals.iter().all(|f| f.1.iter().all(|x| x.is_finite())));
+    assert!(e1::backend_label(e1::BackendKind::Gpu).contains("mode D+"));
+}
